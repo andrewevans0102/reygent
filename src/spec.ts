@@ -14,7 +14,14 @@ export interface JiraSpecPayload {
   title: string;
 }
 
-export type SpecPayload = MarkdownSpecPayload | JiraSpecPayload;
+export interface LinearSpecPayload {
+  source: "linear";
+  issueId: string;
+  content: string;
+  title: string;
+}
+
+export type SpecPayload = MarkdownSpecPayload | JiraSpecPayload | LinearSpecPayload;
 
 export class SpecError extends Error {
   constructor(message: string) {

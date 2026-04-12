@@ -24,8 +24,8 @@ program
 
 program
   .command("spec")
-  .description("Load a spec from a markdown file or Jira issue (e.g. PROJ-123)")
-  .argument("<source>", "Path to a markdown file or a Jira issue key")
+  .description("Load a spec from a markdown file, Jira issue, or Linear issue")
+  .argument("<source>", "Path to a markdown file, issue key (e.g. PROJ-123), or Linear URL")
   .action(specCommand);
 
 program.parse();
