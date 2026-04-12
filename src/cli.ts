@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { initCommand } from "./commands/init.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -14,5 +15,10 @@ program
   .name("reygent")
   .description("Reygent CLI tool")
   .version(pkg.version);
+
+program
+  .command("init")
+  .description("Scaffold .claude/agents/ with built-in agent configs")
+  .action(initCommand);
 
 program.parse();
