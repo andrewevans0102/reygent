@@ -1,9 +1,17 @@
 import { readSpec, SpecError } from "../spec.js";
+import { isJiraKey, readJiraSpec } from "../jira.js";
+import { loadEnvFile } from "../env.js";
 
-export function specCommand(filePath: string): void {
+export async function specCommand(source: string): Promise<void> {
   try {
-    const payload = readSpec(filePath);
-    console.log(JSON.stringify(payload, null, 2));
+    if (isJiraKey(source)) {
+      loadEnvFile();
+      const payload = await readJiraSpec(source);
+      console.log(JSON.stringify(payload, null, 2));
+    } else {
+      const payload = readSpec(source);
+      console.log(JSON.stringify(payload, null, 2));
+    }
   } catch (err) {
     if (err instanceof SpecError) {
       console.error(err.message);

@@ -1,11 +1,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
 
-export interface SpecPayload {
+export interface MarkdownSpecPayload {
   source: "markdown";
   content: string;
   title: string;
 }
+
+export interface JiraSpecPayload {
+  source: "jira";
+  issueKey: string;
+  content: string;
+  title: string;
+}
+
+export type SpecPayload = MarkdownSpecPayload | JiraSpecPayload;
 
 export class SpecError extends Error {
   constructor(message: string) {
@@ -14,7 +23,7 @@ export class SpecError extends Error {
   }
 }
 
-export function readSpec(filePath: string): SpecPayload {
+export function readSpec(filePath: string): MarkdownSpecPayload {
   const resolved = resolve(process.cwd(), filePath);
 
   if (!existsSync(resolved)) {

@@ -24,8 +24,8 @@ program
 
 program
   .command("spec")
-  .description("Load and validate a markdown spec file")
-  .argument("<file>", "Path to the markdown spec file")
+  .description("Load a spec from a markdown file or Jira issue (e.g. PROJ-123)")
+  .argument("<source>", "Path to a markdown file or a Jira issue key")
   .action(specCommand);
 
 program.parse();
