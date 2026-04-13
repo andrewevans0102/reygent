@@ -2,6 +2,7 @@ import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import { runPlanner } from "../planner.js";
 import { runPRCreate } from "../pr-create.js";
+import { runPRReview, formatPRReviewOutput } from "../pr-review.js";
 import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
@@ -206,6 +207,27 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: true,
           output: JSON.stringify(prResult),
         });
+        continue;
+      }
+
+      if (stage.name === "pr-review") {
+        if (!context.prCreate) {
+          throw new TaskError("pr-review: pr-create stage must run first");
+        }
+
+        console.log(`[pr-review] reviewing pull request...`);
+        const reviewOutput = await runPRReview(context);
+        context.prReview = reviewOutput;
+
+        console.log(formatPRReviewOutput(reviewOutput));
+
+        context.results.push({
+          stage: stage.name,
+          success: true,
+          output: JSON.stringify(reviewOutput),
+        });
+
+        console.log("What would you like to do next?");
         continue;
       }
 

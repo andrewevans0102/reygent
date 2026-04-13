@@ -75,6 +75,18 @@ export interface PRCreateOutput {
   prNumber: number;
 }
 
+export interface PRReviewComment {
+  file: string;
+  line: number | null;
+  comment: string;
+}
+
+export interface PRReviewOutput {
+  summary: string;
+  comments: PRReviewComment[];
+  recommendedActions: string[];
+}
+
 export interface TaskContext {
   spec: SpecPayload;
   plan?: PlannerOutput;
@@ -82,6 +94,7 @@ export interface TaskContext {
   gates?: GateOutput;
   securityReview?: SecurityReviewOutput;
   prCreate?: PRCreateOutput;
+  prReview?: PRReviewOutput;
   results: StageResult[];
 }
 
