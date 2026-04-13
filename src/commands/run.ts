@@ -1,13 +1,17 @@
 import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import { runPlanner } from "../planner.js";
+import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
-import type { StageResult, TaskContext } from "../task.js";
+import type { Severity, StageResult, TaskContext } from "../task.js";
+
+const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
 interface RunOptions {
   spec: string;
   dryRun: boolean;
+  securityThreshold: string;
 }
 
 export async function runCommand(options: RunOptions): Promise<void> {
@@ -25,6 +29,14 @@ export async function runCommand(options: RunOptions): Promise<void> {
       };
       console.log(JSON.stringify(output, null, 2));
       return;
+    }
+
+    const threshold = options.securityThreshold.toUpperCase();
+    if (!VALID_SEVERITIES.has(threshold)) {
+      console.error(
+        `Invalid --security-threshold "${options.securityThreshold}". Must be one of: CRITICAL, HIGH, MEDIUM, LOW`,
+      );
+      process.exit(1);
     }
 
     const context: TaskContext = { spec, results: [] };
@@ -136,6 +148,42 @@ export async function runCommand(options: RunOptions): Promise<void> {
           stage: stage.name,
           success: false,
           output: gateResult.output,
+        });
+        process.exit(1);
+      }
+
+      if (stage.name === "security-review") {
+        if (!context.implement) {
+          throw new TaskError("security-review: implement stage must run first");
+        }
+
+        console.log(`[security-review] running security review...`);
+        const { output, passed } = await runSecurityReview(
+          context,
+          threshold as Severity,
+        );
+        context.securityReview = output;
+
+        console.log(
+          `[security-review] ${output.findings.length} finding(s):`,
+        );
+        console.log(formatFindings(output.findings, threshold as Severity));
+
+        if (passed) {
+          console.log(`[security-review] PASSED`);
+          context.results.push({
+            stage: stage.name,
+            success: true,
+            output: JSON.stringify(output),
+          });
+          continue;
+        }
+
+        console.log(`[security-review] FAILED`);
+        context.results.push({
+          stage: stage.name,
+          success: false,
+          output: JSON.stringify(output),
         });
         process.exit(1);
       }

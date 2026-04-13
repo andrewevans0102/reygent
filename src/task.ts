@@ -55,11 +55,25 @@ export interface GateOutput {
   functionalTests?: GateResult;
 }
 
+export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+
+export interface SecurityFinding {
+  severity: Severity;
+  description: string;
+  location?: { file: string; line?: number };
+}
+
+export interface SecurityReviewOutput {
+  severity: Severity;
+  findings: SecurityFinding[];
+}
+
 export interface TaskContext {
   spec: SpecPayload;
   plan?: PlannerOutput;
   implement?: ImplementOutput;
   gates?: GateOutput;
+  securityReview?: SecurityReviewOutput;
   results: StageResult[];
 }
 
