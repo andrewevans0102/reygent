@@ -25,8 +25,16 @@ export interface StageResult {
   output: string;
 }
 
+export interface PlannerOutput {
+  goals: string[];
+  tasks: string[];
+  constraints: string[];
+  dod: string[];
+}
+
 export interface TaskContext {
   spec: SpecPayload;
+  plan?: PlannerOutput;
   results: StageResult[];
 }
 
