@@ -1,6 +1,7 @@
 import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import { runPlanner } from "../planner.js";
+import { runPRCreate } from "../pr-create.js";
 import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
@@ -186,6 +187,26 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(output),
         });
         process.exit(1);
+      }
+
+      if (stage.name === "pr-create") {
+        if (!context.implement) {
+          throw new TaskError("pr-create: implement stage must run first");
+        }
+
+        console.log(`[pr-create] creating pull request...`);
+        const prResult = await runPRCreate(context);
+        context.prCreate = prResult;
+
+        console.log(`[pr-create] branch: ${prResult.branch}`);
+        console.log(`[pr-create] PR: ${prResult.prUrl}`);
+
+        context.results.push({
+          stage: stage.name,
+          success: true,
+          output: JSON.stringify(prResult),
+        });
+        continue;
       }
 
       const result: StageResult = {

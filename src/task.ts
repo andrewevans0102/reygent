@@ -68,12 +68,20 @@ export interface SecurityReviewOutput {
   findings: SecurityFinding[];
 }
 
+export interface PRCreateOutput {
+  branch: string;
+  commitMessage: string;
+  prUrl: string;
+  prNumber: number;
+}
+
 export interface TaskContext {
   spec: SpecPayload;
   plan?: PlannerOutput;
   implement?: ImplementOutput;
   gates?: GateOutput;
   securityReview?: SecurityReviewOutput;
+  prCreate?: PRCreateOutput;
   results: StageResult[];
 }
 
