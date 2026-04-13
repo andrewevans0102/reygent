@@ -23,6 +23,24 @@ Or run directly with npx:
 npx reygent
 ```
 
+### Run globally from source (without publishing to NPM)
+
+Clone the repo, build, and use `npm link` to symlink the package globally:
+
+```bash
+git clone https://github.com/your-org/reygent.git
+cd reygent
+npm install
+npm run build
+npm link
+```
+
+Now `reygent` is available as a command anywhere on your machine. To remove it later:
+
+```bash
+npm unlink -g reygent
+```
+
 ## Quick Start
 
 ### 1. Initialize agents in your project
