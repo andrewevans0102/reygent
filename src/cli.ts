@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { agentCommand } from "./commands/agent.js";
 import { initCommand } from "./commands/init.js";
 import { specCommand } from "./commands/spec.js";
 import { runCommand } from "./commands/run.js";
@@ -28,6 +29,13 @@ program
   .description("Load a spec from a markdown file, Jira issue, or Linear issue")
   .argument("<source>", "Path to a markdown file, issue key (e.g. PROJ-123), or Linear URL")
   .action(specCommand);
+
+program
+  .command("agent")
+  .description("Run a single agent independently")
+  .argument("<name>", "Agent name (dev, qe, planner, security-reviewer, pr-reviewer, adhoc)")
+  .requiredOption("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
+  .action(agentCommand);
 
 program
   .command("run")
