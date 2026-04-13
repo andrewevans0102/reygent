@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { agentCommand } from "./commands/agent.js";
 import { initCommand } from "./commands/init.js";
+import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
 import { runCommand } from "./commands/run.js";
 
@@ -23,6 +24,13 @@ program
   .command("init")
   .description("Scaffold .claude/agents/ with built-in agent configs")
   .action(initCommand);
+
+program
+  .command("generate-spec")
+  .description("Generate a full markdown spec from a short description")
+  .argument("<description>", "Short description of the feature to spec out")
+  .option("--output <file>", "Output file path", "spec.md")
+  .action(generateSpecCommand);
 
 program
   .command("spec")
