@@ -45,10 +45,21 @@ export interface ImplementOutput {
   qe: QEOutput | null;
 }
 
+export interface GateResult {
+  passed: boolean;
+  output: string;
+}
+
+export interface GateOutput {
+  unitTests?: GateResult;
+  functionalTests?: GateResult;
+}
+
 export interface TaskContext {
   spec: SpecPayload;
   plan?: PlannerOutput;
   implement?: ImplementOutput;
+  gates?: GateOutput;
   results: StageResult[];
 }
 

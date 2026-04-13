@@ -92,12 +92,12 @@ When you are finished, output a JSON block with the list of test files you creat
 \`\`\``;
 }
 
-interface SpawnResult {
+export interface SpawnResult {
   stdout: string;
   exitCode: number;
 }
 
-function spawnAgent(name: string, prompt: string): Promise<SpawnResult> {
+export function spawnAgent(name: string, prompt: string): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("claude", ["-p", prompt, "--output-format", "text"], {
       stdio: ["ignore", "pipe", "pipe"],

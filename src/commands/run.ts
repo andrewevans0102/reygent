@@ -1,3 +1,4 @@
+import { runUnitTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import { runPlanner } from "../planner.js";
 import { loadSpec, SpecError } from "../spec.js";
@@ -76,6 +77,36 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(impl),
         });
         continue;
+      }
+
+      if (stage.name === "gate-unit-tests") {
+        if (!context.implement) {
+          throw new TaskError("gate-unit-tests: implement stage must run first");
+        }
+
+        console.log(`[gate-unit-tests] running unit tests...`);
+        const gateResult = await runUnitTestGate(context);
+
+        if (!context.gates) context.gates = {};
+        context.gates.unitTests = gateResult;
+
+        if (gateResult.passed) {
+          console.log(`[gate:unit-tests] PASSED`);
+          context.results.push({
+            stage: stage.name,
+            success: true,
+            output: gateResult.output,
+          });
+          continue;
+        }
+
+        console.log(`[gate:unit-tests] FAILED`);
+        context.results.push({
+          stage: stage.name,
+          success: false,
+          output: gateResult.output,
+        });
+        process.exit(1);
       }
 
       const result: StageResult = {
