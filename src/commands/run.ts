@@ -1,4 +1,4 @@
-import { runUnitTestGate } from "../gate.js";
+import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import { runPlanner } from "../planner.js";
 import { loadSpec, SpecError } from "../spec.js";
@@ -101,6 +101,37 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         console.log(`[gate:unit-tests] FAILED`);
+        context.results.push({
+          stage: stage.name,
+          success: false,
+          output: gateResult.output,
+        });
+        process.exit(1);
+      }
+
+      if (stage.name === "gate-functional-tests") {
+        if (!context.implement) {
+          throw new TaskError("gate-functional-tests: implement stage must run first");
+        }
+
+        console.log(`[gate-functional-tests] running functional tests...`);
+        const gateResult = await runFunctionalTestGate(context);
+
+        if (!context.gates) context.gates = {};
+        context.gates.functionalTests = gateResult;
+
+        if (gateResult.passed) {
+          console.log(`[gate:functional-tests] PASSED`);
+          context.results.push({
+            stage: stage.name,
+            success: true,
+            output: gateResult.output,
+          });
+          continue;
+        }
+
+        console.log(gateResult.output);
+        console.log(`[gate:functional-tests] FAILED`);
         context.results.push({
           stage: stage.name,
           success: false,
