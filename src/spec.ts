@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
+import { isLinearUrl, extractLinearId, readLinearSpec } from "./linear.js";
+import { readJiraSpec } from "./jira.js";
+import { loadEnvFile } from "./env.js";
 
 export interface MarkdownSpecPayload {
   source: "markdown";
@@ -68,4 +71,35 @@ export function readSpec(filePath: string): MarkdownSpecPayload {
     : basename(resolved, extname(resolved));
 
   return { source: "markdown", content, title };
+}
+
+const ISSUE_KEY_PATTERN = /^[A-Z]+-\d+$/;
+
+export async function loadSpec(source: string): Promise<SpecPayload> {
+  if (isLinearUrl(source)) {
+    loadEnvFile();
+    const issueId = extractLinearId(source);
+    return readLinearSpec(issueId);
+  }
+
+  if (ISSUE_KEY_PATTERN.test(source)) {
+    loadEnvFile();
+    const hasLinear = !!process.env.LINEAR_MCP_URL;
+    const hasJira = !!process.env.JIRA_MCP_URL;
+
+    if (hasLinear && !hasJira) {
+      return readLinearSpec(source);
+    }
+    if (hasJira) {
+      return readJiraSpec(source);
+    }
+    throw new SpecError(
+      `No issue tracker configured for "${source}".\n\n` +
+        `Add one of the following to your .env file:\n\n` +
+        `  LINEAR_MCP_URL=https://your-linear-mcp-server.example.com/sse\n` +
+        `  JIRA_MCP_URL=https://your-jira-mcp-server.example.com/sse`,
+    );
+  }
+
+  return readSpec(source);
 }

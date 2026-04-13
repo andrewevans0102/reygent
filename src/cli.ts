@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { initCommand } from "./commands/init.js";
 import { specCommand } from "./commands/spec.js";
+import { runCommand } from "./commands/run.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -27,5 +28,12 @@ program
   .description("Load a spec from a markdown file, Jira issue, or Linear issue")
   .argument("<source>", "Path to a markdown file, issue key (e.g. PROJ-123), or Linear URL")
   .action(specCommand);
+
+program
+  .command("run")
+  .description("Run the agent pipeline from spec to reviewed PR")
+  .requiredOption("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
+  .option("--dry-run", "Print pipeline stages as JSON without executing", false)
+  .action(runCommand);
 
 program.parse();
