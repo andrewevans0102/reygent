@@ -32,9 +32,23 @@ export interface PlannerOutput {
   dod: string[];
 }
 
+export interface DevOutput {
+  files: string[];
+}
+
+export interface QEOutput {
+  testFiles: string[];
+}
+
+export interface ImplementOutput {
+  dev: DevOutput | null;
+  qe: QEOutput | null;
+}
+
 export interface TaskContext {
   spec: SpecPayload;
   plan?: PlannerOutput;
+  implement?: ImplementOutput;
   results: StageResult[];
 }
 
