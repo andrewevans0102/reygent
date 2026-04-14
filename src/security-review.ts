@@ -1,5 +1,6 @@
 import { builtinAgents } from "./agents.js";
-import { spawnAgent } from "./implement.js";
+import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
+import { extractJSON } from "./planner.js";
 import type {
   Severity,
   SecurityFinding,
@@ -79,7 +80,8 @@ ${qeFiles.length > 0 ? qeFiles.map((f) => `- ${f}`).join("\n") : "- (none)"}
 export function extractSecurityReviewOutput(
   stdout: string,
 ): SecurityReviewOutput {
-  const match = stdout.match(
+  const cleaned = extractJSON(stdout);
+  const match = cleaned.match(
     /\{\s*"severity"\s*:\s*"[^"]+"\s*,\s*"findings"\s*:\s*\[[\s\S]*?\]\s*\}/,
   );
   if (!match) {
@@ -170,6 +172,7 @@ export function formatFindings(
 export async function runSecurityReview(
   context: TaskContext,
   threshold: Severity,
+  options?: AgentSpawnOptions,
 ): Promise<{ output: SecurityReviewOutput; passed: boolean }> {
   const agent = builtinAgents.find((a) => a.name === "security-reviewer");
   if (!agent) {
@@ -177,7 +180,7 @@ export async function runSecurityReview(
   }
 
   const prompt = buildSecurityReviewPrompt(agent.systemPrompt, context);
-  const result = await spawnAgent("security-review", prompt);
+  const result = await spawnAgent("security-review", prompt, options);
 
   if (result.exitCode !== 0) {
     throw new TaskError(

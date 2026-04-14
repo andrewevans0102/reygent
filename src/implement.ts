@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
 import { builtinAgents } from "./agents.js";
+import { extractJSON } from "./planner.js";
+import { spawnAgentStream } from "./spawn.js";
+import type { SpawnResult } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
 import type {
   PlannerOutput,
@@ -10,7 +11,21 @@ import type {
 } from "./task.js";
 import { TaskError } from "./task.js";
 
+export type { SpawnResult };
+
 const AGENT_TIMEOUT_MS = 5 * 60 * 1000;
+
+export interface AgentSpawnOptions {
+  autoApprove?: boolean;
+}
+
+export function spawnAgent(
+  name: string,
+  prompt: string,
+  options?: AgentSpawnOptions,
+): Promise<SpawnResult> {
+  return spawnAgentStream(name, prompt, AGENT_TIMEOUT_MS, options);
+}
 
 function buildDevPrompt(
   systemPrompt: string,
@@ -92,49 +107,9 @@ When you are finished, output a JSON block with the list of test files you creat
 \`\`\``;
 }
 
-export interface SpawnResult {
-  stdout: string;
-  exitCode: number;
-}
-
-export function spawnAgent(name: string, prompt: string): Promise<SpawnResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("claude", ["-p", prompt, "--output-format", "text"], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    const chunks: string[] = [];
-
-    const timeout = setTimeout(() => {
-      child.kill();
-      reject(new TaskError(`${name}: timed out after ${AGENT_TIMEOUT_MS}ms`));
-    }, AGENT_TIMEOUT_MS);
-
-    const stdoutRL = createInterface({ input: child.stdout! });
-    stdoutRL.on("line", (line) => {
-      console.log(`[${name}] ${line}`);
-      chunks.push(line);
-    });
-
-    const stderrRL = createInterface({ input: child.stderr! });
-    stderrRL.on("line", (line) => {
-      console.error(`[${name}] ${line}`);
-    });
-
-    child.on("error", (err) => {
-      clearTimeout(timeout);
-      reject(new TaskError(`${name}: failed to spawn — ${err.message}`));
-    });
-
-    child.on("close", (code) => {
-      clearTimeout(timeout);
-      resolve({ stdout: chunks.join("\n"), exitCode: code ?? 1 });
-    });
-  });
-}
-
 function extractDevOutput(stdout: string): DevOutput {
-  const match = stdout.match(/\{\s*"files"\s*:\s*\[.*?\]\s*\}/s);
+  const cleaned = extractJSON(stdout);
+  const match = cleaned.match(/\{\s*"files"\s*:\s*\[.*?\]\s*\}/s);
   if (match) {
     try {
       const parsed = JSON.parse(match[0]) as { files: unknown };
@@ -149,7 +124,8 @@ function extractDevOutput(stdout: string): DevOutput {
 }
 
 function extractQEOutput(stdout: string): QEOutput {
-  const match = stdout.match(/\{\s*"testFiles"\s*:\s*\[.*?\]\s*\}/s);
+  const cleaned = extractJSON(stdout);
+  const match = cleaned.match(/\{\s*"testFiles"\s*:\s*\[.*?\]\s*\}/s);
   if (match) {
     try {
       const parsed = JSON.parse(match[0]) as { testFiles: unknown };
@@ -168,6 +144,7 @@ function extractQEOutput(stdout: string): QEOutput {
 export async function runImplement(
   spec: SpecPayload,
   plan: PlannerOutput,
+  options?: AgentSpawnOptions,
 ): Promise<ImplementOutput> {
   const devAgent = builtinAgents.find((a) => a.name === "dev");
   const qeAgent = builtinAgents.find((a) => a.name === "qe");
@@ -179,32 +156,60 @@ export async function runImplement(
   const devPrompt = buildDevPrompt(devAgent.systemPrompt, spec, plan);
   const qePrompt = buildQEPrompt(qeAgent.systemPrompt, spec, plan);
 
-  const [devResult, qeResult] = await Promise.allSettled([
-    spawnAgent("dev", devPrompt),
-    spawnAgent("qe", qePrompt),
-  ]);
-
   let dev: DevOutput | null = null;
   let qe: QEOutput | null = null;
 
-  if (devResult.status === "fulfilled" && devResult.value.exitCode === 0) {
-    dev = extractDevOutput(devResult.value.stdout);
-  } else {
-    const reason =
-      devResult.status === "rejected"
-        ? devResult.reason
-        : `exit code ${devResult.value.exitCode}`;
-    console.error(`[dev] failed: ${reason}`);
-  }
+  if (options?.autoApprove) {
+    // Parallel: no stdin needed
+    const [devResult, qeResult] = await Promise.allSettled([
+      spawnAgent("dev", devPrompt, options),
+      spawnAgent("qe", qePrompt, options),
+    ]);
 
-  if (qeResult.status === "fulfilled" && qeResult.value.exitCode === 0) {
-    qe = extractQEOutput(qeResult.value.stdout);
+    if (devResult.status === "fulfilled" && devResult.value.exitCode === 0) {
+      dev = extractDevOutput(devResult.value.stdout);
+    } else {
+      const reason =
+        devResult.status === "rejected"
+          ? devResult.reason
+          : `exit code ${devResult.value.exitCode}`;
+      console.error(`[dev] failed: ${reason}`);
+    }
+
+    if (qeResult.status === "fulfilled" && qeResult.value.exitCode === 0) {
+      qe = extractQEOutput(qeResult.value.stdout);
+    } else {
+      const reason =
+        qeResult.status === "rejected"
+          ? qeResult.reason
+          : `exit code ${qeResult.value.exitCode}`;
+      console.error(`[qe] failed: ${reason}`);
+    }
   } else {
-    const reason =
-      qeResult.status === "rejected"
-        ? qeResult.reason
-        : `exit code ${qeResult.value.exitCode}`;
-    console.error(`[qe] failed: ${reason}`);
+    // Sequential: stdin inherited so user can approve each edit
+    console.log(`[implement] running dev agent (approve edits as prompted)...`);
+    try {
+      const devResult = await spawnAgent("dev", devPrompt, options);
+      if (devResult.exitCode === 0) {
+        dev = extractDevOutput(devResult.stdout);
+      } else {
+        console.error(`[dev] failed: exit code ${devResult.exitCode}`);
+      }
+    } catch (err) {
+      console.error(`[dev] failed: ${err}`);
+    }
+
+    console.log(`[implement] running qe agent (approve edits as prompted)...`);
+    try {
+      const qeResult = await spawnAgent("qe", qePrompt, options);
+      if (qeResult.exitCode === 0) {
+        qe = extractQEOutput(qeResult.stdout);
+      } else {
+        console.error(`[qe] failed: exit code ${qeResult.exitCode}`);
+      }
+    } catch (err) {
+      console.error(`[qe] failed: ${err}`);
+    }
   }
 
   if (dev === null && qe === null) {

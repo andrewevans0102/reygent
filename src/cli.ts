@@ -28,8 +28,8 @@ program
 program
   .command("generate-spec")
   .description("Generate a full markdown spec from a short description")
-  .argument("<description>", "Short description of the feature to spec out")
-  .option("--output <file>", "Output file path", "spec.md")
+  .argument("[description]", "Short description of the feature to spec out")
+  .option("--output <file>", "Output file path")
   .action(generateSpecCommand);
 
 program
@@ -42,7 +42,9 @@ program
   .command("agent")
   .description("Run a single agent independently")
   .argument("<name>", "Agent name (dev, qe, planner, security-reviewer, pr-reviewer, adhoc)")
-  .requiredOption("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
+  .argument("[prompt]", "Question or prompt for the agent")
+  .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
+  .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
   .action(agentCommand);
 
 program
@@ -51,6 +53,7 @@ program
   .requiredOption("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
   .option("--dry-run", "Print pipeline stages as JSON without executing", false)
   .option("--security-threshold <level>", "Minimum severity to fail security review (CRITICAL, HIGH, MEDIUM, LOW)", "HIGH")
+  .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
   .action(runCommand);
 
 program.parse();

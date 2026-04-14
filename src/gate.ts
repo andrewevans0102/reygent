@@ -1,4 +1,4 @@
-import { spawnAgent } from "./implement.js";
+import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { TaskError } from "./task.js";
 import type { GateResult, TaskContext } from "./task.js";
 
@@ -9,8 +9,9 @@ import type { GateResult, TaskContext } from "./task.js";
 export async function runGate(
   agentName: string,
   prompt: string,
+  options?: AgentSpawnOptions,
 ): Promise<GateResult> {
-  const result = await spawnAgent(agentName, prompt);
+  const result = await spawnAgent(agentName, prompt, options);
 
   const hasPass = result.stdout.includes("GATE_RESULT:PASS");
   const hasFail = result.stdout.includes("GATE_RESULT:FAIL");
@@ -48,6 +49,7 @@ Do NOT emit both markers. Do NOT omit the marker.`;
 
 export async function runUnitTestGate(
   context: TaskContext,
+  options?: AgentSpawnOptions,
 ): Promise<GateResult> {
   if (!context.implement) {
     throw new TaskError(
@@ -68,7 +70,7 @@ export async function runUnitTestGate(
   }
 
   const prompt = buildUnitTestGatePrompt(context);
-  return runGate("gate:unit-tests", prompt);
+  return runGate("gate:unit-tests", prompt, options);
 }
 
 /* ------------------------------------------------------------------ */
@@ -99,6 +101,7 @@ Do NOT emit both markers. Do NOT omit the marker.`;
 
 export async function runFunctionalTestGate(
   context: TaskContext,
+  options?: AgentSpawnOptions,
 ): Promise<GateResult> {
   if (!context.implement) {
     throw new TaskError(
@@ -119,5 +122,5 @@ export async function runFunctionalTestGate(
   }
 
   const prompt = buildFunctionalTestGatePrompt(context);
-  return runGate("gate:functional-tests", prompt);
+  return runGate("gate:functional-tests", prompt, options);
 }

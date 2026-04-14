@@ -32,6 +32,13 @@ export interface PlannerOutput {
   dod: string[];
 }
 
+export interface PlannerClarification {
+  needsClarification: true;
+  questions: string[];
+}
+
+export type PlannerResult = PlannerOutput | PlannerClarification;
+
 export interface DevOutput {
   files: string[];
 }

@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline";
 import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import { runPlanner } from "../planner.js";
@@ -6,7 +7,7 @@ import { runPRReview, formatPRReviewOutput } from "../pr-review.js";
 import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
-import type { Severity, StageResult, TaskContext } from "../task.js";
+import type { Severity, StageResult, TaskContext, PlannerOutput } from "../task.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -14,6 +15,7 @@ interface RunOptions {
   spec: string;
   dryRun: boolean;
   securityThreshold: string;
+  autoApprove: boolean;
 }
 
 export async function runCommand(options: RunOptions): Promise<void> {
@@ -41,12 +43,79 @@ export async function runCommand(options: RunOptions): Promise<void> {
       process.exit(1);
     }
 
+    // Prompt for permission mode if not specified
+    let autoApprove = options.autoApprove;
+    if (!autoApprove) {
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(
+          "\nAgents will write files and run commands. Auto-approve all actions? (y/n) ",
+          resolve,
+        );
+      });
+      rl.close();
+
+      autoApprove = answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
+      console.log("");
+    }
+
     const context: TaskContext = { spec, results: [] };
+    const agentOptions = { autoApprove };
 
     for (const stage of PIPELINE) {
       if (stage.name === "plan") {
         console.log(`[${stage.name}] running planner...`);
-        const plan = await runPlanner(context.spec);
+
+        let plan: PlannerOutput | null = null;
+        let clarificationAnswers = "";
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        while (!plan && attempts < maxAttempts) {
+          attempts++;
+          const result = await runPlanner(context.spec, clarificationAnswers);
+
+          if ("needsClarification" in result && result.needsClarification) {
+            console.log(`\n[${stage.name}] planner needs clarification:\n`);
+
+            const answers: string[] = [];
+            const rl = createInterface({
+              input: process.stdin,
+              output: process.stdout,
+            });
+
+            for (let i = 0; i < result.questions.length; i++) {
+              const question = result.questions[i];
+              const answer = await new Promise<string>((resolve) => {
+                rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
+              });
+
+              if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
+                rl.close();
+                throw new TaskError("Planner: clarification aborted by user");
+              }
+
+              answers.push(`Q: ${question}\nA: ${answer}`);
+            }
+
+            rl.close();
+            clarificationAnswers = answers.join("\n\n");
+            console.log(`\n[${stage.name}] re-running planner with clarifications...\n`);
+          } else {
+            plan = result as PlannerOutput;
+          }
+        }
+
+        if (!plan) {
+          throw new TaskError(
+            `Planner: failed to create valid plan after ${maxAttempts} attempts`,
+          );
+        }
+
         context.plan = plan;
 
         console.log(`[${stage.name}] goals:`);
@@ -72,7 +141,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         console.log(`[${stage.name}] spawning dev and qe agents...`);
-        const impl = await runImplement(context.spec, context.plan);
+        const impl = await runImplement(context.spec, context.plan, agentOptions);
         context.implement = impl;
 
         const devSuccess = impl.dev !== null;
@@ -99,7 +168,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         console.log(`[gate-unit-tests] running unit tests...`);
-        const gateResult = await runUnitTestGate(context);
+        const gateResult = await runUnitTestGate(context, agentOptions);
 
         if (!context.gates) context.gates = {};
         context.gates.unitTests = gateResult;
@@ -129,7 +198,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         console.log(`[gate-functional-tests] running functional tests...`);
-        const gateResult = await runFunctionalTestGate(context);
+        const gateResult = await runFunctionalTestGate(context, agentOptions);
 
         if (!context.gates) context.gates = {};
         context.gates.functionalTests = gateResult;
@@ -163,6 +232,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const { output, passed } = await runSecurityReview(
           context,
           threshold as Severity,
+          agentOptions,
         );
         context.securityReview = output;
 
@@ -216,7 +286,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         console.log(`[pr-review] reviewing pull request...`);
-        const reviewOutput = await runPRReview(context);
+        const reviewOutput = await runPRReview(context, agentOptions);
         context.prReview = reviewOutput;
 
         console.log(formatPRReviewOutput(reviewOutput));

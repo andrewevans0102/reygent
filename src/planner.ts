@@ -1,58 +1,87 @@
-import { execFile } from "node:child_process";
 import { builtinAgents } from "./agents.js";
+import { spawnAgentStream } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
-import type { PlannerOutput } from "./task.js";
+import type { PlannerOutput, PlannerClarification, PlannerResult } from "./task.js";
 import { TaskError } from "./task.js";
 
-function buildPrompt(spec: SpecPayload): string {
+export function extractJSON(text: string): string {
+  const trimmed = text.trim();
+
+  // Try exact match: entire string is a fenced block
+  const exact = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/);
+  if (exact) return exact[1];
+
+  // Try embedded fence: find last ```json ... ``` block in output
+  const fences = [...trimmed.matchAll(/```(?:json)?\s*\n([\s\S]*?)\n```/g)];
+  if (fences.length > 0) return fences[fences.length - 1][1];
+
+  // Try raw JSON object: find last { ... } block
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (lastBrace !== -1) {
+    // Walk backwards to find matching opening brace
+    let depth = 0;
+    for (let i = lastBrace; i >= 0; i--) {
+      if (trimmed[i] === "}") depth++;
+      if (trimmed[i] === "{") depth--;
+      if (depth === 0) return trimmed.slice(i, lastBrace + 1);
+    }
+  }
+
+  return trimmed;
+}
+
+function buildPrompt(spec: SpecPayload, previousAnswers?: string): string {
   const plannerAgent = builtinAgents.find((a) => a.name === "planner");
   const systemPrompt = plannerAgent?.systemPrompt ?? "";
+
+  let clarificationContext = "";
+  if (previousAnswers) {
+    clarificationContext = `
+
+## Previous Clarifications
+
+${previousAnswers}
+
+Use these clarifications to inform your plan.`;
+  }
 
   return `${systemPrompt}
 
 ---
 
-Below is the raw spec to analyse. Return ONLY valid JSON matching one of two shapes:
+Below is the raw spec to analyse. Return ONLY valid JSON matching one of three shapes:
 
-**Valid spec:**
+**Valid spec (can create plan):**
 \`\`\`json
 { "valid": true, "goals": ["..."], "tasks": ["..."], "constraints": ["..."], "dod": ["..."] }
 \`\`\`
 
-**Invalid spec:**
+**Needs clarification (spec ambiguous or missing design decisions):**
+\`\`\`json
+{ "valid": false, "needsClarification": true, "questions": ["What auth method?", "Support pagination?"] }
+\`\`\`
+
+**Invalid spec (fundamental issues, cannot proceed):**
 \`\`\`json
 { "valid": false, "errors": ["..."] }
 \`\`\`
 
-Each array in the valid shape must contain at least one non-empty string. Do not include any text outside the JSON object.
+IMPORTANT: If spec is ambiguous or missing key design decisions, prefer "needsClarification" over hard failure. Ask specific questions about:
+- Authentication/authorization approach
+- Data storage/persistence strategy
+- API design decisions (REST vs GraphQL, pagination, filtering)
+- Error handling patterns
+- Scalability/performance requirements
+- Integration points with existing systems
+
+Each array must contain at least one non-empty string. Do not include any text outside the JSON object.
 
 ---
 
 **Spec title:** ${spec.title}
 
 **Spec content:**
-${spec.content}`;
-}
-
-function spawnClaude(prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "claude",
-      ["-p", prompt, "--output-format", "json"],
-      { timeout: 120_000, maxBuffer: 1024 * 1024 },
-      (error, stdout) => {
-        if (error) {
-          reject(
-            new TaskError(
-              `Planner: claude CLI failed — ${error.message}`,
-            ),
-          );
-          return;
-        }
-        resolve(stdout);
-      },
-    );
-  });
+${spec.content}${clarificationContext}`;
 }
 
 function isNonEmptyStringArray(value: unknown): value is string[] {
@@ -63,40 +92,39 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
   );
 }
 
-export async function runPlanner(spec: SpecPayload): Promise<PlannerOutput> {
-  const prompt = buildPrompt(spec);
-  const raw = await spawnClaude(prompt);
+export async function runPlanner(
+  spec: SpecPayload,
+  previousAnswers?: string,
+): Promise<PlannerResult> {
+  const prompt = buildPrompt(spec, previousAnswers);
+  const { stdout: raw, exitCode } = await spawnAgentStream("planner", prompt, 120_000, { quiet: true });
 
-  let cliOutput: unknown;
-  try {
-    cliOutput = JSON.parse(raw);
-  } catch {
-    throw new TaskError("Planner: failed to parse claude CLI output as JSON");
-  }
-
-  const result = (cliOutput as { result?: unknown }).result;
-  if (result === undefined) {
-    throw new TaskError(
-      "Planner: claude CLI output missing 'result' field",
-    );
+  if (exitCode !== 0) {
+    throw new TaskError(`Planner: claude CLI exited with code ${exitCode}`);
   }
 
   let parsed: unknown;
-  if (typeof result === "string") {
-    try {
-      parsed = JSON.parse(result);
-    } catch {
-      throw new TaskError(
-        "Planner: failed to parse 'result' field as JSON",
-      );
-    }
-  } else {
-    parsed = result;
+  try {
+    parsed = JSON.parse(extractJSON(raw));
+  } catch {
+    throw new TaskError("Planner: failed to parse result as JSON");
   }
 
   const obj = parsed as Record<string, unknown>;
 
   if (obj.valid === false) {
+    // Check if needs clarification
+    if (obj.needsClarification === true && Array.isArray(obj.questions)) {
+      const questions = (obj.questions as unknown[]).filter(
+        (q) => typeof q === "string" && q.trim().length > 0,
+      ) as string[];
+
+      if (questions.length > 0) {
+        return { needsClarification: true, questions };
+      }
+    }
+
+    // Hard failure
     const errors = Array.isArray(obj.errors)
       ? (obj.errors as string[]).join("\n  - ")
       : "unknown validation error";

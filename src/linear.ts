@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { extractJSON } from "./planner.js";
 import { LinearSpecPayload, SpecError } from "./spec.js";
 
 const LINEAR_URL_PATTERN =
@@ -72,7 +73,7 @@ export async function readLinearSpec(
     let content: string;
 
     try {
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(extractJSON(raw));
       title = parsed.title || parsed.summary || issueId;
       const description = parsed.description || "";
 

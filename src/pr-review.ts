@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { builtinAgents } from "./agents.js";
-import { spawnAgent } from "./implement.js";
+import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
+import { extractJSON } from "./planner.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
 
@@ -72,7 +73,8 @@ ${diff}
 }
 
 export function extractPRReviewOutput(stdout: string): PRReviewOutput {
-  const match = stdout.match(
+  const cleaned = extractJSON(stdout);
+  const match = cleaned.match(
     /\{\s*"summary"\s*:\s*"[^"]*"[\s\S]*?"recommendedActions"\s*:\s*\[[\s\S]*?\]\s*\}/,
   );
   if (!match) {
@@ -193,6 +195,7 @@ function getDiff(prNumber: number): Promise<string> {
 
 export async function runPRReview(
   context: TaskContext,
+  options?: AgentSpawnOptions,
 ): Promise<PRReviewOutput> {
   if (!context.prCreate) {
     throw new TaskError("pr-review: pr-create stage must run first");
@@ -205,7 +208,7 @@ export async function runPRReview(
 
   const diff = await getDiff(context.prCreate.prNumber);
   const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff);
-  const result = await spawnAgent("pr-review", prompt);
+  const result = await spawnAgent("pr-review", prompt, options);
 
   if (result.exitCode !== 0) {
     throw new TaskError(

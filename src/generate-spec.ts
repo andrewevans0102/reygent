@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
 import { builtinAgents } from "./agents.js";
+import { spawnAgentStream } from "./spawn.js";
 import { TaskError } from "./task.js";
 
 function buildGeneratePrompt(description: string): string {
@@ -25,52 +25,17 @@ Be specific and actionable. Expand the description into concrete requirements th
 **Description:** ${description}`;
 }
 
-function spawnClaude(prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "claude",
-      ["-p", prompt, "--output-format", "json"],
-      { timeout: 120_000, maxBuffer: 1024 * 1024 },
-      (error, stdout) => {
-        if (error) {
-          reject(
-            new TaskError(
-              `generate-spec: claude CLI failed — ${error.message}`,
-            ),
-          );
-          return;
-        }
-        resolve(stdout);
-      },
-    );
-  });
-}
-
 export async function generateSpec(description: string): Promise<string> {
   const prompt = buildGeneratePrompt(description);
-  const raw = await spawnClaude(prompt);
+  const { stdout, exitCode } = await spawnAgentStream("generate-spec", prompt, 120_000);
 
-  let cliOutput: unknown;
-  try {
-    cliOutput = JSON.parse(raw);
-  } catch {
-    throw new TaskError(
-      "generate-spec: failed to parse claude CLI output as JSON",
-    );
+  if (exitCode !== 0) {
+    throw new TaskError(`generate-spec: claude CLI exited with code ${exitCode}`);
   }
 
-  const result = (cliOutput as { result?: unknown }).result;
-  if (result === undefined) {
-    throw new TaskError(
-      "generate-spec: claude CLI output missing 'result' field",
-    );
+  if (!stdout) {
+    throw new TaskError("generate-spec: empty result from claude CLI");
   }
 
-  if (typeof result !== "string") {
-    throw new TaskError(
-      "generate-spec: expected 'result' to be a markdown string",
-    );
-  }
-
-  return result;
+  return stdout;
 }

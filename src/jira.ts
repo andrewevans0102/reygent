@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { extractJSON } from "./planner.js";
 import { JiraSpecPayload, SpecError } from "./spec.js";
 
 const JIRA_KEY_PATTERN = /^[A-Z]+-\d+$/;
@@ -61,7 +62,7 @@ export async function readJiraSpec(issueKey: string): Promise<JiraSpecPayload> {
     let content: string;
 
     try {
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(extractJSON(raw));
       title = parsed.summary || parsed.title || issueKey;
       const description = parsed.description || "";
       const acceptanceCriteria =

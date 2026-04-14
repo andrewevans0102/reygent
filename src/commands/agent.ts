@@ -1,14 +1,17 @@
+import { createInterface } from "node:readline";
 import { builtinAgents } from "../agents.js";
 import { spawnAgent } from "../implement.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { TaskError } from "../task.js";
 
 interface AgentOptions {
-  spec: string;
+  spec?: string;
+  autoApprove: boolean;
 }
 
 export async function agentCommand(
   name: string,
+  userPrompt: string | undefined,
   options: AgentOptions,
 ): Promise<void> {
   const agent = builtinAgents.find((a) => a.name === name);
@@ -20,9 +23,32 @@ export async function agentCommand(
   }
 
   try {
-    const spec = await loadSpec(options.spec);
+    // Prompt for permission mode if not specified
+    let autoApprove = options.autoApprove;
+    if (!autoApprove) {
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
 
-    const prompt = `${agent.systemPrompt}
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(
+          "\nAgent may write files and run commands. Auto-approve all actions? (y/n) ",
+          resolve,
+        );
+      });
+      rl.close();
+
+      autoApprove = answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
+      console.log("");
+    }
+
+    let prompt: string;
+
+    if (options.spec) {
+      // Spec mode: load spec and build prompt with spec context
+      const spec = await loadSpec(options.spec);
+      prompt = `${agent.systemPrompt}
 
 ---
 
@@ -31,8 +57,24 @@ export async function agentCommand(
 **Title:** ${spec.title}
 
 ${spec.content}`;
+    } else if (userPrompt) {
+      // Interactive mode: use user prompt directly
+      prompt = `${agent.systemPrompt}
 
-    const result = await spawnAgent(name, prompt);
+---
+
+${userPrompt}`;
+    } else {
+      console.error(
+        `Error: either provide a prompt or use --spec\n\n` +
+        `Examples:\n` +
+        `  reygent agent security-reviewer "review this auth code"\n` +
+        `  reygent agent qe --spec spec.md`,
+      );
+      process.exit(1);
+    }
+
+    const result = await spawnAgent(name, prompt, { autoApprove });
 
     if (result.exitCode !== 0) {
       process.exit(1);
