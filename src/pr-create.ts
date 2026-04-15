@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { request as httpsRequest } from "node:https";
 import { loadEnvFile } from "./env.js";
 import type { SpecPayload } from "./spec.js";
 import type { PRCreateOutput, TaskContext } from "./task.js";
@@ -110,6 +111,41 @@ export async function createPR(opts: {
   return createGitHubPR(opts);
 }
 
+function httpsPost(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+): Promise<{ status: number; text: string }> {
+  const rejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0";
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const bodyBuf = Buffer.from(body, "utf-8");
+    const req = httpsRequest(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: parsed.pathname + parsed.search,
+        method: "POST",
+        headers: { ...headers, "Content-Length": bodyBuf.byteLength },
+        rejectUnauthorized,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString("utf-8"),
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.write(bodyBuf);
+    req.end();
+  });
+}
+
 async function createGitHubPR(opts: {
   remote: RemoteInfo;
   title: string;
@@ -123,28 +159,26 @@ async function createGitHubPR(opts: {
     host === "github.com"
       ? "https://api.github.com"
       : `https://${host}/api/v3`;
-  const response = await fetch(`${apiBase}/repos/${owner}/${repo}/pulls`, {
-    method: "POST",
-    headers: {
+  const body = JSON.stringify({
+    title: opts.title,
+    body: opts.body,
+    head: opts.head,
+    base: opts.base,
+  });
+  const { status, text } = await httpsPost(
+    `${apiBase}/repos/${owner}/${repo}/pulls`,
+    {
       Authorization: `Bearer ${opts.token}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      title: opts.title,
-      body: opts.body,
-      head: opts.head,
-      base: opts.base,
-    }),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new TaskError(
-      `pr-create: GitHub API error ${response.status}: ${text}`,
-    );
+    body,
+  );
+  if (status < 200 || status >= 300) {
+    throw new TaskError(`pr-create: GitHub API error ${status}: ${text}`);
   }
-  const data = (await response.json()) as { html_url: string; number: number };
+  const data = JSON.parse(text) as { html_url: string; number: number };
   return { prUrl: data.html_url, prNumber: data.number };
 }
 
@@ -158,29 +192,24 @@ async function createGitLabMR(opts: {
 }): Promise<{ prUrl: string; prNumber: number }> {
   const { host, owner, repo } = opts.remote;
   const projectPath = encodeURIComponent(`${owner}/${repo}`);
-  const response = await fetch(
+  const body = JSON.stringify({
+    title: opts.title,
+    description: opts.body,
+    source_branch: opts.head,
+    target_branch: opts.base,
+  });
+  const { status, text } = await httpsPost(
     `https://${host}/api/v4/projects/${projectPath}/merge_requests`,
     {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${opts.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        title: opts.title,
-        description: opts.body,
-        source_branch: opts.head,
-        target_branch: opts.base,
-      }),
+      Authorization: `Bearer ${opts.token}`,
+      "Content-Type": "application/json",
     },
+    body,
   );
-  if (!response.ok) {
-    const text = await response.text();
-    throw new TaskError(
-      `pr-create: GitLab API error ${response.status}: ${text}`,
-    );
+  if (status < 200 || status >= 300) {
+    throw new TaskError(`pr-create: GitLab API error ${status}: ${text}`);
   }
-  const data = (await response.json()) as { web_url: string; iid: number };
+  const data = JSON.parse(text) as { web_url: string; iid: number };
   return { prUrl: data.web_url, prNumber: data.iid };
 }
 
