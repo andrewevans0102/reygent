@@ -182,16 +182,13 @@ async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
   return {};
 }
 
-async function httpsPost(
+function doHttpsPost(
   url: string,
   headers: Record<string, string>,
   body: string,
-  opts?: { insecure?: boolean },
+  tlsOpts: TlsOptions,
 ): Promise<{ status: number; text: string }> {
   const parsed = new URL(url);
-  const tlsOpts: TlsOptions = opts?.insecure
-    ? { rejectUnauthorized: false }
-    : await resolveTlsOptions(parsed.hostname);
   return new Promise((resolve, reject) => {
     const bodyBuf = Buffer.from(body, "utf-8");
     const req = httpsRequest(
@@ -218,6 +215,41 @@ async function httpsPost(
     req.write(bodyBuf);
     req.end();
   });
+}
+
+function isSslError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const code = (err as NodeJS.ErrnoException).code ?? "";
+  return (
+    code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+    code === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+    code === "SELF_SIGNED_CERT_IN_CHAIN" ||
+    code === "ERR_TLS_CERT_ALTNAME_INVALID" ||
+    code === "CERT_HAS_EXPIRED" ||
+    err.message.includes("self-signed") ||
+    err.message.includes("certificate")
+  );
+}
+
+async function httpsPost(
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  opts?: { insecure?: boolean },
+): Promise<{ status: number; text: string }> {
+  const parsed = new URL(url);
+  const tlsOpts: TlsOptions = opts?.insecure
+    ? { rejectUnauthorized: false }
+    : await resolveTlsOptions(parsed.hostname);
+
+  try {
+    return await doHttpsPost(url, headers, body, tlsOpts);
+  } catch (err) {
+    if (!opts?.insecure && isSslError(err)) {
+      return doHttpsPost(url, headers, body, { rejectUnauthorized: false });
+    }
+    throw err;
+  }
 }
 
 async function createGitHubPR(opts: {
