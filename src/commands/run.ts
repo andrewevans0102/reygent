@@ -251,13 +251,32 @@ export async function runCommand(options: RunOptions): Promise<void> {
           continue;
         }
 
-        console.log(`[security-review] FAILED`);
+        console.log(`[security-review] FAILED — findings at or above ${threshold} threshold`);
         context.results.push({
           stage: stage.name,
           success: false,
           output: JSON.stringify(output),
         });
-        process.exit(1);
+
+        const rl = createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        const answer = await new Promise<string>((resolve) => {
+          rl.question(
+            "\nSecurity review failed. Continue with PR creation anyway? (y/n) ",
+            resolve,
+          );
+        });
+        rl.close();
+
+        if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
+          console.log("[security-review] Aborted by user.");
+          process.exit(1);
+        }
+
+        console.log("[security-review] Bypassed by user — continuing...");
+        continue;
       }
 
       if (stage.name === "pr-create") {
@@ -281,10 +300,6 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
 
       if (stage.name === "pr-review") {
-        if (!context.prCreate) {
-          throw new TaskError("pr-review: pr-create stage must run first");
-        }
-
         console.log(`[pr-review] reviewing pull request...`);
         const reviewOutput = await runPRReview(context, agentOptions);
         context.prReview = reviewOutput;

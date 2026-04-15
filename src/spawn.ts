@@ -72,6 +72,18 @@ export function spawnAgentStream(
       reject(new TaskError(`${name}: timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
+    let stdoutEnded = false;
+    let stderrEnded = false;
+    let processExitCode: number | null = null;
+
+    const maybeResolve = () => {
+      if (stdoutEnded && stderrEnded && processExitCode !== null) {
+        clearTimeout(timeout);
+        const stdout = resultText || textChunks.join("\n");
+        resolve({ stdout, exitCode: processExitCode });
+      }
+    };
+
     const stdoutRL = createInterface({ input: child.stdout! });
     stdoutRL.on("line", (line) => {
       if (!line.trim()) return;
@@ -104,10 +116,18 @@ export function spawnAgentStream(
         resultText = msg.result;
       }
     });
+    stdoutRL.on("close", () => {
+      stdoutEnded = true;
+      maybeResolve();
+    });
 
     const stderrRL = createInterface({ input: child.stderr! });
     stderrRL.on("line", (line) => {
       process.stderr.write(`[${name}] ${line}\n`);
+    });
+    stderrRL.on("close", () => {
+      stderrEnded = true;
+      maybeResolve();
     });
 
     child.on("error", (err) => {
@@ -116,10 +136,8 @@ export function spawnAgentStream(
     });
 
     child.on("close", (code) => {
-      clearTimeout(timeout);
-      // Prefer result event text; fall back to collected text chunks
-      const stdout = resultText || textChunks.join("\n");
-      resolve({ stdout, exitCode: code ?? 1 });
+      processExitCode = code ?? 1;
+      maybeResolve();
     });
   });
 }

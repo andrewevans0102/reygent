@@ -172,17 +172,20 @@ export function formatPRReviewOutput(output: PRReviewOutput): string {
   return lines.join("\n");
 }
 
-function getDiff(prNumber: number): Promise<string> {
+function exec(
+  cmd: string,
+  args: string[],
+): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
-      "gh",
-      ["pr", "diff", String(prNumber)],
+      cmd,
+      args,
       { maxBuffer: 10 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) {
           reject(
             new TaskError(
-              `pr-review: failed to fetch PR diff: ${stderr || error.message}`,
+              `pr-review: command failed: ${cmd} ${args.join(" ")}\n${stderr || error.message}`,
             ),
           );
           return;
@@ -193,12 +196,54 @@ function getDiff(prNumber: number): Promise<string> {
   });
 }
 
+function getDiff(prNumber: number): Promise<string> {
+  return exec("gh", ["pr", "diff", String(prNumber)]);
+}
+
+/**
+ * Detect PR number from current git branch via GitHub CLI.
+ * Returns the PR number or throws if no PR is found.
+ */
+async function detectPRFromBranch(): Promise<{ prNumber: number; branch: string }> {
+  const branch = (await exec("git", ["branch", "--show-current"])).trim();
+  if (!branch) {
+    throw new TaskError(
+      "pr-review: not on a branch — cannot auto-detect PR number",
+    );
+  }
+
+  let prJson: string;
+  try {
+    prJson = await exec("gh", ["pr", "view", "--json", "number", "--jq", ".number"]);
+  } catch {
+    throw new TaskError(
+      `pr-review: no open PR found for branch "${branch}". Create a PR first or provide a PR number.`,
+    );
+  }
+
+  const prNumber = parseInt(prJson.trim(), 10);
+  if (isNaN(prNumber) || prNumber <= 0) {
+    throw new TaskError(
+      `pr-review: could not parse PR number from branch "${branch}"`,
+    );
+  }
+
+  return { prNumber, branch };
+}
+
 export async function runPRReview(
   context: TaskContext,
   options?: AgentSpawnOptions,
 ): Promise<PRReviewOutput> {
-  if (!context.prCreate) {
-    throw new TaskError("pr-review: pr-create stage must run first");
+  let prNumber: number;
+
+  if (context.prCreate) {
+    prNumber = context.prCreate.prNumber;
+  } else {
+    console.log("[pr-review] no PR number provided — detecting from current branch...");
+    const detected = await detectPRFromBranch();
+    prNumber = detected.prNumber;
+    console.log(`[pr-review] found PR #${prNumber} on branch "${detected.branch}"`);
   }
 
   const agent = builtinAgents.find((a) => a.name === "pr-reviewer");
@@ -206,7 +251,7 @@ export async function runPRReview(
     throw new TaskError("pr-review: missing pr-reviewer agent config");
   }
 
-  const diff = await getDiff(context.prCreate.prNumber);
+  const diff = await getDiff(prNumber);
   const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff);
   const result = await spawnAgent("pr-review", prompt, options);
 

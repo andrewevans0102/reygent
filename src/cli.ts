@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { agentCommand } from "./commands/agent.js";
-import { initCommand } from "./commands/init.js";
 import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
 import { runCommand } from "./commands/run.js";
+import { prCreateCommand } from "./commands/pr-create.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -19,11 +19,6 @@ program
   .name("reygent")
   .description("Reygent CLI tool")
   .version(pkg.version);
-
-program
-  .command("init")
-  .description("Scaffold .claude/agents/ with built-in agent configs")
-  .action(initCommand);
 
 program
   .command("generate-spec")
@@ -55,5 +50,16 @@ program
   .option("--security-threshold <level>", "Minimum severity to fail security review (CRITICAL, HIGH, MEDIUM, LOW)", "HIGH")
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
   .action(runCommand);
+
+program
+  .command("pr-create")
+  .description("Create a pull request from current branch")
+  .option("--title <title>", "PR title (defaults to spec title or last commit message)")
+  .option("--body <body>", "PR body/description")
+  .option("--spec <source>", "Optional: Path to a markdown file, issue key, or Linear URL")
+  .option("--base <branch>", "Base branch for PR (defaults to origin/HEAD)")
+  .option("--push", "Push current branch to origin before creating PR", true)
+  .option("--no-push", "Don't push (assume branch already pushed)")
+  .action(prCreateCommand);
 
 program.parse();

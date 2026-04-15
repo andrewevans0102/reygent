@@ -43,17 +43,6 @@ export async function assertGhInstalled(): Promise<void> {
   }
 }
 
-export function assertGithubToken(): void {
-  if (!process.env.GITHUB_TOKEN && !process.env.GH_TOKEN) {
-    throw new TaskError(
-      "pr-create: GITHUB_TOKEN or GH_TOKEN environment variable is not set.\n\n" +
-        "Create a token at https://github.com/settings/tokens\n" +
-        "Then add to your .env file:\n" +
-        "  GITHUB_TOKEN=ghp_xxxxxxxxxxxx",
-    );
-  }
-}
-
 export function deriveBranchName(spec: SpecPayload): string {
   switch (spec.source) {
     case "jira":
@@ -171,6 +160,44 @@ export function buildPRBody(context: TaskContext): string {
     sections.push("");
   }
 
+  const prReview = context.prReview;
+  if (prReview) {
+    sections.push("## PR Review");
+    sections.push("");
+    sections.push(prReview.summary);
+    sections.push("");
+
+    if (prReview.comments.length > 0) {
+      sections.push("### Review Comments");
+      sections.push("");
+
+      const byFile = new Map<string, typeof prReview.comments>();
+      for (const c of prReview.comments) {
+        const group = byFile.get(c.file) ?? [];
+        group.push(c);
+        byFile.set(c.file, group);
+      }
+
+      for (const [file, comments] of byFile) {
+        sections.push(`**${file}**`);
+        for (const c of comments) {
+          const lineRef = c.line !== null ? `:${c.line}` : "";
+          sections.push(`- \`${file}${lineRef}\`: ${c.comment}`);
+        }
+        sections.push("");
+      }
+    }
+
+    if (prReview.recommendedActions.length > 0) {
+      sections.push("### Recommended Actions");
+      sections.push("");
+      for (const action of prReview.recommendedActions) {
+        sections.push(`- ${action}`);
+      }
+      sections.push("");
+    }
+  }
+
   sections.push("---");
   sections.push("*Created by [reygent](https://github.com/andrewevans/reygent)*");
 
@@ -182,12 +209,48 @@ export async function runPRCreate(
 ): Promise<PRCreateOutput> {
   loadEnvFile();
   await assertGhInstalled();
-  assertGithubToken();
 
   const branch = deriveBranchName(context.spec);
   const commitMessage = buildCommitMessage(context);
   const prBody = buildPRBody(context);
   const prTitle = context.spec.title;
+
+  // Get default branch
+  let baseBranch: string;
+  try {
+    const { stdout: defaultBranch } = await exec("git", [
+      "symbolic-ref",
+      "refs/remotes/origin/HEAD",
+    ]);
+    baseBranch = defaultBranch.trim().replace("refs/remotes/origin/", "");
+  } catch {
+    // Fallback: auto-set origin/HEAD and retry
+    try {
+      await exec("git", ["remote", "set-head", "origin", "-a"]);
+      const { stdout: defaultBranch } = await exec("git", [
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+      ]);
+      baseBranch = defaultBranch.trim().replace("refs/remotes/origin/", "");
+    } catch {
+      // Final fallback: try common default branches
+      const { stdout: branches } = await exec("git", [
+        "branch",
+        "-r",
+        "--list",
+        "origin/main",
+        "origin/master",
+      ]);
+      const match = branches.trim().match(/origin\/(main|master)/);
+      if (match) {
+        baseBranch = match[1];
+      } else {
+        throw new TaskError(
+          "pr-create: cannot determine default branch. Set with: git remote set-head origin <branch>",
+        );
+      }
+    }
+  }
 
   // Stage all changes
   await exec("git", ["add", "-A"]);
@@ -213,8 +276,8 @@ export async function runPRCreate(
     prTitle,
     "--body",
     prBody,
-    "--head",
-    branch,
+    "--base",
+    baseBranch,
   ]);
 
   // Parse PR URL from last non-empty line
