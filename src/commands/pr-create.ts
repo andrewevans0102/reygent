@@ -1,4 +1,4 @@
-import { createPRViaAPI, parseGitHubRemote, resolveGitHubToken } from "../pr-create.js";
+import { createPR, parseRemote, resolveToken } from "../pr-create.js";
 import { loadSpec } from "../spec.js";
 import type { TaskContext } from "../task.js";
 import { TaskError } from "../task.js";
@@ -81,7 +81,14 @@ export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
   try {
     loadEnvFile();
 
-    const token = await resolveGitHubToken();
+    // Resolve remote and credentials first
+    const { stdout: remoteUrlEarly } = await exec("git", [
+      "remote",
+      "get-url",
+      "origin",
+    ]);
+    const remoteEarly = parseRemote(remoteUrlEarly);
+    const token = await resolveToken(remoteEarly.host);
 
     // Get current branch
     const { stdout: currentBranch } = await exec("git", [
@@ -163,18 +170,10 @@ export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
       await exec("git", ["push", "-u", "origin", branch], { timeout: 60_000 });
     }
 
-    // Determine owner/repo from remote URL
+    // Create PR via platform API
     console.log(`[pr-create] creating pull request...`);
-    const { stdout: remoteUrl } = await exec("git", [
-      "remote",
-      "get-url",
-      "origin",
-    ]);
-    const { owner, repo } = parseGitHubRemote(remoteUrl);
-
-    const { prUrl, prNumber } = await createPRViaAPI({
-      owner,
-      repo,
+    const { prUrl, prNumber } = await createPR({
+      remote: remoteEarly,
       title: prTitle,
       body: prBody,
       head: branch,

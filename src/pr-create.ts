@@ -29,7 +29,16 @@ function exec(
   });
 }
 
-export async function resolveGitHubToken(): Promise<string> {
+export type Platform = "github" | "gitlab";
+
+export interface RemoteInfo {
+  platform: Platform;
+  host: string;
+  owner: string;
+  repo: string;
+}
+
+export async function resolveToken(host: string): Promise<string> {
   const { execFile: execFileCb } = await import("node:child_process");
   return new Promise((resolve, reject) => {
     const child = execFileCb(
@@ -40,8 +49,8 @@ export async function resolveGitHubToken(): Promise<string> {
         if (error) {
           reject(
             new TaskError(
-              "pr-create: failed to retrieve GitHub credentials via git credential fill.\n" +
-                "Run: git credential approve or configure a credential helper.",
+              `pr-create: failed to retrieve credentials for ${host} via git credential fill.\n` +
+                "Configure a credential helper: https://git-scm.com/doc/credential-helpers",
             ),
           );
           return;
@@ -52,7 +61,7 @@ export async function resolveGitHubToken(): Promise<string> {
         if (!passwordLine) {
           reject(
             new TaskError(
-              "pr-create: no password/token found from git credential fill for github.com.",
+              `pr-create: no password/token found from git credential fill for ${host}.`,
             ),
           );
           return;
@@ -60,50 +69,75 @@ export async function resolveGitHubToken(): Promise<string> {
         resolve(passwordLine.slice("password=".length).trim());
       },
     );
-    child.stdin?.write("protocol=https\nhost=github.com\n\n");
+    child.stdin?.write(`protocol=https\nhost=${host}\n\n`);
     child.stdin?.end();
   });
 }
 
-export function parseGitHubRemote(remoteUrl: string): { owner: string; repo: string } {
-  const match = remoteUrl
-    .trim()
-    .match(/github\.com[/:]([^/]+)\/([^/.]+?)(\.git)?$/);
-  if (!match) {
-    throw new TaskError(
-      `pr-create: cannot parse GitHub remote URL: ${remoteUrl}`,
-    );
+export function parseRemote(remoteUrl: string): RemoteInfo {
+  const url = remoteUrl.trim();
+
+  // SSH: git@github.com:owner/repo.git
+  const sshMatch = url.match(/^git@([^:]+):([^/]+)\/([^/.]+?)(\.git)?$/);
+  if (sshMatch) {
+    const host = sshMatch[1];
+    const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
+    return { platform, host, owner: sshMatch[2], repo: sshMatch[3] };
   }
-  return { owner: match[1], repo: match[2] };
+
+  // HTTPS: https://github.com/owner/repo.git
+  const httpsMatch = url.match(/^https?:\/\/([^/]+)\/([^/]+)\/([^/.]+?)(\.git)?$/);
+  if (httpsMatch) {
+    const host = httpsMatch[1];
+    const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
+    return { platform, host, owner: httpsMatch[2], repo: httpsMatch[3] };
+  }
+
+  throw new TaskError(`pr-create: cannot parse remote URL: ${url}`);
 }
 
-export async function createPRViaAPI(opts: {
-  owner: string;
-  repo: string;
+export async function createPR(opts: {
+  remote: RemoteInfo;
   title: string;
   body: string;
   head: string;
   base: string;
   token: string;
 }): Promise<{ prUrl: string; prNumber: number }> {
-  const response = await fetch(
-    `https://api.github.com/repos/${opts.owner}/${opts.repo}/pulls`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${opts.token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        title: opts.title,
-        body: opts.body,
-        head: opts.head,
-        base: opts.base,
-      }),
+  if (opts.remote.platform === "gitlab") {
+    return createGitLabMR(opts);
+  }
+  return createGitHubPR(opts);
+}
+
+async function createGitHubPR(opts: {
+  remote: RemoteInfo;
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+  token: string;
+}): Promise<{ prUrl: string; prNumber: number }> {
+  const { host, owner, repo } = opts.remote;
+  const apiBase =
+    host === "github.com"
+      ? "https://api.github.com"
+      : `https://${host}/api/v3`;
+  const response = await fetch(`${apiBase}/repos/${owner}/${repo}/pulls`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${opts.token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({
+      title: opts.title,
+      body: opts.body,
+      head: opts.head,
+      base: opts.base,
+    }),
+  });
   if (!response.ok) {
     const text = await response.text();
     throw new TaskError(
@@ -112,6 +146,42 @@ export async function createPRViaAPI(opts: {
   }
   const data = (await response.json()) as { html_url: string; number: number };
   return { prUrl: data.html_url, prNumber: data.number };
+}
+
+async function createGitLabMR(opts: {
+  remote: RemoteInfo;
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+  token: string;
+}): Promise<{ prUrl: string; prNumber: number }> {
+  const { host, owner, repo } = opts.remote;
+  const projectPath = encodeURIComponent(`${owner}/${repo}`);
+  const response = await fetch(
+    `https://${host}/api/v4/projects/${projectPath}/merge_requests`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${opts.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: opts.title,
+        description: opts.body,
+        source_branch: opts.head,
+        target_branch: opts.base,
+      }),
+    },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new TaskError(
+      `pr-create: GitLab API error ${response.status}: ${text}`,
+    );
+  }
+  const data = (await response.json()) as { web_url: string; iid: number };
+  return { prUrl: data.web_url, prNumber: data.iid };
 }
 
 export function deriveBranchName(spec: SpecPayload): string {
@@ -280,7 +350,13 @@ export async function runPRCreate(
 ): Promise<PRCreateOutput> {
   loadEnvFile();
 
-  const token = await resolveGitHubToken();
+  const { stdout: remoteUrlForToken } = await exec("git", [
+    "remote",
+    "get-url",
+    "origin",
+  ]);
+  const remoteForToken = parseRemote(remoteUrlForToken);
+  const token = await resolveToken(remoteForToken.host);
 
   const branch = deriveBranchName(context.spec);
   const commitMessage = buildCommitMessage(context);
@@ -340,18 +416,8 @@ export async function runPRCreate(
   // Push with timeout
   await exec("git", ["push", "-u", "origin", branch], { timeout: 60_000 });
 
-  // Determine owner/repo from remote URL
-  const { stdout: remoteUrl } = await exec("git", [
-    "remote",
-    "get-url",
-    "origin",
-  ]);
-  const { owner, repo } = parseGitHubRemote(remoteUrl);
-
-  // Create PR via GitHub API
-  const { prUrl, prNumber } = await createPRViaAPI({
-    owner,
-    repo,
+  const { prUrl, prNumber } = await createPR({
+    remote: remoteForToken,
     title: prTitle,
     body: prBody,
     head: branch,
