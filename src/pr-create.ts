@@ -29,18 +29,89 @@ function exec(
   });
 }
 
-export async function assertGhInstalled(): Promise<void> {
-  try {
-    await exec("gh", ["--version"]);
-  } catch {
+export async function resolveGitHubToken(): Promise<string> {
+  const { execFile: execFileCb } = await import("node:child_process");
+  return new Promise((resolve, reject) => {
+    const child = execFileCb(
+      "git",
+      ["credential", "fill"],
+      { maxBuffer: 1024 * 1024 },
+      (error, stdout) => {
+        if (error) {
+          reject(
+            new TaskError(
+              "pr-create: failed to retrieve GitHub credentials via git credential fill.\n" +
+                "Run: git credential approve or configure a credential helper.",
+            ),
+          );
+          return;
+        }
+        const passwordLine = stdout
+          .split("\n")
+          .find((l) => l.startsWith("password="));
+        if (!passwordLine) {
+          reject(
+            new TaskError(
+              "pr-create: no password/token found from git credential fill for github.com.",
+            ),
+          );
+          return;
+        }
+        resolve(passwordLine.slice("password=".length).trim());
+      },
+    );
+    child.stdin?.write("protocol=https\nhost=github.com\n\n");
+    child.stdin?.end();
+  });
+}
+
+export function parseGitHubRemote(remoteUrl: string): { owner: string; repo: string } {
+  const match = remoteUrl
+    .trim()
+    .match(/github\.com[/:]([^/]+)\/([^/.]+?)(\.git)?$/);
+  if (!match) {
     throw new TaskError(
-      "pr-create: GitHub CLI (gh) is not installed.\n\n" +
-        "Install it:\n" +
-        "  macOS:  brew install gh\n" +
-        "  Linux:  https://github.com/cli/cli/blob/trunk/docs/install_linux.md\n" +
-        "  Windows: winget install --id GitHub.cli",
+      `pr-create: cannot parse GitHub remote URL: ${remoteUrl}`,
     );
   }
+  return { owner: match[1], repo: match[2] };
+}
+
+export async function createPRViaAPI(opts: {
+  owner: string;
+  repo: string;
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+  token: string;
+}): Promise<{ prUrl: string; prNumber: number }> {
+  const response = await fetch(
+    `https://api.github.com/repos/${opts.owner}/${opts.repo}/pulls`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${opts.token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: opts.title,
+        body: opts.body,
+        head: opts.head,
+        base: opts.base,
+      }),
+    },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new TaskError(
+      `pr-create: GitHub API error ${response.status}: ${text}`,
+    );
+  }
+  const data = (await response.json()) as { html_url: string; number: number };
+  return { prUrl: data.html_url, prNumber: data.number };
 }
 
 export function deriveBranchName(spec: SpecPayload): string {
@@ -208,7 +279,8 @@ export async function runPRCreate(
   context: TaskContext,
 ): Promise<PRCreateOutput> {
   loadEnvFile();
-  await assertGhInstalled();
+
+  const token = await resolveGitHubToken();
 
   const branch = deriveBranchName(context.spec);
   const commitMessage = buildCommitMessage(context);
@@ -268,26 +340,24 @@ export async function runPRCreate(
   // Push with timeout
   await exec("git", ["push", "-u", "origin", branch], { timeout: 60_000 });
 
-  // Create PR
-  const { stdout: prOut } = await exec("gh", [
-    "pr",
-    "create",
-    "--title",
-    prTitle,
-    "--body",
-    prBody,
-    "--base",
-    baseBranch,
+  // Determine owner/repo from remote URL
+  const { stdout: remoteUrl } = await exec("git", [
+    "remote",
+    "get-url",
+    "origin",
   ]);
+  const { owner, repo } = parseGitHubRemote(remoteUrl);
 
-  // Parse PR URL from last non-empty line
-  const prUrl = prOut.trim().split("\n").pop()?.trim() ?? "";
-  if (!prUrl.startsWith("https://")) {
-    throw new TaskError(`pr-create: unexpected gh output: ${prOut}`);
-  }
-
-  const prNumberMatch = prUrl.match(/\/pull\/(\d+)/);
-  const prNumber = prNumberMatch ? parseInt(prNumberMatch[1], 10) : 0;
+  // Create PR via GitHub API
+  const { prUrl, prNumber } = await createPRViaAPI({
+    owner,
+    repo,
+    title: prTitle,
+    body: prBody,
+    head: branch,
+    base: baseBranch,
+    token,
+  });
 
   return { branch, commitMessage, prUrl, prNumber };
 }

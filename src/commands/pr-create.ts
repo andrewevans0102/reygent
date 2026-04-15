@@ -1,4 +1,4 @@
-import { assertGhInstalled } from "../pr-create.js";
+import { createPRViaAPI, parseGitHubRemote, resolveGitHubToken } from "../pr-create.js";
 import { loadSpec } from "../spec.js";
 import type { TaskContext } from "../task.js";
 import { TaskError } from "../task.js";
@@ -80,7 +80,8 @@ interface PRCreateOptions {
 export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
   try {
     loadEnvFile();
-    await assertGhInstalled();
+
+    const token = await resolveGitHubToken();
 
     // Get current branch
     const { stdout: currentBranch } = await exec("git", [
@@ -162,27 +163,24 @@ export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
       await exec("git", ["push", "-u", "origin", branch], { timeout: 60_000 });
     }
 
-    // Create PR
+    // Determine owner/repo from remote URL
     console.log(`[pr-create] creating pull request...`);
-    const { stdout: prOut } = await exec("gh", [
-      "pr",
-      "create",
-      "--title",
-      prTitle,
-      "--body",
-      prBody,
-      "--base",
-      baseBranch,
+    const { stdout: remoteUrl } = await exec("git", [
+      "remote",
+      "get-url",
+      "origin",
     ]);
+    const { owner, repo } = parseGitHubRemote(remoteUrl);
 
-    // Parse PR URL
-    const prUrl = prOut.trim().split("\n").pop()?.trim() ?? "";
-    if (!prUrl.startsWith("https://")) {
-      throw new TaskError(`pr-create: unexpected gh output: ${prOut}`);
-    }
-
-    const prNumberMatch = prUrl.match(/\/pull\/(\d+)/);
-    const prNumber = prNumberMatch ? parseInt(prNumberMatch[1], 10) : 0;
+    const { prUrl, prNumber } = await createPRViaAPI({
+      owner,
+      repo,
+      title: prTitle,
+      body: prBody,
+      head: branch,
+      base: baseBranch,
+      token,
+    });
 
     console.log(`[pr-create] branch: ${branch}`);
     console.log(`[pr-create] base: ${baseBranch}`);
