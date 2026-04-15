@@ -16,6 +16,7 @@ interface RunOptions {
   dryRun: boolean;
   securityThreshold: string;
   autoApprove: boolean;
+  insecure: boolean;
 }
 
 export async function runCommand(options: RunOptions): Promise<void> {
@@ -285,7 +286,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         console.log(`[pr-create] creating pull request...`);
-        const prResult = await runPRCreate(context);
+        const prResult = await runPRCreate(context, { insecure: options.insecure });
         context.prCreate = prResult;
 
         console.log(`[pr-create] branch: ${prResult.branch}`);

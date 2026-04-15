@@ -75,6 +75,7 @@ interface PRCreateOptions {
   spec?: string;
   base?: string;
   push: boolean;
+  insecure: boolean;
 }
 
 export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
@@ -179,6 +180,7 @@ export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
       head: branch,
       base: baseBranch,
       token,
+      insecure: options.insecure,
     });
 
     console.log(`[pr-create] branch: ${branch}`);

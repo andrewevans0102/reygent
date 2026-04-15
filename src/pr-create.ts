@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
+import { rootCertificates } from "node:tls";
 import { loadEnvFile } from "./env.js";
 import type { SpecPayload } from "./spec.js";
 import type { PRCreateOutput, TaskContext } from "./task.js";
@@ -104,6 +106,7 @@ export async function createPR(opts: {
   head: string;
   base: string;
   token: string;
+  insecure?: boolean;
 }): Promise<{ prUrl: string; prNumber: number }> {
   if (opts.remote.platform === "gitlab") {
     return createGitLabMR(opts);
@@ -111,37 +114,84 @@ export async function createPR(opts: {
   return createGitHubPR(opts);
 }
 
-async function shouldRejectUnauthorized(hostname?: string): Promise<boolean> {
-  // Respect GIT_SSL_NO_VERIFY env var (standard git convention)
-  if (process.env.GIT_SSL_NO_VERIFY) return false;
+interface TlsOptions {
+  rejectUnauthorized?: boolean;
+  ca?: string[];
+}
+
+async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
+  // Respect GIT_SSL_NO_VERIFY env var
+  if (process.env.GIT_SSL_NO_VERIFY) return { rejectUnauthorized: false };
   // Respect NODE_TLS_REJECT_UNAUTHORIZED if explicitly set
-  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") return false;
-  // Respect git config http.sslVerify (including host-specific overrides)
-  try {
-    const { execFile: ef } = await import("node:child_process");
-    const args = hostname
-      ? ["config", "--bool", "--get-urlmatch", "http.sslVerify", `https://${hostname}/`]
-      : ["config", "--bool", "http.sslVerify"];
-    const value = await new Promise<string>((res, rej) => {
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") return { rejectUnauthorized: false };
+
+  const { execFile: ef } = await import("node:child_process");
+  const gitConfig = (args: string[]): Promise<string> =>
+    new Promise((res, rej) => {
       ef("git", args, {}, (err, stdout) => {
         if (err) rej(err);
         else res(stdout.trim());
       });
     });
-    if (value === "false") return false;
-  } catch {
-    // git config not set — proceed with verification
+
+  // Check if sslVerify is explicitly disabled
+  const sslVerifyDisabled = await (async () => {
+    if (hostname) {
+      try {
+        const v = await gitConfig([
+          "config", "--bool", "--get-urlmatch", "http.sslVerify", `https://${hostname}/`,
+        ]);
+        if (v === "false") return true;
+      } catch { /* fall through */ }
+    }
+    try {
+      const v = await gitConfig(["config", "--bool", "http.sslVerify"]);
+      if (v === "false") return true;
+    } catch { /* not set */ }
+    return false;
+  })();
+
+  if (sslVerifyDisabled) return { rejectUnauthorized: false };
+
+  // Load custom CA bundle from git config (http.sslCAInfo)
+  // This is how git trusts corporate/internal CAs
+  const caPath = await (async () => {
+    if (hostname) {
+      try {
+        return await gitConfig([
+          "config", "--get-urlmatch", "http.sslCAInfo", `https://${hostname}/`,
+        ]);
+      } catch { /* fall through */ }
+    }
+    try {
+      return await gitConfig(["config", "http.sslCAInfo"]);
+    } catch { /* not set */ }
+    return null;
+  })();
+
+  if (caPath) {
+    try {
+      const customCa = readFileSync(caPath, "utf-8");
+      // Combine Node's default CAs with the custom bundle so both are trusted
+      return { ca: [...rootCertificates, customCa] };
+    } catch {
+      // CA file unreadable — fall through to defaults
+    }
   }
-  return true;
+
+  return {};
 }
 
 async function httpsPost(
   url: string,
   headers: Record<string, string>,
   body: string,
+  opts?: { insecure?: boolean },
 ): Promise<{ status: number; text: string }> {
   const parsed = new URL(url);
-  const rejectUnauthorized = await shouldRejectUnauthorized(parsed.hostname);
+  const tlsOpts: TlsOptions = opts?.insecure
+    ? { rejectUnauthorized: false }
+    : await resolveTlsOptions(parsed.hostname);
   return new Promise((resolve, reject) => {
     const bodyBuf = Buffer.from(body, "utf-8");
     const req = httpsRequest(
@@ -151,7 +201,7 @@ async function httpsPost(
         path: parsed.pathname + parsed.search,
         method: "POST",
         headers: { ...headers, "Content-Length": bodyBuf.byteLength },
-        rejectUnauthorized,
+        ...tlsOpts,
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -177,6 +227,7 @@ async function createGitHubPR(opts: {
   head: string;
   base: string;
   token: string;
+  insecure?: boolean;
 }): Promise<{ prUrl: string; prNumber: number }> {
   const { host, owner, repo } = opts.remote;
   const apiBase =
@@ -198,6 +249,7 @@ async function createGitHubPR(opts: {
       "Content-Type": "application/json",
     },
     body,
+    { insecure: opts.insecure },
   );
   if (status < 200 || status >= 300) {
     throw new TaskError(`pr-create: GitHub API error ${status}: ${text}`);
@@ -213,6 +265,7 @@ async function createGitLabMR(opts: {
   head: string;
   base: string;
   token: string;
+  insecure?: boolean;
 }): Promise<{ prUrl: string; prNumber: number }> {
   const { host, owner, repo } = opts.remote;
   const projectPath = encodeURIComponent(`${owner}/${repo}`);
@@ -229,6 +282,7 @@ async function createGitLabMR(opts: {
       "Content-Type": "application/json",
     },
     body,
+    { insecure: opts.insecure },
   );
   if (status < 200 || status >= 300) {
     throw new TaskError(`pr-create: GitLab API error ${status}: ${text}`);
@@ -400,6 +454,7 @@ export function buildPRBody(context: TaskContext): string {
 
 export async function runPRCreate(
   context: TaskContext,
+  opts?: { insecure?: boolean },
 ): Promise<PRCreateOutput> {
   loadEnvFile();
 
@@ -476,6 +531,7 @@ export async function runPRCreate(
     head: branch,
     base: baseBranch,
     token,
+    insecure: opts?.insecure,
   });
 
   return { branch, commitMessage, prUrl, prNumber };

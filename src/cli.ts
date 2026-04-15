@@ -49,6 +49,7 @@ program
   .option("--dry-run", "Print pipeline stages as JSON without executing", false)
   .option("--security-threshold <level>", "Minimum severity to fail security review (CRITICAL, HIGH, MEDIUM, LOW)", "HIGH")
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
+  .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .action(runCommand);
 
 program
@@ -60,6 +61,7 @@ program
   .option("--base <branch>", "Base branch for PR (defaults to origin/HEAD)")
   .option("--push", "Push current branch to origin before creating PR", true)
   .option("--no-push", "Don't push (assume branch already pushed)")
+  .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .action(prCreateCommand);
 
 program.parse();
