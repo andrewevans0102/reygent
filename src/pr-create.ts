@@ -111,12 +111,33 @@ export async function createPR(opts: {
   return createGitHubPR(opts);
 }
 
-function httpsPost(
+async function shouldRejectUnauthorized(): Promise<boolean> {
+  // Respect GIT_SSL_NO_VERIFY env var (standard git convention)
+  if (process.env.GIT_SSL_NO_VERIFY) return false;
+  // Respect NODE_TLS_REJECT_UNAUTHORIZED if explicitly set
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") return false;
+  // Respect git config http.sslVerify = false
+  try {
+    const { execFile: ef } = await import("node:child_process");
+    const value = await new Promise<string>((res, rej) => {
+      ef("git", ["config", "--bool", "http.sslVerify"], {}, (err, stdout) => {
+        if (err) rej(err);
+        else res(stdout.trim());
+      });
+    });
+    if (value === "false") return false;
+  } catch {
+    // git config not set — proceed with verification
+  }
+  return true;
+}
+
+async function httpsPost(
   url: string,
   headers: Record<string, string>,
   body: string,
 ): Promise<{ status: number; text: string }> {
-  const rejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0";
+  const rejectUnauthorized = await shouldRejectUnauthorized();
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const bodyBuf = Buffer.from(body, "utf-8");
