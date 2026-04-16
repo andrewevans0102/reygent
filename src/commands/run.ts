@@ -333,24 +333,28 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(output),
         });
 
-        const rl = createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-        const answer = await new Promise<string>((resolve) => {
-          rl.question(
-            chalk.yellow("\nSecurity review failed. Continue with PR creation anyway? (y/n) "),
-            resolve,
-          );
-        });
-        rl.close();
+        if (autoApprove) {
+          console.log(chalk.yellow("Auto-approved — bypassing security gate..."));
+        } else {
+          const rl = createInterface({
+            input: process.stdin,
+            output: process.stdout,
+          });
+          const answer = await new Promise<string>((resolve) => {
+            rl.question(
+              chalk.yellow("\nSecurity review failed. Continue with PR creation anyway? (y/n) "),
+              resolve,
+            );
+          });
+          rl.close();
 
-        if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
-          console.log(chalk.red("Aborted by user."));
-          process.exit(1);
+          if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
+            console.log(chalk.red("Aborted by user."));
+            process.exit(1);
+          }
+
+          console.log(chalk.yellow("Bypassed by user — continuing..."));
         }
-
-        console.log(chalk.yellow("Bypassed by user — continuing..."));
         continue;
       }
 
