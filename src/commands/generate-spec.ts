@@ -1,6 +1,8 @@
 import { createInterface } from "node:readline/promises";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import chalk from "chalk";
+import ora from "ora";
 import { generateSpec } from "../generate-spec.js";
 import { TaskError } from "../task.js";
 
@@ -22,7 +24,7 @@ export async function generateSpecCommand(
     if (!description) {
       description = await prompt("Feature description: ");
       if (!description) {
-        console.error("Description is required.");
+        console.log(chalk.red.bold("Error:"), "Description is required.");
         process.exit(1);
       }
     }
@@ -32,26 +34,23 @@ export async function generateSpecCommand(
       output = await prompt("Output file path (spec.md): ", "spec.md");
     }
 
-    const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-    let i = 0;
-    const interval = setInterval(() => {
-      process.stdout.write(`\r${spinner[i++ % spinner.length]} Generating spec...`);
-    }, 80);
+    const spinner = ora(chalk.blue("Generating spec...")).start();
 
     let markdown: string;
     try {
       markdown = await generateSpec(description);
-    } finally {
-      clearInterval(interval);
-      process.stdout.write("\r\x1b[K");
+      spinner.succeed(chalk.green("Spec generated"));
+    } catch (err) {
+      spinner.fail(chalk.red("Failed to generate spec"));
+      throw err;
     }
 
     const outPath = resolve(process.cwd(), output);
     writeFileSync(outPath, markdown, "utf-8");
-    console.log(`Spec written to ${outPath}`);
+    console.log(chalk.gray("Spec written to"), chalk.cyan(outPath));
   } catch (err) {
     if (err instanceof TaskError) {
-      console.error(err.message);
+      console.log(chalk.red.bold("Error:"), err.message);
       process.exit(1);
     }
     throw err;

@@ -1,4 +1,6 @@
 import { createInterface } from "node:readline";
+import chalk from "chalk";
+import ora from "ora";
 import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import { runPlanner } from "../planner.js";
@@ -17,6 +19,7 @@ interface RunOptions {
   securityThreshold: string;
   autoApprove: boolean;
   insecure: boolean;
+  skipClarification: boolean;
 }
 
 export async function runCommand(options: RunOptions): Promise<void> {
@@ -24,23 +27,47 @@ export async function runCommand(options: RunOptions): Promise<void> {
     const spec = await loadSpec(options.spec);
 
     if (options.dryRun) {
-      const output = {
-        spec: { source: spec.source, title: spec.title },
-        stages: PIPELINE.map((s) => ({
-          name: s.name,
-          description: s.description,
-          execution: s.execution,
-        })),
-      };
-      console.log(JSON.stringify(output, null, 2));
+      console.log("");
+      console.log(chalk.bold.cyan("┌─ Specification"));
+      console.log(chalk.cyan("│"), chalk.bold(spec.title));
+      console.log(chalk.cyan("│"), chalk.gray(`source: ${spec.source}`));
+      console.log(chalk.cyan("└─"));
+      console.log("");
+      console.log(chalk.bold.cyan("┌─ Pipeline Stages"));
+
+      for (let i = 0; i < PIPELINE.length; i++) {
+        const stage = PIPELINE[i];
+        const isLast = i === PIPELINE.length - 1;
+        const prefix = isLast ? "└─" : "├─";
+        const continuation = isLast ? "  " : "│ ";
+
+        console.log(chalk.cyan(prefix), chalk.bold.white(stage.name));
+        console.log(chalk.cyan(continuation), chalk.gray(stage.description));
+
+        // Format execution details
+        let execInfo = "";
+        if (stage.execution.kind === "agent") {
+          execInfo = chalk.blue(`agent: ${stage.execution.agent}`);
+        } else if (stage.execution.kind === "parallel") {
+          execInfo = chalk.magenta(`parallel: ${stage.execution.agents.join(", ")}`);
+        } else if (stage.execution.kind === "gate") {
+          execInfo = chalk.yellow(`gate: ${stage.execution.condition} (${stage.execution.agent})`);
+        }
+
+        console.log(chalk.cyan(continuation), execInfo);
+
+        if (!isLast) {
+          console.log(chalk.cyan("│"));
+        }
+      }
+
+      console.log("");
       return;
     }
 
     const threshold = options.securityThreshold.toUpperCase();
     if (!VALID_SEVERITIES.has(threshold)) {
-      console.error(
-        `Invalid --security-threshold "${options.securityThreshold}". Must be one of: CRITICAL, HIGH, MEDIUM, LOW`,
-      );
+      console.log(chalk.red.bold("Error:"), `Invalid --security-threshold "${options.securityThreshold}". Must be one of: CRITICAL, HIGH, MEDIUM, LOW`);
       process.exit(1);
     }
 
@@ -64,69 +91,105 @@ export async function runCommand(options: RunOptions): Promise<void> {
       console.log("");
     }
 
+    // Prompt for clarification preference if not specified
+    let skipClarification = options.skipClarification;
+    if (!skipClarification && !options.dryRun) {
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(
+          "Skip clarifying questions and make assumptions? (y/n) ",
+          resolve,
+        );
+      });
+      rl.close();
+
+      skipClarification = answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
+      console.log("");
+    }
+
     const context: TaskContext = { spec, results: [] };
     const agentOptions = { autoApprove };
 
     for (const stage of PIPELINE) {
       if (stage.name === "plan") {
-        console.log(`[${stage.name}] running planner...`);
+        const spinner = ora(chalk.blue("running planner...")).start();
 
         let plan: PlannerOutput | null = null;
-        let clarificationAnswers = "";
-        let attempts = 0;
-        const maxAttempts = 3;
 
-        while (!plan && attempts < maxAttempts) {
-          attempts++;
-          const result = await runPlanner(context.spec, clarificationAnswers);
-
+        if (skipClarification) {
+          // Skip clarification, make assumptions
+          const result = await runPlanner(context.spec, undefined, { makeAssumptions: true });
           if ("needsClarification" in result && result.needsClarification) {
-            console.log(`\n[${stage.name}] planner needs clarification:\n`);
+            spinner.fail(chalk.red("Planner asked questions despite skip flag"));
+            throw new TaskError("Planner: unexpected clarification request in assumption mode");
+          }
+          plan = result as PlannerOutput;
+        } else {
+          // Run clarification loop
+          let clarificationAnswers = "";
+          let attempts = 0;
+          const maxAttempts = 3;
 
-            const answers: string[] = [];
-            const rl = createInterface({
-              input: process.stdin,
-              output: process.stdout,
-            });
+          while (!plan && attempts < maxAttempts) {
+            attempts++;
+            const result = await runPlanner(context.spec, clarificationAnswers);
 
-            for (let i = 0; i < result.questions.length; i++) {
-              const question = result.questions[i];
-              const answer = await new Promise<string>((resolve) => {
-                rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
+            if ("needsClarification" in result && result.needsClarification) {
+              spinner.stop();
+              console.log(chalk.yellow("\nPlanner needs clarification:\n"));
+
+              const answers: string[] = [];
+              const rl = createInterface({
+                input: process.stdin,
+                output: process.stdout,
               });
 
-              if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
-                rl.close();
-                throw new TaskError("Planner: clarification aborted by user");
+              for (let i = 0; i < result.questions.length; i++) {
+                const question = result.questions[i];
+                const answer = await new Promise<string>((resolve) => {
+                  rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
+                });
+
+                if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
+                  rl.close();
+                  throw new TaskError("Planner: clarification aborted by user");
+                }
+
+                answers.push(`Q: ${question}\nA: ${answer}`);
               }
 
-              answers.push(`Q: ${question}\nA: ${answer}`);
+              rl.close();
+              clarificationAnswers = answers.join("\n\n");
+              console.log(chalk.blue("\nRe-running planner with clarifications...\n"));
+              spinner.start();
+            } else {
+              plan = result as PlannerOutput;
             }
+          }
 
-            rl.close();
-            clarificationAnswers = answers.join("\n\n");
-            console.log(`\n[${stage.name}] re-running planner with clarifications...\n`);
-          } else {
-            plan = result as PlannerOutput;
+          if (!plan) {
+            spinner.fail(chalk.red("Planner failed"));
+            throw new TaskError(
+              `Planner: failed to create valid plan after ${maxAttempts} attempts`,
+            );
           }
         }
 
-        if (!plan) {
-          throw new TaskError(
-            `Planner: failed to create valid plan after ${maxAttempts} attempts`,
-          );
-        }
-
+        spinner.succeed(chalk.green("Plan created"));
         context.plan = plan;
 
-        console.log(`[${stage.name}] goals:`);
-        for (const g of plan.goals) console.log(`  - ${g}`);
-        console.log(`[${stage.name}] tasks:`);
-        for (const t of plan.tasks) console.log(`  - ${t}`);
-        console.log(`[${stage.name}] constraints:`);
-        for (const c of plan.constraints) console.log(`  - ${c}`);
-        console.log(`[${stage.name}] definition of done:`);
-        for (const d of plan.dod) console.log(`  - ${d}`);
+        console.log(chalk.cyan("\nGoals:"));
+        for (const g of plan.goals) console.log(`  ${chalk.gray("-")} ${g}`);
+        console.log(chalk.cyan("\nTasks:"));
+        for (const t of plan.tasks) console.log(`  ${chalk.gray("-")} ${t}`);
+        console.log(chalk.cyan("\nConstraints:"));
+        for (const c of plan.constraints) console.log(`  ${chalk.gray("-")} ${c}`);
+        console.log(chalk.cyan("\nDefinition of Done:"));
+        for (const d of plan.dod) console.log(`  ${chalk.gray("-")} ${d}`);
 
         context.results.push({
           stage: stage.name,
@@ -141,18 +204,24 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("Implement: plan stage must run before implement");
         }
 
-        console.log(`[${stage.name}] spawning dev and qe agents...`);
+        const spinner = ora(chalk.blue("spawning dev and qe agents...")).start();
         const impl = await runImplement(context.spec, context.plan, agentOptions);
         context.implement = impl;
 
         const devSuccess = impl.dev !== null;
         const qeSuccess = impl.qe !== null;
 
+        if (devSuccess && qeSuccess) {
+          spinner.succeed(chalk.green("Implementation complete"));
+        } else {
+          spinner.warn(chalk.yellow("Implementation partially failed"));
+        }
+
         if (impl.dev) {
-          console.log(`[${stage.name}] dev files: ${impl.dev.files.join(", ") || "(none)"}`);
+          console.log(chalk.gray("dev files:"), impl.dev.files.join(", ") || chalk.gray("(none)"));
         }
         if (impl.qe) {
-          console.log(`[${stage.name}] qe test files: ${impl.qe.testFiles.join(", ") || "(none)"}`);
+          console.log(chalk.gray("qe test files:"), impl.qe.testFiles.join(", ") || chalk.gray("(none)"));
         }
 
         context.results.push({
@@ -168,14 +237,14 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("gate-unit-tests: implement stage must run first");
         }
 
-        console.log(`[gate-unit-tests] running unit tests...`);
+        const spinner = ora(chalk.blue("running unit tests...")).start();
         const gateResult = await runUnitTestGate(context, agentOptions);
 
         if (!context.gates) context.gates = {};
         context.gates.unitTests = gateResult;
 
         if (gateResult.passed) {
-          console.log(`[gate:unit-tests] PASSED`);
+          spinner.succeed(chalk.green("Unit tests PASSED"));
           context.results.push({
             stage: stage.name,
             success: true,
@@ -184,7 +253,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           continue;
         }
 
-        console.log(`[gate:unit-tests] FAILED`);
+        spinner.fail(chalk.red("Unit tests FAILED"));
         context.results.push({
           stage: stage.name,
           success: false,
@@ -198,14 +267,14 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("gate-functional-tests: implement stage must run first");
         }
 
-        console.log(`[gate-functional-tests] running functional tests...`);
+        const spinner = ora(chalk.blue("running functional tests...")).start();
         const gateResult = await runFunctionalTestGate(context, agentOptions);
 
         if (!context.gates) context.gates = {};
         context.gates.functionalTests = gateResult;
 
         if (gateResult.passed) {
-          console.log(`[gate:functional-tests] PASSED`);
+          spinner.succeed(chalk.green("Functional tests PASSED"));
           context.results.push({
             stage: stage.name,
             success: true,
@@ -214,8 +283,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           continue;
         }
 
+        spinner.fail(chalk.red("Functional tests FAILED"));
         console.log(gateResult.output);
-        console.log(`[gate:functional-tests] FAILED`);
         context.results.push({
           stage: stage.name,
           success: false,
@@ -229,7 +298,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("security-review: implement stage must run first");
         }
 
-        console.log(`[security-review] running security review...`);
+        const spinner = ora(chalk.blue("running security review...")).start();
         const { output, passed } = await runSecurityReview(
           context,
           threshold as Severity,
@@ -237,13 +306,18 @@ export async function runCommand(options: RunOptions): Promise<void> {
         );
         context.securityReview = output;
 
-        console.log(
-          `[security-review] ${output.findings.length} finding(s):`,
-        );
+        if (passed) {
+          spinner.succeed(chalk.green("Security review PASSED"));
+        } else {
+          spinner.fail(chalk.red("Security review FAILED"));
+        }
+
+        console.log("");
+        console.log(chalk.cyan.bold(`Security Findings (${output.findings.length}):`));
         console.log(formatFindings(output.findings, threshold as Severity));
+        console.log("");
 
         if (passed) {
-          console.log(`[security-review] PASSED`);
           context.results.push({
             stage: stage.name,
             success: true,
@@ -252,7 +326,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           continue;
         }
 
-        console.log(`[security-review] FAILED — findings at or above ${threshold} threshold`);
+        console.log(chalk.yellow(`Findings at or above ${threshold} threshold`));
         context.results.push({
           stage: stage.name,
           success: false,
@@ -265,18 +339,18 @@ export async function runCommand(options: RunOptions): Promise<void> {
         });
         const answer = await new Promise<string>((resolve) => {
           rl.question(
-            "\nSecurity review failed. Continue with PR creation anyway? (y/n) ",
+            chalk.yellow("\nSecurity review failed. Continue with PR creation anyway? (y/n) "),
             resolve,
           );
         });
         rl.close();
 
         if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
-          console.log("[security-review] Aborted by user.");
+          console.log(chalk.red("Aborted by user."));
           process.exit(1);
         }
 
-        console.log("[security-review] Bypassed by user — continuing...");
+        console.log(chalk.yellow("Bypassed by user — continuing..."));
         continue;
       }
 
@@ -285,12 +359,13 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("pr-create: implement stage must run first");
         }
 
-        console.log(`[pr-create] creating pull request...`);
+        const spinner = ora(chalk.blue("creating pull request...")).start();
         const prResult = await runPRCreate(context, { insecure: options.insecure });
         context.prCreate = prResult;
+        spinner.succeed(chalk.green("PR created"));
 
-        console.log(`[pr-create] branch: ${prResult.branch}`);
-        console.log(`[pr-create] PR: ${prResult.prUrl}`);
+        console.log(chalk.gray("branch:"), chalk.cyan(prResult.branch));
+        console.log(chalk.gray("PR:"), chalk.blue(prResult.prUrl));
 
         context.results.push({
           stage: stage.name,
@@ -301,9 +376,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
 
       if (stage.name === "pr-review") {
-        console.log(`[pr-review] reviewing pull request...`);
+        const spinner = ora(chalk.blue("reviewing pull request...")).start();
         const reviewOutput = await runPRReview(context, agentOptions);
         context.prReview = reviewOutput;
+        spinner.succeed(chalk.green("PR review complete"));
 
         console.log(formatPRReviewOutput(reviewOutput));
 
@@ -313,7 +389,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(reviewOutput),
         });
 
-        console.log("What would you like to do next?");
+        console.log(chalk.cyan("\nWhat would you like to do next?"));
         continue;
       }
 
@@ -322,12 +398,12 @@ export async function runCommand(options: RunOptions): Promise<void> {
         success: true,
         output: "skipped",
       };
-      console.log(`[${stage.name}] skipped`);
+      console.log(chalk.gray(`[${stage.name}] skipped`));
       context.results.push(result);
     }
   } catch (err) {
     if (err instanceof SpecError || err instanceof TaskError) {
-      console.error(err.message);
+      console.log(chalk.red.bold("Error:"), err.message);
       process.exit(1);
     }
     throw err;

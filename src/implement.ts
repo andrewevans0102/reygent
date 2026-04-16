@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { builtinAgents } from "./agents.js";
 import { extractJSON } from "./planner.js";
 import { spawnAgentStream } from "./spawn.js";
@@ -13,7 +14,7 @@ import { TaskError } from "./task.js";
 
 export type { SpawnResult };
 
-const AGENT_TIMEOUT_MS = 5 * 60 * 1000;
+const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
 
 export interface AgentSpawnOptions {
   autoApprove?: boolean;
@@ -173,7 +174,7 @@ export async function runImplement(
         devResult.status === "rejected"
           ? devResult.reason
           : `exit code ${devResult.value.exitCode}`;
-      console.error(`[dev] failed: ${reason}`);
+      console.log(chalk.red("dev agent failed:"), reason);
     }
 
     if (qeResult.status === "fulfilled" && qeResult.value.exitCode === 0) {
@@ -183,32 +184,32 @@ export async function runImplement(
         qeResult.status === "rejected"
           ? qeResult.reason
           : `exit code ${qeResult.value.exitCode}`;
-      console.error(`[qe] failed: ${reason}`);
+      console.log(chalk.red("qe agent failed:"), reason);
     }
   } else {
     // Sequential: stdin inherited so user can approve each edit
-    console.log(`[implement] running dev agent (approve edits as prompted)...`);
+    console.log(chalk.blue("Running dev agent (approve edits as prompted)..."));
     try {
       const devResult = await spawnAgent("dev", devPrompt, options);
       if (devResult.exitCode === 0) {
         dev = extractDevOutput(devResult.stdout);
       } else {
-        console.error(`[dev] failed: exit code ${devResult.exitCode}`);
+        console.log(chalk.red("dev agent failed:"), `exit code ${devResult.exitCode}`);
       }
     } catch (err) {
-      console.error(`[dev] failed: ${err}`);
+      console.log(chalk.red("dev agent failed:"), err);
     }
 
-    console.log(`[implement] running qe agent (approve edits as prompted)...`);
+    console.log(chalk.blue("Running qe agent (approve edits as prompted)..."));
     try {
       const qeResult = await spawnAgent("qe", qePrompt, options);
       if (qeResult.exitCode === 0) {
         qe = extractQEOutput(qeResult.stdout);
       } else {
-        console.error(`[qe] failed: exit code ${qeResult.exitCode}`);
+        console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.exitCode}`);
       }
     } catch (err) {
-      console.error(`[qe] failed: ${err}`);
+      console.log(chalk.red("qe agent failed:"), err);
     }
   }
 

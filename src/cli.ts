@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import chalk from "chalk";
 import { agentCommand } from "./commands/agent.js";
 import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
@@ -31,6 +32,7 @@ program
   .command("spec")
   .description("Load a spec from a markdown file, Jira issue, or Linear issue")
   .argument("<source>", "Path to a markdown file, issue key (e.g. PROJ-123), or Linear URL")
+  .option("--clarify", "Run planner with clarification loop to evaluate spec", false)
   .action(specCommand);
 
 program
@@ -50,6 +52,7 @@ program
   .option("--security-threshold <level>", "Minimum severity to fail security review (CRITICAL, HIGH, MEDIUM, LOW)", "HIGH")
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
   .option("--insecure", "Skip SSL certificate verification for API calls", false)
+  .option("--skip-clarification", "Skip planner clarification and make assumptions", false)
   .action(runCommand);
 
 program
@@ -63,5 +66,16 @@ program
   .option("--no-push", "Don't push (assume branch already pushed)")
   .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .action(prCreateCommand);
+
+// Show header on commands that do actual work (not --help or --version)
+const isHelpOrVersion = process.argv.includes("--help") ||
+                         process.argv.includes("-h") ||
+                         process.argv.includes("--version") ||
+                         process.argv.includes("-V") ||
+                         process.argv.length <= 2;
+
+if (!isHelpOrVersion) {
+  console.log(chalk.bold.cyan(`\nreygent`) + chalk.gray(` v${pkg.version}`) + "\n");
+}
 
 program.parse();

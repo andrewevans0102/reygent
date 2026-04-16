@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
+import chalk from "chalk";
 import { TaskError } from "./task.js";
 
 export interface SpawnResult {
@@ -93,7 +94,7 @@ export function spawnAgentStream(
         event = JSON.parse(line) as StreamEvent;
       } catch {
         // Non-JSON line — pass through
-        console.log(`[${name}] ${line}`);
+        console.log(chalk.gray(`[${name}]`), line);
         return;
       }
 
@@ -102,11 +103,11 @@ export function spawnAgentStream(
         for (const block of msg.message.content) {
           if (block.type === "tool_use") {
             const detail = formatToolDetail(block.name, block.input);
-            const suffix = detail ? ` ${detail}` : "";
-            process.stderr.write(`[${name}] → ${block.name}${suffix}\n`);
+            const suffix = detail ? ` ${chalk.gray(detail)}` : "";
+            process.stderr.write(`${chalk.gray(`[${name}]`)} ${chalk.cyan("→")} ${chalk.blue(block.name)}${suffix}\n`);
           } else if (block.type === "text") {
             if (!options?.quiet) {
-              console.log(`[${name}] ${block.text}`);
+              console.log(chalk.gray(`[${name}]`), block.text);
             }
             textChunks.push(block.text);
           }
@@ -123,7 +124,7 @@ export function spawnAgentStream(
 
     const stderrRL = createInterface({ input: child.stderr! });
     stderrRL.on("line", (line) => {
-      process.stderr.write(`[${name}] ${line}\n`);
+      process.stderr.write(`${chalk.gray(`[${name}]`)} ${line}\n`);
     });
     stderrRL.on("close", () => {
       stderrEnded = true;

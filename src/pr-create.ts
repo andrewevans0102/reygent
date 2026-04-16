@@ -549,9 +549,38 @@ export async function runPRCreate(
     throw new TaskError("pr-create: no changes to commit");
   }
 
+  // Check if branch exists locally
+  const { stdout: localBranches } = await exec("git", ["branch", "--list", branch]);
+  const branchExists = localBranches.trim().length > 0;
+
+  if (branchExists) {
+    // Delete existing local branch
+    try {
+      await exec("git", ["branch", "-D", branch]);
+    } catch {
+      // If deletion fails, branch might be current branch - ignore
+    }
+  }
+
   // Create branch and commit
   await exec("git", ["checkout", "-b", branch]);
   await exec("git", ["commit", "-m", commitMessage]);
+
+  // Check if branch exists remotely and delete it
+  try {
+    const { stdout: remoteBranches } = await exec("git", [
+      "ls-remote",
+      "--heads",
+      "origin",
+      branch,
+    ]);
+    if (remoteBranches.trim().length > 0) {
+      // Remote branch exists - delete it
+      await exec("git", ["push", "origin", "--delete", branch]);
+    }
+  } catch {
+    // Remote branch doesn't exist or delete failed - continue
+  }
 
   // Push with timeout
   await exec("git", ["push", "-u", "origin", branch], { timeout: 60_000 });

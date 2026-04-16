@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import chalk from "chalk";
 import { builtinAgents } from "./agents.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { extractJSON } from "./planner.js";
@@ -240,10 +241,10 @@ export async function runPRReview(
   if (context.prCreate) {
     prNumber = context.prCreate.prNumber;
   } else {
-    console.log("[pr-review] no PR number provided — detecting from current branch...");
+    console.log(chalk.blue("No PR number provided — detecting from current branch..."));
     const detected = await detectPRFromBranch();
     prNumber = detected.prNumber;
-    console.log(`[pr-review] found PR #${prNumber} on branch "${detected.branch}"`);
+    console.log(chalk.green(`Found PR #${prNumber} on branch "${detected.branch}"`));
   }
 
   const agent = builtinAgents.find((a) => a.name === "pr-reviewer");

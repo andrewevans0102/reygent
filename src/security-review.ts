@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { builtinAgents } from "./agents.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { extractJSON } from "./planner.js";
@@ -156,15 +157,38 @@ export function formatFindings(
   findings: SecurityFinding[],
   threshold: Severity,
 ): string {
-  if (findings.length === 0) return "  No findings.";
+  if (findings.length === 0) {
+    return chalk.gray("  No findings.");
+  }
 
   return findings
     .map((f) => {
-      const marker = severityAtOrAbove(f.severity, threshold) ? "!! " : "   ";
+      const isBlocking = severityAtOrAbove(f.severity, threshold);
+      const marker = isBlocking ? chalk.red.bold("!! ") : "   ";
+
+      let severityLabel: string;
+      switch (f.severity) {
+        case "CRITICAL":
+          severityLabel = chalk.red.bold(`[${f.severity}]`);
+          break;
+        case "HIGH":
+          severityLabel = chalk.red(`[${f.severity}]`);
+          break;
+        case "MEDIUM":
+          severityLabel = chalk.yellow(`[${f.severity}]`);
+          break;
+        case "LOW":
+          severityLabel = chalk.blue(`[${f.severity}]`);
+          break;
+      }
+
       const loc = f.location
-        ? ` (${f.location.file}${f.location.line ? `:${f.location.line}` : ""})`
+        ? chalk.gray(
+            ` (${f.location.file}${f.location.line ? `:${f.location.line}` : ""})`,
+          )
         : "";
-      return `${marker}[${f.severity}] ${f.description}${loc}`;
+
+      return `${marker}${severityLabel} ${f.description}${loc}`;
     })
     .join("\n");
 }

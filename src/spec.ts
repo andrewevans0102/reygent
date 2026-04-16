@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
+import chalk from "chalk";
 import { isLinearUrl, extractLinearId, readLinearSpec } from "./linear.js";
 import { readJiraSpec } from "./jira.js";
 import { loadEnvFile } from "./env.js";
@@ -42,7 +43,7 @@ export function readSpec(filePath: string): MarkdownSpecPayload {
 
   const ext = extname(resolved).toLowerCase();
   if (ext !== ".md" && ext !== ".markdown") {
-    console.warn(`Warning: ${basename(resolved)} is not a .md file`);
+    console.log(chalk.yellow("Warning:"), `${basename(resolved)} is not a .md file`);
   }
 
   const content = readFileSync(resolved, "utf-8");

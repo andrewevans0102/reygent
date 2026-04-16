@@ -30,7 +30,11 @@ export function extractJSON(text: string): string {
   return trimmed;
 }
 
-function buildPrompt(spec: SpecPayload, previousAnswers?: string): string {
+export interface PlannerOptions {
+  makeAssumptions?: boolean;
+}
+
+function buildPrompt(spec: SpecPayload, previousAnswers?: string, options?: PlannerOptions): string {
   const plannerAgent = builtinAgents.find((a) => a.name === "planner");
   const systemPrompt = plannerAgent?.systemPrompt ?? "";
 
@@ -44,6 +48,19 @@ ${previousAnswers}
 
 Use these clarifications to inform your plan.`;
   }
+
+  const assumptionMode = options?.makeAssumptions === true;
+  const clarificationInstructions = assumptionMode
+    ? `
+IMPORTANT: Do NOT ask for clarification. If the spec is ambiguous or missing design decisions, make reasonable assumptions based on industry best practices and common patterns. Document your assumptions in the constraints field.`
+    : `
+IMPORTANT: If spec is ambiguous or missing key design decisions, prefer "needsClarification" over hard failure. Ask specific questions about:
+- Authentication/authorization approach
+- Data storage/persistence strategy
+- API design decisions (REST vs GraphQL, pagination, filtering)
+- Error handling patterns
+- Scalability/performance requirements
+- Integration points with existing systems`;
 
   return `${systemPrompt}
 
@@ -65,14 +82,7 @@ Below is the raw spec to analyse. Return ONLY valid JSON matching one of three s
 \`\`\`json
 { "valid": false, "errors": ["..."] }
 \`\`\`
-
-IMPORTANT: If spec is ambiguous or missing key design decisions, prefer "needsClarification" over hard failure. Ask specific questions about:
-- Authentication/authorization approach
-- Data storage/persistence strategy
-- API design decisions (REST vs GraphQL, pagination, filtering)
-- Error handling patterns
-- Scalability/performance requirements
-- Integration points with existing systems
+${clarificationInstructions}
 
 Each array must contain at least one non-empty string. Do not include any text outside the JSON object.
 
@@ -95,8 +105,9 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
 export async function runPlanner(
   spec: SpecPayload,
   previousAnswers?: string,
+  options?: PlannerOptions,
 ): Promise<PlannerResult> {
-  const prompt = buildPrompt(spec, previousAnswers);
+  const prompt = buildPrompt(spec, previousAnswers, options);
   const { stdout: raw, exitCode } = await spawnAgentStream("planner", prompt, 120_000, { quiet: true });
 
   if (exitCode !== 0) {

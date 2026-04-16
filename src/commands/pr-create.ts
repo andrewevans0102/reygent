@@ -1,3 +1,5 @@
+import chalk from "chalk";
+import ora from "ora";
 import { createPR, parseRemote, resolveToken } from "../pr-create.js";
 import { loadSpec } from "../spec.js";
 import type { TaskContext } from "../task.js";
@@ -152,9 +154,10 @@ export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
 
     // Commit uncommitted changes if present
     if (hasUncommitted) {
-      console.log(`[pr-create] committing changes...`);
+      const spinner = ora(chalk.blue("committing changes...")).start();
       await exec("git", ["add", "-A"]);
       await exec("git", ["commit", "-m", prTitle]);
+      spinner.succeed(chalk.green("Changes committed"));
     }
 
     // Push if requested
@@ -166,13 +169,14 @@ export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
         );
       }
 
-      console.log(`[pr-create] pushing ${branch} to origin...`);
-      console.log(`[pr-create] exact command: git push -u origin ${branch}`);
+      const spinner = ora(chalk.blue(`pushing ${branch} to origin...`)).start();
+      console.log(chalk.gray(`exact command: git push -u origin ${branch}`));
       await exec("git", ["push", "-u", "origin", branch], { timeout: 60_000 });
+      spinner.succeed(chalk.green("Branch pushed"));
     }
 
     // Create PR via platform API
-    console.log(`[pr-create] creating pull request...`);
+    const spinner = ora(chalk.blue("creating pull request...")).start();
     const { prUrl, prNumber } = await createPR({
       remote: remoteEarly,
       title: prTitle,
@@ -182,13 +186,14 @@ export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
       token,
       insecure: options.insecure,
     });
+    spinner.succeed(chalk.green("PR created"));
 
-    console.log(`[pr-create] branch: ${branch}`);
-    console.log(`[pr-create] base: ${baseBranch}`);
-    console.log(`[pr-create] PR #${prNumber}: ${prUrl}`);
+    console.log(chalk.gray("branch:"), chalk.cyan(branch));
+    console.log(chalk.gray("base:"), chalk.cyan(baseBranch));
+    console.log(chalk.gray(`PR #${prNumber}:`), chalk.blue(prUrl));
   } catch (err) {
     if (err instanceof TaskError) {
-      console.error(err.message);
+      console.log(chalk.red.bold("Error:"), err.message);
       process.exit(1);
     }
     throw err;

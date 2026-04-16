@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import chalk from "chalk";
 import { builtinAgents } from "../agents.js";
 import { spawnAgent } from "../implement.js";
 import { loadSpec, SpecError } from "../spec.js";
@@ -18,7 +19,7 @@ export async function agentCommand(
 
   if (!agent) {
     const validNames = builtinAgents.map((a) => a.name).join(", ");
-    console.error(`Unknown agent "${name}". Valid agents: ${validNames}`);
+    console.log(chalk.red.bold("Error:"), `Unknown agent "${name}". Valid agents: ${validNames}`);
     process.exit(1);
   }
 
@@ -65,12 +66,10 @@ ${spec.content}`;
 
 ${userPrompt}`;
     } else {
-      console.error(
-        `Error: either provide a prompt or use --spec\n\n` +
-        `Examples:\n` +
-        `  reygent agent security-reviewer "review this auth code"\n` +
-        `  reygent agent qe --spec spec.md`,
-      );
+      console.log(chalk.red.bold("Error:"), "either provide a prompt or use --spec\n");
+      console.log(chalk.cyan("Examples:"));
+      console.log(chalk.gray("  reygent agent security-reviewer \"review this auth code\""));
+      console.log(chalk.gray("  reygent agent qe --spec spec.md"));
       process.exit(1);
     }
 
@@ -81,7 +80,7 @@ ${userPrompt}`;
     }
   } catch (err) {
     if (err instanceof SpecError || err instanceof TaskError) {
-      console.error(err.message);
+      console.log(chalk.red.bold("Error:"), err.message);
       process.exit(1);
     }
     throw err;
