@@ -18,6 +18,14 @@
 - Entry point: `src/cli.ts`
 - Bundle output: `dist/`
 
+## Config System
+
+- **Built-in agents:** `src/agents.ts` exports `builtinAgents` array
+- **Config loader:** `src/config.ts` handles local vs global resolution
+- **Local config:** `.reygent/config.json` (searched upward from cwd)
+- **Fallback:** If no local config found, use built-in agents
+- All agent-consuming code uses `getAgents()` from `src/config.ts`
+
 ## Terminal output style
 
 This project uses **chalk**, **ora**, and **cli-progress** for terminal output. Always use these libraries instead of plain `console.log` for anything user-facing.

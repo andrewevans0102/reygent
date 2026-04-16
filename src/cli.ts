@@ -8,6 +8,7 @@ import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
 import { runCommand } from "./commands/run.js";
 import { prCreateCommand } from "./commands/pr-create.js";
+import { initCommand } from "./commands/init.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -20,6 +21,11 @@ program
   .name("reygent")
   .description("Reygent CLI tool")
   .version(pkg.version);
+
+program
+  .command("init")
+  .description("Initialize .reygent folder with default agent and skill config")
+  .action(initCommand);
 
 program
   .command("generate-spec")

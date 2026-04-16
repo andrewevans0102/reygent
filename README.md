@@ -43,14 +43,14 @@ npm unlink -g reygent
 
 ## Quick Start
 
-### 1. Initialize agents in your project
+### 1. (Optional) Initialize local config
 
 ```bash
 cd your-project
 reygent init
 ```
 
-This scaffolds `.claude/agents/` with config files for each built-in agent (dev, qe, planner, security-reviewer, pr-reviewer, adhoc).
+This creates `.reygent/config.json` with all built-in agents. Edit this file to customize agents for your project. If you skip this step, reygent uses the global built-in agents.
 
 ### 2. Generate a spec (or write one manually)
 
@@ -104,7 +104,7 @@ Prints the pipeline stages as JSON without running anything.
 
 ### `reygent init`
 
-Scaffold `.claude/agents/` in the current project with default agent configs.
+Create `.reygent/config.json` in the current project with default agent and skill definitions. This enables per-project customization of agents.
 
 ### `reygent generate-spec <description> [--output <file>]`
 
@@ -204,7 +204,7 @@ reygent run --spec ./specs/feature.md
 
 ### Jira issues
 
-Pass a Jira issue key. Requires `JIRA_MCP_URL` in your `.env`:
+Pass a Jira issue key. Requires Jira API credentials in your `.env`:
 
 ```bash
 reygent run --spec PROJ-123
@@ -212,7 +212,7 @@ reygent run --spec PROJ-123
 
 ### Linear issues
 
-Pass a Linear issue identifier or full URL. Requires `LINEAR_MCP_URL` in your `.env`:
+Pass a Linear issue identifier or full URL. Requires Linear API key in your `.env`:
 
 ```bash
 reygent run --spec ENG-456
@@ -227,30 +227,42 @@ Create a `.env` file in your project root:
 
 ```bash
 # Linear integration (optional)
-LINEAR_MCP_URL=https://your-linear-mcp-server/sse
+LINEAR_API_KEY=lin_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Get your API key at: https://linear.app/settings/api
 
 # Jira integration (optional)
-JIRA_MCP_URL=https://your-jira-mcp-server/sse
-
-# GitHub authentication (required for PR operations)
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+JIRA_URL=https://your-company.atlassian.net
+JIRA_EMAIL=you@company.com
+JIRA_API_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
+# Get an API token at: https://id.atlassian.com/manage-profile/security/api-tokens
 ```
 
-### Agent configs
+**Note:** GitHub authentication for PR operations uses git's credential helper (same as `gh` CLI). No additional env vars needed.
 
-After running `reygent init`, agent configs live in `.claude/agents/<name>/agent.json`. Each config has:
+### Local vs Global Config
+
+**Global (default):** Reygent uses built-in agents defined in the package.
+
+**Local (per-project):** After running `reygent init`, a `.reygent/config.json` file is created in your project:
 
 ```json
 {
-  "name": "dev",
-  "description": "Write, edit, and refactor implementation code",
-  "systemPrompt": "You are the Dev agent...",
-  "tools": ["read", "write", "bash", "search"],
-  "role": "developer"
+  "agents": [
+    {
+      "name": "dev",
+      "description": "Write, edit, and refactor implementation code",
+      "systemPrompt": "You are the Dev agent...",
+      "tools": ["read", "write", "bash", "search"],
+      "role": "developer"
+    }
+  ],
+  "skills": {}
 }
 ```
 
-You can customize system prompts and tool access to fit your project's conventions.
+When `.reygent/config.json` exists, reygent uses the local agents instead of the built-in ones. This lets you customize system prompts, tools, and behavior per project.
+
+Reygent searches upward from the current directory to find `.reygent/`, so you can run commands from any subdirectory.
 
 ## Agents
 

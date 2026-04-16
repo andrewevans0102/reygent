@@ -1,6 +1,3 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { extractJSON } from "./planner.js";
 import { LinearSpecPayload, SpecError } from "./spec.js";
 
 const LINEAR_URL_PATTERN =
@@ -18,96 +15,116 @@ export function extractLinearId(url: string): string {
   return match[1];
 }
 
+interface LinearIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string;
+  children?: {
+    nodes: Array<{
+      id: string;
+      identifier: string;
+      title: string;
+      description?: string;
+    }>;
+  };
+}
+
+interface LinearResponse {
+  data?: {
+    issue?: LinearIssue;
+  };
+  errors?: Array<{ message: string }>;
+}
+
 export async function readLinearSpec(
   issueId: string,
 ): Promise<LinearSpecPayload> {
-  const mcpUrl = process.env.LINEAR_MCP_URL;
+  const apiKey = process.env.LINEAR_API_KEY;
 
-  if (!mcpUrl) {
+  if (!apiKey) {
     throw new SpecError(
-      `LINEAR_MCP_URL is not configured.\n\n` +
+      `LINEAR_API_KEY is not configured.\n\n` +
         `Add the following to your .env file:\n\n` +
-        `  LINEAR_MCP_URL=https://your-linear-mcp-server.example.com/sse\n\n` +
-        `This should point to your Linear MCP server's SSE endpoint.`,
+        `  LINEAR_API_KEY=lin_api_xxxxxxxx\n\n` +
+        `Get an API key at: https://linear.app/settings/api`,
     );
   }
 
-  const transport = new SSEClientTransport(new URL(mcpUrl));
-  const client = new Client({ name: "reygent", version: "0.1.0" });
+  const query = `
+    query($id: String!) {
+      issue(id: $id) {
+        id
+        identifier
+        title
+        description
+        children {
+          nodes {
+            id
+            identifier
+            title
+            description
+          }
+        }
+      }
+    }
+  `;
 
   try {
-    await client.connect(transport);
-
-    const result = await client.callTool({
-      name: "get_issue",
-      arguments: { id: issueId },
+    const response = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        variables: { id: issueId },
+      }),
     });
 
-    if (result.isError) {
-      const errorText =
-        result.content
-          ?.filter(
-            (c): c is { type: "text"; text: string } => c.type === "text",
-          )
-          .map((c) => c.text)
-          .join("\n") || "Unknown error";
+    if (!response.ok) {
       throw new SpecError(
-        `Linear API error for ${issueId}: ${errorText}`,
+        `Linear API error (${response.status}): ${response.statusText}`,
       );
     }
 
-    const textBlocks =
-      result.content?.filter(
-        (c): c is { type: "text"; text: string } => c.type === "text",
-      ) || [];
+    const data = await response.json() as LinearResponse;
 
-    if (textBlocks.length === 0) {
-      throw new SpecError(
-        `No content returned from Linear MCP server for ${issueId}`,
-      );
+    if (data.errors && data.errors.length > 0) {
+      const errorMsg = data.errors.map(e => e.message).join(", ");
+      throw new SpecError(`Linear GraphQL error: ${errorMsg}`);
     }
 
-    const raw = textBlocks.map((c) => c.text).join("\n");
-
-    let title: string;
-    let content: string;
-
-    try {
-      const parsed = JSON.parse(extractJSON(raw));
-      title = parsed.title || parsed.summary || issueId;
-      const description = parsed.description || "";
-
-      const parts = [`# ${title}`, description];
-
-      // Include sub-issues if present
-      const subIssues =
-        parsed.subIssues || parsed.children || parsed.sub_issues || [];
-      if (Array.isArray(subIssues) && subIssues.length > 0) {
-        const subSection = subIssues
-          .map((sub: { title?: string; description?: string; id?: string }) => {
-            const subTitle = sub.title || sub.id || "Untitled";
-            const subDesc = sub.description ? `\n${sub.description}` : "";
-            return `- **${subTitle}**${subDesc}`;
-          })
-          .join("\n");
-        parts.push(`## Sub-issues\n\n${subSection}`);
-      }
-
-      content = parts.join("\n\n");
-    } catch {
-      content = raw;
-      const headingMatch = raw.match(/^# (.+)$/m);
-      title = headingMatch ? headingMatch[1].trim() : issueId;
+    if (!data.data?.issue) {
+      throw new SpecError(`Issue not found: ${issueId}`);
     }
+
+    const issue = data.data.issue;
+    const title = issue.title || issueId;
+    const description = issue.description || "";
+
+    const parts = [`# ${title}`, description];
+
+    // Include sub-issues if present
+    const children = issue.children?.nodes || [];
+    if (children.length > 0) {
+      const subSection = children
+        .map((sub) => {
+          const subTitle = sub.title || sub.identifier || "Untitled";
+          const subDesc = sub.description ? `\n${sub.description}` : "";
+          return `- **${subTitle}**${subDesc}`;
+        })
+        .join("\n");
+      parts.push(`## Sub-issues\n\n${subSection}`);
+    }
+
+    const content = parts.filter(p => p.trim()).join("\n\n");
 
     return { source: "linear", issueId, title, content };
   } catch (err) {
     if (err instanceof SpecError) throw err;
     const message = err instanceof Error ? err.message : String(err);
-    throw new SpecError(
-      `Failed to connect to Linear MCP server: ${message}`,
-    );
-  } finally {
-    await client.close().catch(() => {});
+    throw new SpecError(`Failed to fetch Linear issue: ${message}`);
   }
 }

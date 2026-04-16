@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { builtinAgents } from "./agents.js";
+import { getAgents } from "./config.js";
 import { extractJSON } from "./planner.js";
 import { spawnAgentStream } from "./spawn.js";
 import type { SpawnResult } from "./spawn.js";
@@ -147,8 +147,9 @@ export async function runImplement(
   plan: PlannerOutput,
   options?: AgentSpawnOptions,
 ): Promise<ImplementOutput> {
-  const devAgent = builtinAgents.find((a) => a.name === "dev");
-  const qeAgent = builtinAgents.find((a) => a.name === "qe");
+  const agents = getAgents();
+  const devAgent = agents.find((a) => a.name === "dev");
+  const qeAgent = agents.find((a) => a.name === "qe");
 
   if (!devAgent || !qeAgent) {
     throw new TaskError("Implement: missing dev or qe agent config");

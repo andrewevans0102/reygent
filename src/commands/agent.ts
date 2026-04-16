@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline";
 import chalk from "chalk";
-import { builtinAgents } from "../agents.js";
+import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { TaskError } from "../task.js";
@@ -15,10 +15,11 @@ export async function agentCommand(
   userPrompt: string | undefined,
   options: AgentOptions,
 ): Promise<void> {
-  const agent = builtinAgents.find((a) => a.name === name);
+  const agents = getAgents();
+  const agent = agents.find((a) => a.name === name);
 
   if (!agent) {
-    const validNames = builtinAgents.map((a) => a.name).join(", ");
+    const validNames = agents.map((a) => a.name).join(", ");
     console.log(chalk.red.bold("Error:"), `Unknown agent "${name}". Valid agents: ${validNames}`);
     process.exit(1);
   }

@@ -1,9 +1,10 @@
-import { builtinAgents } from "./agents.js";
+import { getAgents } from "./config.js";
 import { spawnAgentStream } from "./spawn.js";
 import { TaskError } from "./task.js";
 
 function buildGeneratePrompt(description: string): string {
-  const plannerAgent = builtinAgents.find((a) => a.name === "planner");
+  const agents = getAgents();
+  const plannerAgent = agents.find((a) => a.name === "planner");
   const systemPrompt = plannerAgent?.systemPrompt ?? "";
 
   return `${systemPrompt}

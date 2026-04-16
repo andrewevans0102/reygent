@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { builtinAgents } from "./agents.js";
+import { getAgents } from "./config.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { extractJSON } from "./planner.js";
 import type {
@@ -198,7 +198,8 @@ export async function runSecurityReview(
   threshold: Severity,
   options?: AgentSpawnOptions,
 ): Promise<{ output: SecurityReviewOutput; passed: boolean }> {
-  const agent = builtinAgents.find((a) => a.name === "security-reviewer");
+  const agents = getAgents();
+  const agent = agents.find((a) => a.name === "security-reviewer");
   if (!agent) {
     throw new TaskError("security-review: missing security-reviewer agent config");
   }

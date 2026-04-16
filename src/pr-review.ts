@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import chalk from "chalk";
-import { builtinAgents } from "./agents.js";
+import { getAgents } from "./config.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { extractJSON } from "./planner.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
@@ -247,7 +247,8 @@ export async function runPRReview(
     console.log(chalk.green(`Found PR #${prNumber} on branch "${detected.branch}"`));
   }
 
-  const agent = builtinAgents.find((a) => a.name === "pr-reviewer");
+  const agents = getAgents();
+  const agent = agents.find((a) => a.name === "pr-reviewer");
   if (!agent) {
     throw new TaskError("pr-review: missing pr-reviewer agent config");
   }

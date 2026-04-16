@@ -1,4 +1,4 @@
-import { builtinAgents } from "./agents.js";
+import { getAgents } from "./config.js";
 import { spawnAgentStream } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
 import type { PlannerOutput, PlannerClarification, PlannerResult } from "./task.js";
@@ -35,7 +35,8 @@ export interface PlannerOptions {
 }
 
 function buildPrompt(spec: SpecPayload, previousAnswers?: string, options?: PlannerOptions): string {
-  const plannerAgent = builtinAgents.find((a) => a.name === "planner");
+  const agents = getAgents();
+  const plannerAgent = agents.find((a) => a.name === "planner");
   const systemPrompt = plannerAgent?.systemPrompt ?? "";
 
   let clarificationContext = "";
