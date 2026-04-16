@@ -85,8 +85,8 @@ export async function loadSpec(source: string): Promise<SpecPayload> {
 
   if (ISSUE_KEY_PATTERN.test(source)) {
     loadEnvFile();
-    const hasLinear = !!process.env.LINEAR_MCP_URL;
-    const hasJira = !!process.env.JIRA_MCP_URL;
+    const hasLinear = !!process.env.LINEAR_API_KEY;
+    const hasJira = !!(process.env.JIRA_URL && process.env.JIRA_EMAIL && process.env.JIRA_API_TOKEN);
 
     if (hasLinear && !hasJira) {
       return readLinearSpec(source);
@@ -97,8 +97,12 @@ export async function loadSpec(source: string): Promise<SpecPayload> {
     throw new SpecError(
       `No issue tracker configured for "${source}".\n\n` +
         `Add one of the following to your .env file:\n\n` +
-        `  LINEAR_MCP_URL=https://your-linear-mcp-server.example.com/sse\n` +
-        `  JIRA_MCP_URL=https://your-jira-mcp-server.example.com/sse`,
+        `  For Linear:\n` +
+        `    LINEAR_API_KEY=lin_api_...\n\n` +
+        `  For Jira:\n` +
+        `    JIRA_URL=https://your-domain.atlassian.net\n` +
+        `    JIRA_EMAIL=your-email@example.com\n` +
+        `    JIRA_API_TOKEN=your-jira-token`,
     );
   }
 
