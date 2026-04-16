@@ -32,7 +32,9 @@ interface LinearIssue {
 
 interface LinearResponse {
   data?: {
-    issue?: LinearIssue;
+    issues?: {
+      nodes: LinearIssue[];
+    };
   };
   errors?: Array<{ message: string }>;
 }
@@ -51,19 +53,30 @@ export async function readLinearSpec(
     );
   }
 
+  const match = issueId.match(/^([A-Z]+)-(\d+)$/);
+  if (!match) {
+    throw new SpecError(
+      `Invalid issue identifier format: ${issueId}. Expected format: TEAM-123`,
+    );
+  }
+  const teamKey = match[1];
+  const issueNumber = parseInt(match[2], 10);
+
   const query = `
-    query($id: String!) {
-      issue(id: $id) {
-        id
-        identifier
-        title
-        description
-        children {
-          nodes {
-            id
-            identifier
-            title
-            description
+    query($teamKey: String!, $number: Float!) {
+      issues(filter: { number: { eq: $number }, team: { key: { eq: $teamKey } } }, first: 1) {
+        nodes {
+          id
+          identifier
+          title
+          description
+          children {
+            nodes {
+              id
+              identifier
+              title
+              description
+            }
           }
         }
       }
@@ -74,12 +87,12 @@ export async function readLinearSpec(
     const response = await fetch("https://api.linear.app/graphql", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        "Authorization": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         query,
-        variables: { id: issueId },
+        variables: { teamKey, number: issueNumber },
       }),
     });
 
@@ -96,11 +109,12 @@ export async function readLinearSpec(
       throw new SpecError(`Linear GraphQL error: ${errorMsg}`);
     }
 
-    if (!data.data?.issue) {
+    const nodes = data.data?.issues?.nodes;
+    if (!nodes || nodes.length === 0) {
       throw new SpecError(`Issue not found: ${issueId}`);
     }
 
-    const issue = data.data.issue;
+    const issue = nodes[0];
     const title = issue.title || issueId;
     const description = issue.description || "";
 
