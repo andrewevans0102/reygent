@@ -4,6 +4,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { builtinAgents } from "../agents.js";
 import type { ReygentConfig } from "../config.js";
+import { isDebug } from "../debug.js";
 
 export async function initCommand(): Promise<void> {
   const targetDir = join(process.cwd(), ".reygent");
@@ -46,7 +47,9 @@ export async function initCommand(): Promise<void> {
     console.log(chalk.gray("  • Run"), chalk.cyan("reygent agent <name>"), chalk.gray("to use your local config"));
     console.log("");
   } catch (err) {
-    spinner.fail(chalk.red(`Failed: ${(err as Error).message}`));
-    process.exit(1);
+    const message = err instanceof Error ? err.message : String(err);
+    spinner.fail(chalk.red(`Failed: ${message}`));
+    if (isDebug()) console.error(err instanceof Error ? err.stack : err);
+    process.exit(2);
   }
 }

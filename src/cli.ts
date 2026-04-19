@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
+import { setDebug } from "./debug.js";
 import { agentCommand } from "./commands/agent.js";
 import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
@@ -20,7 +21,8 @@ const program = new Command();
 program
   .name("reygent")
   .description("Reygent CLI tool")
-  .version(pkg.version);
+  .version(pkg.version)
+  .option("--debug", "Show full stack traces on errors (or set REYGENT_DEBUG=1)");
 
 program
   .command("init")
@@ -84,5 +86,12 @@ const isHelpOrVersion = process.argv.includes("--help") ||
 if (!isHelpOrVersion) {
   console.log(chalk.bold.cyan(`\nreygent`) + chalk.gray(` v${pkg.version}`) + "\n");
 }
+
+// Set debug flag before any command action runs
+program.hook("preAction", () => {
+  if (program.opts().debug) {
+    setDebug(true);
+  }
+});
 
 program.parse();
