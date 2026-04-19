@@ -5,6 +5,7 @@ import ora from "ora";
 import { builtinAgents } from "../agents.js";
 import type { ReygentConfig } from "../config.js";
 import { isDebug } from "../debug.js";
+import { DEFAULT_MODEL } from "../model.js";
 
 export async function initCommand(options: { dryRun: boolean } = { dryRun: false }): Promise<void> {
   const targetDir = join(process.cwd(), ".reygent");
@@ -13,6 +14,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
   const defaultConfig: ReygentConfig = {
     agents: builtinAgents,
     skills: {},
+    model: DEFAULT_MODEL,
   };
 
   if (options.dryRun) {

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import chalk from "chalk";
 import { TaskError } from "./task.js";
+import { resolveModel } from "./model.js";
 
 export interface SpawnResult {
   stdout: string;
@@ -50,14 +51,15 @@ export interface SpawnOptions {
   autoApprove?: boolean;
 }
 
-export function spawnAgentStream(
+export async function spawnAgentStream(
   name: string,
   prompt: string,
   timeoutMs: number,
   options?: SpawnOptions,
 ): Promise<SpawnResult> {
+  const modelId = await resolveModel();
   return new Promise((resolve, reject) => {
-    const args = ["-p", prompt, "--output-format", "stream-json", "--verbose"];
+    const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--model", modelId];
     if (options?.autoApprove) {
       args.push("--allowedTools", "Bash", "Edit", "Write", "Read", "Glob", "Grep");
     }

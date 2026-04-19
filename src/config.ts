@@ -6,6 +6,7 @@ import { builtinAgents } from "./agents.js";
 export interface ReygentConfig {
   agents?: AgentConfig[];
   skills?: Record<string, unknown>; // For future skill support
+  model?: string;
 }
 
 /**

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { setDebug } from "./debug.js";
+import { setModelOverride, validateModel } from "./model.js";
 import { agentCommand } from "./commands/agent.js";
 import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
@@ -22,7 +23,8 @@ program
   .name("reygent")
   .description("Reygent CLI tool")
   .version(pkg.version)
-  .option("--debug", "Show full stack traces on errors (or set REYGENT_DEBUG=1)");
+  .option("--debug", "Show full stack traces on errors (or set REYGENT_DEBUG=1)")
+  .option("--model <id>", "Anthropic model ID (e.g. claude-sonnet-4-5, claude-opus-4-6)");
 
 program
   .command("init")
@@ -88,10 +90,15 @@ if (!isHelpOrVersion) {
   console.log(chalk.bold.cyan(`\nreygent`) + chalk.gray(` v${pkg.version}`) + "\n");
 }
 
-// Set debug flag before any command action runs
+// Set debug flag and model override before any command action runs
 program.hook("preAction", () => {
   if (program.opts().debug) {
     setDebug(true);
+  }
+  const modelFlag = program.opts().model;
+  if (modelFlag) {
+    const resolved = validateModel(modelFlag);
+    setModelOverride(resolved);
   }
 });
 
