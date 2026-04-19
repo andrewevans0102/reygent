@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline";
 import chalk from "chalk";
 import ora from "ora";
+import { isDebug } from "../debug.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { runPlanner } from "../planner.js";
 import { TaskError } from "../task.js";
@@ -83,8 +84,12 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
   } catch (err) {
     if (err instanceof SpecError || err instanceof TaskError) {
       console.log(chalk.red.bold("Error:"), err.message);
+      if (isDebug()) console.error(err.stack);
       process.exit(1);
     }
-    throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(chalk.red.bold("Internal error:"), message);
+    if (isDebug()) console.error(err instanceof Error ? err.stack : err);
+    process.exit(2);
   }
 }
