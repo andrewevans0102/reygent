@@ -122,6 +122,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
     const spec = await loadSpec(options.spec);
 
     if (options.dryRun) {
+      console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
       console.log("");
       console.log(chalk.bold.cyan("┌─ Specification"));
       console.log(chalk.cyan("│"), chalk.bold(spec.title));

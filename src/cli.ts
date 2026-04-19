@@ -27,6 +27,7 @@ program
 program
   .command("init")
   .description("Initialize .reygent folder with default agent and skill config")
+  .option("--dry-run", "Preview what files would be created without writing anything", false)
   .action(initCommand);
 
 program
