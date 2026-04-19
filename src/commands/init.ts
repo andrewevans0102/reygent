@@ -6,9 +6,26 @@ import { builtinAgents } from "../agents.js";
 import type { ReygentConfig } from "../config.js";
 import { isDebug } from "../debug.js";
 
-export async function initCommand(): Promise<void> {
+export async function initCommand(options: { dryRun: boolean } = { dryRun: false }): Promise<void> {
   const targetDir = join(process.cwd(), ".reygent");
   const configPath = join(targetDir, "config.json");
+
+  const defaultConfig: ReygentConfig = {
+    agents: builtinAgents,
+    skills: {},
+  };
+
+  if (options.dryRun) {
+    console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
+    console.log(chalk.bold("Would create:"));
+    console.log(chalk.gray("  dir:  "), chalk.cyan(targetDir));
+    console.log(chalk.gray("  file: "), chalk.cyan(configPath));
+    console.log("");
+    console.log(chalk.bold("Config preview:"));
+    console.log(chalk.gray(JSON.stringify(defaultConfig, null, 2)));
+    console.log("");
+    return;
+  }
 
   if (existsSync(targetDir)) {
     console.log(chalk.yellow.bold("Warning:"), `.reygent folder already exists`);
@@ -29,12 +46,6 @@ export async function initCommand(): Promise<void> {
     if (!existsSync(targetDir)) {
       mkdirSync(targetDir, { recursive: true });
     }
-
-    // Write default config with all builtin agents
-    const defaultConfig: ReygentConfig = {
-      agents: builtinAgents,
-      skills: {},
-    };
 
     writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2) + "\n", "utf-8");
 
