@@ -6,6 +6,7 @@ import { builtinAgents } from "./agents.js";
 export interface ReygentConfig {
   agents?: AgentConfig[];
   skills?: Record<string, unknown>; // For future skill support
+  model?: string;
 }
 
 /**
@@ -22,6 +23,7 @@ export function loadConfig(): ReygentConfig {
       return {
         agents: config.agents ?? builtinAgents,
         skills: config.skills ?? {},
+        model: config.model,
       };
     } catch (err) {
       throw new Error(

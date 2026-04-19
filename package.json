@@ -18,6 +18,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@inquirer/prompts": "^8.4.1",
     "@types/cli-progress": "^3.11.6",
     "chalk": "^5.6.2",
     "cli-progress": "^3.12.0",
