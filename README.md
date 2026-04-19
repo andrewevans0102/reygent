@@ -1,5 +1,7 @@
 # Reygent
 
+![Reygent Logo](/README_IMAGES/ReygentLogo.png)
+
 An AI-powered CLI that orchestrates multiple Claude agents to automate the software development lifecycle — from spec to shipped PR.
 
 Reygent reads a spec (markdown file, Jira issue, or Linear issue), then runs a pipeline of specialized agents that plan the work, implement code, write tests, run quality gates, perform a security review, create a pull request, and review the PR.

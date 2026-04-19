@@ -279,6 +279,7 @@ async function createGitHubPR(opts: {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "Content-Type": "application/json",
+      "User-Agent": "reygent",
     },
     body,
     { insecure: opts.insecure },
@@ -479,7 +480,7 @@ export function buildPRBody(context: TaskContext): string {
   }
 
   sections.push("---");
-  sections.push("*Created by [reygent](https://github.com/andrewevans/reygent)*");
+  sections.push("*Created by [reygent](https://github.com/andrewevans0102/reygent)*");
 
   return sections.join("\n");
 }

@@ -232,20 +232,24 @@ async function detectPRFromBranch(): Promise<{ prNumber: number; branch: string 
   return { prNumber, branch };
 }
 
+/**
+ * Resolve the PR number from context or by detecting from the current branch.
+ */
+async function resolvePRNumber(context: TaskContext): Promise<number> {
+  if (context.prCreate) {
+    return context.prCreate.prNumber;
+  }
+  console.log(chalk.blue("No PR number provided — detecting from current branch..."));
+  const detected = await detectPRFromBranch();
+  console.log(chalk.green(`Found PR #${detected.prNumber} on branch "${detected.branch}"`));
+  return detected.prNumber;
+}
+
 export async function runPRReview(
   context: TaskContext,
   options?: AgentSpawnOptions,
 ): Promise<PRReviewOutput> {
-  let prNumber: number;
-
-  if (context.prCreate) {
-    prNumber = context.prCreate.prNumber;
-  } else {
-    console.log(chalk.blue("No PR number provided — detecting from current branch..."));
-    const detected = await detectPRFromBranch();
-    prNumber = detected.prNumber;
-    console.log(chalk.green(`Found PR #${prNumber} on branch "${detected.branch}"`));
-  }
+  const prNumber = await resolvePRNumber(context);
 
   const agents = getAgents();
   const agent = agents.find((a) => a.name === "pr-reviewer");
@@ -264,4 +268,17 @@ export async function runPRReview(
   }
 
   return extractPRReviewOutput(result.stdout);
+}
+
+/**
+ * Post a formatted PR review as a comment on the pull request.
+ */
+export async function postPRReviewComment(
+  context: TaskContext,
+  review: PRReviewOutput,
+): Promise<void> {
+  const prNumber = await resolvePRNumber(context);
+  const body = formatPRReviewOutput(review) +
+    "\n\n---\n*Review by [reygent](https://github.com/andrewevans0102/reygent)*";
+  await exec("gh", ["pr", "comment", String(prNumber), "--body", body]);
 }

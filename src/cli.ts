@@ -59,6 +59,7 @@ program
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
   .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .option("--skip-clarification", "Skip planner clarification and make assumptions", false)
+  .option("--max-retries <count>", "Max retry attempts when gate tests fail", "2")
   .action(runCommand);
 
 program

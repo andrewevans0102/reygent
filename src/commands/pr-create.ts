@@ -134,7 +134,7 @@ export async function prCreateCommand(options: PRCreateOptions): Promise<void> {
       sections.push(spec.title);
       sections.push("");
       sections.push("---");
-      sections.push("*Created by [reygent](https://github.com/andrewevans/reygent)*");
+      sections.push("*Created by [reygent](https://github.com/andrewevans0102/reygent)*");
 
       prBody = options.body || sections.join("\n");
     } else if (options.title) {

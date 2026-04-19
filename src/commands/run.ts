@@ -3,9 +3,10 @@ import chalk from "chalk";
 import ora from "ora";
 import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
+import type { FailureContext } from "../implement.js";
 import { runPlanner } from "../planner.js";
 import { runPRCreate } from "../pr-create.js";
-import { runPRReview, formatPRReviewOutput } from "../pr-review.js";
+import { runPRReview, formatPRReviewOutput, postPRReviewComment } from "../pr-review.js";
 import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
@@ -20,6 +21,99 @@ interface RunOptions {
   autoApprove: boolean;
   insecure: boolean;
   skipClarification: boolean;
+  maxRetries: string;
+}
+
+const MAX_TEST_OUTPUT_CHARS = 8000;
+
+function truncateForPrompt(output: string): string {
+  if (output.length <= MAX_TEST_OUTPUT_CHARS) return output;
+  const half = Math.floor(MAX_TEST_OUTPUT_CHARS / 2);
+  return (
+    output.slice(0, half) +
+    "\n\n... [truncated] ...\n\n" +
+    output.slice(-half)
+  );
+}
+
+interface RetryGateOptions {
+  gateName: string;
+  gateRunner: () => Promise<import("../task.js").GateResult>;
+  agentsToRun: Array<"dev" | "qe">;
+  context: TaskContext;
+  agentOptions: { autoApprove: boolean };
+  maxRetries: number;
+  autoApprove: boolean;
+  stageName: string;
+}
+
+async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").GateResult> {
+  const { gateName, gateRunner, agentsToRun, context, agentOptions, maxRetries, autoApprove, stageName } = opts;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
+
+    if (!autoApprove) {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(
+          chalk.yellow(`\n${gateName} failed. Retry with failure context? (y/n) `),
+          resolve,
+        );
+      });
+      rl.close();
+      if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
+        console.log(chalk.red("Aborted by user."));
+        process.exit(1);
+      }
+    }
+
+    console.log(chalk.yellow(`\nRetrying ${gateName} (attempt ${attempt}/${maxRetries})...`));
+
+    const failureContext: FailureContext = {
+      gateName,
+      testOutput: truncateForPrompt(lastOutput),
+      attempt,
+      maxAttempts: maxRetries,
+    };
+
+    const spinner = ora(chalk.blue(`re-running ${agentsToRun.join(" + ")} agent(s)...`)).start();
+    const retryResult = await runImplement(context.spec, context.plan!, agentOptions, {
+      failureContext,
+      agentsToRun,
+    });
+
+    // Merge results into context
+    if (retryResult.dev && context.implement) {
+      context.implement.dev = retryResult.dev;
+    }
+    if (retryResult.qe && context.implement) {
+      context.implement.qe = retryResult.qe;
+    }
+    spinner.succeed(chalk.green("Retry implementation complete"));
+
+    // Re-run gate
+    const retrySpinner = ora(chalk.blue(`re-running ${gateName}...`)).start();
+    const gateResult = await gateRunner();
+
+    if (!context.gates) context.gates = {};
+    if (gateName === "unit tests") {
+      context.gates.unitTests = gateResult;
+    } else {
+      context.gates.functionalTests = gateResult;
+    }
+
+    if (gateResult.passed) {
+      retrySpinner.succeed(chalk.green(`${gateName} PASSED on retry ${attempt}`));
+      return gateResult;
+    }
+
+    retrySpinner.fail(chalk.red(`${gateName} FAILED (retry ${attempt}/${maxRetries})`));
+  }
+
+  // All retries exhausted
+  console.log(chalk.red.bold(`\n${gateName} failed after ${maxRetries} retries. Exiting.`));
+  process.exit(1);
 }
 
 export async function runCommand(options: RunOptions): Promise<void> {
@@ -110,6 +204,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
       skipClarification = answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
       console.log("");
     }
+
+    const maxRetries = Math.max(0, parseInt(options.maxRetries, 10) || 0);
 
     const context: TaskContext = { spec, results: [] };
     const agentOptions = { autoApprove };
@@ -238,7 +334,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const spinner = ora(chalk.blue("running unit tests...")).start();
-        const gateResult = await runUnitTestGate(context, agentOptions);
+        let gateResult = await runUnitTestGate(context, agentOptions);
 
         if (!context.gates) context.gates = {};
         context.gates.unitTests = gateResult;
@@ -254,12 +350,25 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         spinner.fail(chalk.red("Unit tests FAILED"));
+
+        // Retry loop — dev agent only for unit test failures
+        gateResult = await retryGate({
+          gateName: "unit tests",
+          gateRunner: () => runUnitTestGate(context, agentOptions),
+          agentsToRun: ["dev"],
+          context,
+          agentOptions,
+          maxRetries,
+          autoApprove,
+          stageName: stage.name,
+        });
+
         context.results.push({
           stage: stage.name,
-          success: false,
+          success: gateResult.passed,
           output: gateResult.output,
         });
-        process.exit(1);
+        continue;
       }
 
       if (stage.name === "gate-functional-tests") {
@@ -268,7 +377,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const spinner = ora(chalk.blue("running functional tests...")).start();
-        const gateResult = await runFunctionalTestGate(context, agentOptions);
+        let gateResult = await runFunctionalTestGate(context, agentOptions);
 
         if (!context.gates) context.gates = {};
         context.gates.functionalTests = gateResult;
@@ -285,12 +394,25 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
         spinner.fail(chalk.red("Functional tests FAILED"));
         console.log(gateResult.output);
+
+        // Retry loop — both dev + qe agents for functional test failures
+        gateResult = await retryGate({
+          gateName: "functional tests",
+          gateRunner: () => runFunctionalTestGate(context, agentOptions),
+          agentsToRun: ["dev", "qe"],
+          context,
+          agentOptions,
+          maxRetries,
+          autoApprove,
+          stageName: stage.name,
+        });
+
         context.results.push({
           stage: stage.name,
-          success: false,
+          success: gateResult.passed,
           output: gateResult.output,
         });
-        process.exit(1);
+        continue;
       }
 
       if (stage.name === "security-review") {
@@ -386,6 +508,15 @@ export async function runCommand(options: RunOptions): Promise<void> {
         spinner.succeed(chalk.green("PR review complete"));
 
         console.log(formatPRReviewOutput(reviewOutput));
+
+        const commentSpinner = ora(chalk.blue("posting review comment to PR...")).start();
+        try {
+          await postPRReviewComment(context, reviewOutput);
+          commentSpinner.succeed(chalk.green("Review posted to PR"));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          commentSpinner.fail(chalk.yellow(`Could not post review to PR: ${msg}`));
+        }
 
         context.results.push({
           stage: stage.name,

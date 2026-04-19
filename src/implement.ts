@@ -20,6 +20,18 @@ export interface AgentSpawnOptions {
   autoApprove?: boolean;
 }
 
+export interface FailureContext {
+  gateName: string;
+  testOutput: string;
+  attempt: number;
+  maxAttempts: number;
+}
+
+export interface RetryOptions {
+  failureContext?: FailureContext;
+  agentsToRun?: Array<"dev" | "qe">;
+}
+
 export function spawnAgent(
   name: string,
   prompt: string,
@@ -28,12 +40,30 @@ export function spawnAgent(
   return spawnAgentStream(name, prompt, AGENT_TIMEOUT_MS, options);
 }
 
+function buildRetrySection(failureContext: FailureContext): string {
+  return `
+
+---
+
+## RETRY (attempt ${failureContext.attempt}/${failureContext.maxAttempts})
+
+The previous implementation failed the **${failureContext.gateName}** gate. Review the test output below, identify what went wrong, and fix the issues.
+
+**Test output:**
+\`\`\`
+${failureContext.testOutput}
+\`\`\`
+
+Focus on fixing the failures above. Do not rewrite code that already works.`;
+}
+
 function buildDevPrompt(
   systemPrompt: string,
   spec: SpecPayload,
   plan: PlannerOutput,
+  failureContext?: FailureContext,
 ): string {
-  return `${systemPrompt}
+  let prompt = `${systemPrompt}
 
 ---
 
@@ -66,14 +96,21 @@ When you are finished, output a JSON block with the list of files you created or
 \`\`\`json
 { "files": ["src/example.ts", "src/example.test.ts"] }
 \`\`\``;
+
+  if (failureContext) {
+    prompt += buildRetrySection(failureContext);
+  }
+
+  return prompt;
 }
 
 function buildQEPrompt(
   systemPrompt: string,
   spec: SpecPayload,
   plan: PlannerOutput,
+  failureContext?: FailureContext,
 ): string {
-  return `${systemPrompt}
+  let prompt = `${systemPrompt}
 
 ---
 
@@ -106,6 +143,12 @@ When you are finished, output a JSON block with the list of test files you creat
 \`\`\`json
 { "testFiles": ["tests/example.test.ts"] }
 \`\`\``;
+
+  if (failureContext) {
+    prompt += buildRetrySection(failureContext);
+  }
+
+  return prompt;
 }
 
 function extractDevOutput(stdout: string): DevOutput {
@@ -146,6 +189,7 @@ export async function runImplement(
   spec: SpecPayload,
   plan: PlannerOutput,
   options?: AgentSpawnOptions,
+  retryOptions?: RetryOptions,
 ): Promise<ImplementOutput> {
   const agents = getAgents();
   const devAgent = agents.find((a) => a.name === "dev");
@@ -155,67 +199,111 @@ export async function runImplement(
     throw new TaskError("Implement: missing dev or qe agent config");
   }
 
-  const devPrompt = buildDevPrompt(devAgent.systemPrompt, spec, plan);
-  const qePrompt = buildQEPrompt(qeAgent.systemPrompt, spec, plan);
+  const agentsToRun = retryOptions?.agentsToRun ?? ["dev", "qe"];
+  const failureContext = retryOptions?.failureContext;
+
+  const runDev = agentsToRun.includes("dev");
+  const runQE = agentsToRun.includes("qe");
+
+  const devPrompt = runDev
+    ? buildDevPrompt(devAgent.systemPrompt, spec, plan, failureContext)
+    : "";
+  const qePrompt = runQE
+    ? buildQEPrompt(qeAgent.systemPrompt, spec, plan, failureContext)
+    : "";
 
   let dev: DevOutput | null = null;
   let qe: QEOutput | null = null;
 
   if (options?.autoApprove) {
     // Parallel: no stdin needed
-    const [devResult, qeResult] = await Promise.allSettled([
-      spawnAgent("dev", devPrompt, options),
-      spawnAgent("qe", qePrompt, options),
-    ]);
+    const promises: Promise<PromiseSettledResult<SpawnResult>>[] = [];
 
-    if (devResult.status === "fulfilled" && devResult.value.exitCode === 0) {
-      dev = extractDevOutput(devResult.value.stdout);
-    } else {
-      const reason =
-        devResult.status === "rejected"
-          ? devResult.reason
-          : `exit code ${devResult.value.exitCode}`;
-      console.log(chalk.red("dev agent failed:"), reason);
+    if (runDev) {
+      promises.push(
+        spawnAgent("dev", devPrompt, options).then(
+          (v) => ({ status: "fulfilled" as const, value: v }),
+          (e) => ({ status: "rejected" as const, reason: e }),
+        ),
+      );
+    }
+    if (runQE) {
+      promises.push(
+        spawnAgent("qe", qePrompt, options).then(
+          (v) => ({ status: "fulfilled" as const, value: v }),
+          (e) => ({ status: "rejected" as const, reason: e }),
+        ),
+      );
     }
 
-    if (qeResult.status === "fulfilled" && qeResult.value.exitCode === 0) {
-      qe = extractQEOutput(qeResult.value.stdout);
-    } else {
-      const reason =
-        qeResult.status === "rejected"
-          ? qeResult.reason
-          : `exit code ${qeResult.value.exitCode}`;
-      console.log(chalk.red("qe agent failed:"), reason);
+    const results = await Promise.all(promises);
+    let idx = 0;
+
+    if (runDev) {
+      const devResult = results[idx++];
+      if (devResult.status === "fulfilled" && devResult.value.exitCode === 0) {
+        dev = extractDevOutput(devResult.value.stdout);
+      } else {
+        const reason =
+          devResult.status === "rejected"
+            ? devResult.reason
+            : `exit code ${devResult.value.exitCode}`;
+        console.log(chalk.red("dev agent failed:"), reason);
+      }
+    }
+
+    if (runQE) {
+      const qeResult = results[idx++];
+      if (qeResult.status === "fulfilled" && qeResult.value.exitCode === 0) {
+        qe = extractQEOutput(qeResult.value.stdout);
+      } else {
+        const reason =
+          qeResult.status === "rejected"
+            ? qeResult.reason
+            : `exit code ${qeResult.value.exitCode}`;
+        console.log(chalk.red("qe agent failed:"), reason);
+      }
     }
   } else {
     // Sequential: stdin inherited so user can approve each edit
-    console.log(chalk.blue("Running dev agent (approve edits as prompted)..."));
-    try {
-      const devResult = await spawnAgent("dev", devPrompt, options);
-      if (devResult.exitCode === 0) {
-        dev = extractDevOutput(devResult.stdout);
-      } else {
-        console.log(chalk.red("dev agent failed:"), `exit code ${devResult.exitCode}`);
+    if (runDev) {
+      console.log(chalk.blue("Running dev agent (approve edits as prompted)..."));
+      try {
+        const devResult = await spawnAgent("dev", devPrompt, options);
+        if (devResult.exitCode === 0) {
+          dev = extractDevOutput(devResult.stdout);
+        } else {
+          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.exitCode}`);
+        }
+      } catch (err) {
+        console.log(chalk.red("dev agent failed:"), err);
       }
-    } catch (err) {
-      console.log(chalk.red("dev agent failed:"), err);
     }
 
-    console.log(chalk.blue("Running qe agent (approve edits as prompted)..."));
-    try {
-      const qeResult = await spawnAgent("qe", qePrompt, options);
-      if (qeResult.exitCode === 0) {
-        qe = extractQEOutput(qeResult.stdout);
-      } else {
-        console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.exitCode}`);
+    if (runQE) {
+      console.log(chalk.blue("Running qe agent (approve edits as prompted)..."));
+      try {
+        const qeResult = await spawnAgent("qe", qePrompt, options);
+        if (qeResult.exitCode === 0) {
+          qe = extractQEOutput(qeResult.stdout);
+        } else {
+          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.exitCode}`);
+        }
+      } catch (err) {
+        console.log(chalk.red("qe agent failed:"), err);
       }
-    } catch (err) {
-      console.log(chalk.red("qe agent failed:"), err);
     }
   }
 
-  if (dev === null && qe === null) {
-    throw new TaskError("Implement: both dev and qe agents failed");
+  // Only fail if both requested agents failed
+  if ((runDev && dev === null) && (runQE && qe === null)) {
+    throw new TaskError("Implement: all requested agents failed");
+  }
+  if (runDev && !runQE && dev === null) {
+    throw new TaskError("Implement: dev agent failed");
+  }
+  if (!runDev && runQE && qe === null) {
+    throw new TaskError("Implement: qe agent failed");
   }
 
   return { dev, qe };

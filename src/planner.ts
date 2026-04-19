@@ -109,7 +109,7 @@ export async function runPlanner(
   options?: PlannerOptions,
 ): Promise<PlannerResult> {
   const prompt = buildPrompt(spec, previousAnswers, options);
-  const { stdout: raw, exitCode } = await spawnAgentStream("planner", prompt, 120_000, { quiet: true });
+  const { stdout: raw, exitCode } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true });
 
   if (exitCode !== 0) {
     throw new TaskError(`Planner: claude CLI exited with code ${exitCode}`);
