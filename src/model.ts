@@ -1,6 +1,7 @@
 import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { loadConfig } from "./config.js";
+import { TaskError } from "./task.js";
 
 export interface ModelEntry {
   id: string;
@@ -38,7 +39,7 @@ export function validateModel(id: string): string {
     const aliases = Object.entries(SHORT_ALIASES)
       .map(([alias, full]) => `  ${alias} → ${full}`)
       .join("\n");
-    throw new Error(
+    throw new TaskError(
       `Unknown model: ${id}\n\nSupported models:\n${list}\n\nShort aliases:\n${aliases}`,
     );
   }
@@ -57,7 +58,7 @@ export function getModel(): string | null {
   if (modelOverride) return modelOverride;
   const configModel = getConfigModel();
   if (configModel) {
-    return resolveAlias(configModel);
+    return validateModel(configModel);
   }
   return null;
 }
@@ -85,5 +86,10 @@ export async function promptModelSelection(): Promise<string> {
 export async function resolveModel(): Promise<string> {
   const model = getModel();
   if (model) return model;
+  if (!process.stdin.isTTY) {
+    throw new TaskError(
+      "No model configured. Pass --model <id> or set \"model\" in .reygent/config.json",
+    );
+  }
   return promptModelSelection();
 }

@@ -23,6 +23,7 @@ export function loadConfig(): ReygentConfig {
       return {
         agents: config.agents ?? builtinAgents,
         skills: config.skills ?? {},
+        model: config.model,
       };
     } catch (err) {
       throw new Error(

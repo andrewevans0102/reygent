@@ -97,8 +97,13 @@ program.hook("preAction", () => {
   }
   const modelFlag = program.opts().model;
   if (modelFlag) {
-    const resolved = validateModel(modelFlag);
-    setModelOverride(resolved);
+    try {
+      const resolved = validateModel(modelFlag);
+      setModelOverride(resolved);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      program.error(message);
+    }
   }
 });
 
