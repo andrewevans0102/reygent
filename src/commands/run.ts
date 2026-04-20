@@ -12,6 +12,7 @@ import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
 import type { Severity, StageResult, TaskContext, PlannerOutput } from "../task.js";
+import { UsageTracker, printUsageSummary, printVerboseUsage } from "../usage.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -23,6 +24,7 @@ interface RunOptions {
   insecure: boolean;
   skipClarification: boolean;
   maxRetries: string;
+  verbose: boolean;
 }
 
 const MAX_TEST_OUTPUT_CHARS = 8000;
@@ -39,17 +41,18 @@ function truncateForPrompt(output: string): string {
 
 interface RetryGateOptions {
   gateName: string;
-  gateRunner: () => Promise<import("../task.js").GateResult>;
+  gateRunner: () => Promise<{ gate: import("../task.js").GateResult; usage?: import("../usage.js").UsageInfo }>;
   agentsToRun: Array<"dev" | "qe">;
   context: TaskContext;
   agentOptions: { autoApprove: boolean };
   maxRetries: number;
   autoApprove: boolean;
   stageName: string;
+  tracker: UsageTracker;
 }
 
 async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").GateResult> {
-  const { gateName, gateRunner, agentsToRun, context, agentOptions, maxRetries, autoApprove, stageName } = opts;
+  const { gateName, gateRunner, agentsToRun, context, agentOptions, maxRetries, autoApprove, stageName, tracker } = opts;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
@@ -79,10 +82,15 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     };
 
     const spinner = ora(chalk.blue(`re-running ${agentsToRun.join(" + ")} agent(s)...`)).start();
-    const retryResult = await runImplement(context.spec, context.plan!, agentOptions, {
+    const { implement: retryResult, usages: retryUsages } = await runImplement(context.spec, context.plan!, agentOptions, {
       failureContext,
       agentsToRun,
     });
+
+    // Record retry implementation usage
+    for (const u of retryUsages) {
+      if (u.usage) tracker.record(u.agent, `${stageName}-retry`, u.usage);
+    }
 
     // Merge results into context
     if (retryResult.dev && context.implement) {
@@ -95,7 +103,9 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
 
     // Re-run gate
     const retrySpinner = ora(chalk.blue(`re-running ${gateName}...`)).start();
-    const gateResult = await gateRunner();
+    const { gate: gateResult, usage: gateUsage } = await gateRunner();
+
+    if (gateUsage) tracker.record(gateName, `${stageName}-retry`, gateUsage);
 
     if (!context.gates) context.gates = {};
     if (gateName === "unit tests") {
@@ -211,6 +221,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
     const context: TaskContext = { spec, results: [] };
     const agentOptions = { autoApprove };
+    const tracker = new UsageTracker();
 
     for (const stage of PIPELINE) {
       if (stage.name === "plan") {
@@ -220,12 +231,13 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
         if (skipClarification) {
           // Skip clarification, make assumptions
-          const result = await runPlanner(context.spec, undefined, { makeAssumptions: true });
+          const { result, usage: planUsage } = await runPlanner(context.spec, undefined, { makeAssumptions: true });
           if ("needsClarification" in result && result.needsClarification) {
             spinner.fail(chalk.red("Planner asked questions despite skip flag"));
             throw new TaskError("Planner: unexpected clarification request in assumption mode");
           }
           plan = result as PlannerOutput;
+          if (planUsage) tracker.record("planner", "plan", planUsage);
         } else {
           // Run clarification loop
           let clarificationAnswers = "";
@@ -234,7 +246,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
           while (!plan && attempts < maxAttempts) {
             attempts++;
-            const result = await runPlanner(context.spec, clarificationAnswers);
+            const { result, usage: planUsage } = await runPlanner(context.spec, clarificationAnswers);
+            if (planUsage) tracker.record("planner", "plan", planUsage);
 
             if ("needsClarification" in result && result.needsClarification) {
               spinner.stop();
@@ -303,8 +316,12 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const spinner = ora(chalk.blue("spawning dev and qe agents...")).start();
-        const impl = await runImplement(context.spec, context.plan, agentOptions);
+        const { implement: impl, usages: implUsages } = await runImplement(context.spec, context.plan, agentOptions);
         context.implement = impl;
+
+        for (const u of implUsages) {
+          if (u.usage) tracker.record(u.agent, "implement", u.usage);
+        }
 
         const devSuccess = impl.dev !== null;
         const qeSuccess = impl.qe !== null;
@@ -336,7 +353,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const spinner = ora(chalk.blue("running unit tests...")).start();
-        let gateResult = await runUnitTestGate(context, agentOptions);
+        const { gate: unitGateResult, usage: unitGateUsage } = await runUnitTestGate(context, agentOptions);
+        let gateResult = unitGateResult;
+
+        if (unitGateUsage) tracker.record("gate:unit-tests", stage.name, unitGateUsage);
 
         if (!context.gates) context.gates = {};
         context.gates.unitTests = gateResult;
@@ -363,6 +383,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           maxRetries,
           autoApprove,
           stageName: stage.name,
+          tracker,
         });
 
         context.results.push({
@@ -379,7 +400,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const spinner = ora(chalk.blue("running functional tests...")).start();
-        let gateResult = await runFunctionalTestGate(context, agentOptions);
+        const { gate: funcGateResult, usage: funcGateUsage } = await runFunctionalTestGate(context, agentOptions);
+        let gateResult = funcGateResult;
+
+        if (funcGateUsage) tracker.record("gate:functional-tests", stage.name, funcGateUsage);
 
         if (!context.gates) context.gates = {};
         context.gates.functionalTests = gateResult;
@@ -407,6 +431,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           maxRetries,
           autoApprove,
           stageName: stage.name,
+          tracker,
         });
 
         context.results.push({
@@ -423,11 +448,12 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const spinner = ora(chalk.blue("running security review...")).start();
-        const { output, passed } = await runSecurityReview(
+        const { output, passed, usage: secUsage } = await runSecurityReview(
           context,
           threshold as Severity,
           agentOptions,
         );
+        if (secUsage) tracker.record("security-review", stage.name, secUsage);
         context.securityReview = output;
 
         if (passed) {
@@ -505,8 +531,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       if (stage.name === "pr-review") {
         const spinner = ora(chalk.blue("reviewing pull request...")).start();
-        const reviewOutput = await runPRReview(context, agentOptions);
+        const { output: reviewOutput, usage: prUsage } = await runPRReview(context, agentOptions);
         context.prReview = reviewOutput;
+        if (prUsage) tracker.record("pr-review", stage.name, prUsage);
         spinner.succeed(chalk.green("PR review complete"));
 
         console.log(formatPRReviewOutput(reviewOutput));
@@ -537,6 +564,12 @@ export async function runCommand(options: RunOptions): Promise<void> {
       };
       console.log(chalk.gray(`[${stage.name}] skipped`));
       context.results.push(result);
+    }
+
+    // Print usage summary after pipeline completes
+    printUsageSummary(tracker);
+    if (options.verbose) {
+      printVerboseUsage(tracker);
     }
   } catch (err) {
     if (err instanceof SpecError || err instanceof TaskError) {

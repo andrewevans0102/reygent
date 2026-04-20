@@ -3,6 +3,7 @@ import { spawnAgentStream } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
 import type { PlannerOutput, PlannerClarification, PlannerResult } from "./task.js";
 import { TaskError } from "./task.js";
+import type { UsageInfo } from "./usage.js";
 
 export function extractJSON(text: string): string {
   const trimmed = text.trim();
@@ -107,9 +108,9 @@ export async function runPlanner(
   spec: SpecPayload,
   previousAnswers?: string,
   options?: PlannerOptions,
-): Promise<PlannerResult> {
+): Promise<{ result: PlannerResult; usage?: UsageInfo }> {
   const prompt = buildPrompt(spec, previousAnswers, options);
-  const { stdout: raw, exitCode } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true });
+  const { stdout: raw, exitCode, usage } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true });
 
   if (exitCode !== 0) {
     throw new TaskError(`Planner: claude CLI exited with code ${exitCode}`);
@@ -132,7 +133,7 @@ export async function runPlanner(
       ) as string[];
 
       if (questions.length > 0) {
-        return { needsClarification: true, questions };
+        return { result: { needsClarification: true, questions }, usage };
       }
     }
 
@@ -168,5 +169,5 @@ export async function runPlanner(
     throw new TaskError("Planner: 'dod' must be a non-empty string array");
   }
 
-  return { goals, tasks, constraints, dod };
+  return { result: { goals, tasks, constraints, dod }, usage };
 }

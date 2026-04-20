@@ -9,6 +9,7 @@ import type {
   TaskContext,
 } from "./task.js";
 import { TaskError } from "./task.js";
+import type { UsageInfo } from "./usage.js";
 
 const SEVERITY_ORDER: Record<Severity, number> = {
   LOW: 0,
@@ -197,7 +198,7 @@ export async function runSecurityReview(
   context: TaskContext,
   threshold: Severity,
   options?: AgentSpawnOptions,
-): Promise<{ output: SecurityReviewOutput; passed: boolean }> {
+): Promise<{ output: SecurityReviewOutput; passed: boolean; usage?: UsageInfo }> {
   const agents = getAgents();
   const agent = agents.find((a) => a.name === "security-reviewer");
   if (!agent) {
@@ -219,5 +220,5 @@ export async function runSecurityReview(
     severityAtOrAbove(f.severity, threshold),
   );
 
-  return { output, passed: !hasBlockingFinding };
+  return { output, passed: !hasBlockingFinding, usage: result.usage };
 }

@@ -1,6 +1,7 @@
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { TaskError } from "./task.js";
 import type { GateResult, TaskContext } from "./task.js";
+import type { UsageInfo } from "./usage.js";
 
 /* ------------------------------------------------------------------ */
 /*  Shared gate utility                                               */
@@ -10,7 +11,7 @@ export async function runGate(
   agentName: string,
   prompt: string,
   options?: AgentSpawnOptions,
-): Promise<GateResult> {
+): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   const result = await spawnAgent(agentName, prompt, options);
 
   const hasPass = result.stdout.includes("GATE_RESULT:PASS");
@@ -18,7 +19,7 @@ export async function runGate(
 
   const passed = result.exitCode === 0 && hasPass && !hasFail;
 
-  return { passed, output: result.stdout };
+  return { gate: { passed, output: result.stdout }, usage: result.usage };
 }
 
 /* ------------------------------------------------------------------ */
@@ -53,7 +54,7 @@ Do NOT emit both markers. Do NOT omit the marker.`;
 export async function runUnitTestGate(
   context: TaskContext,
   options?: AgentSpawnOptions,
-): Promise<GateResult> {
+): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   if (!context.implement) {
     throw new TaskError(
       "gate:unit-tests: implement stage has not run",
@@ -102,7 +103,7 @@ Do NOT emit both markers. Do NOT omit the marker.`;
 export async function runFunctionalTestGate(
   context: TaskContext,
   options?: AgentSpawnOptions,
-): Promise<GateResult> {
+): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   if (!context.implement) {
     throw new TaskError(
       "gate:functional-tests: implement stage has not run",
