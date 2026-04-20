@@ -11,6 +11,7 @@ import { specCommand } from "./commands/spec.js";
 import { runCommand } from "./commands/run.js";
 import { prCreateCommand } from "./commands/pr-create.js";
 import { initCommand } from "./commands/init.js";
+import { chatCommand } from "./commands/chat.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -54,6 +55,12 @@ program
   .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
   .action(agentCommand);
+
+program
+  .command("chat")
+  .description("Start an interactive chat session with an agent")
+  .argument("[name]", "Agent name (or pick interactively)")
+  .action(chatCommand);
 
 program
   .command("run")
