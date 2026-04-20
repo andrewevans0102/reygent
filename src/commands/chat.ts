@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { constants } from "node:os";
 import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { getAgents } from "../config.js";
@@ -13,6 +14,9 @@ import type { AgentConfig } from "../agents.js";
  */
 async function promptAgentSelection(): Promise<AgentConfig> {
   const agents = getAgents();
+  if (agents.length === 0) {
+    throw new TaskError("No agents configured. Add agents to .reygent/config.json or check built-in agents.");
+  }
   const selected = await select({
     message: "Select agent to chat with:",
     choices: agents.map((a) => ({
@@ -45,8 +49,13 @@ function spawnInteractiveChat(
       );
     });
 
-    child.on("close", (code) => {
-      resolve(code ?? 0);
+    child.on("close", (code, signal) => {
+      if (signal) {
+        const sigNum = constants.signals[signal];
+        resolve(sigNum ? 128 + sigNum : 1);
+      } else {
+        resolve(code ?? 0);
+      }
     });
   });
 }
