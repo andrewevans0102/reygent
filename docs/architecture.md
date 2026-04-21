@@ -481,6 +481,8 @@ Reygent spawns `claude` as a subprocess rather than calling the Anthropic API di
 
 No LangChain, no agent framework. The pipeline is a simple `for...of` loop over a static array of stages. Each stage function is called directly. State is threaded via a plain TypeScript object. This keeps the codebase small and debuggable.
 
+This design aligns with the **agent harness pattern** described by Anthropic — structured orchestration of specialized agents rather than a monolithic agent or framework. See [Harness Pattern](./harness-pattern.md) for the full mapping.
+
 ### Why Custom .env Parser?
 
 The `loadEnvFile()` function is ~20 lines instead of depending on `dotenv`. It handles the common case (KEY=VALUE with optional quotes) and avoids a dependency for minimal functionality.
