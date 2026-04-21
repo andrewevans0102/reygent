@@ -66,7 +66,7 @@ program
   .command("run")
   .description("Run the reygent workflow from spec to reviewed PR")
   .requiredOption("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
-  .option("--dry-run", "Print workflow stages as JSON without executing", false)
+  .option("--dry-run", "Preview workflow stages without executing", false)
   .option("--security-threshold <level>", "Minimum severity to fail security review (CRITICAL, HIGH, MEDIUM, LOW)", "HIGH")
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
   .option("--insecure", "Skip SSL certificate verification for API calls", false)

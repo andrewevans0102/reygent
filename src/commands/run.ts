@@ -141,7 +141,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
       console.log(chalk.cyan("│"), chalk.gray(`source: ${spec.source}`));
       console.log(chalk.cyan("└─"));
       console.log("");
-      console.log(chalk.bold.cyan("┌─ Pipeline Stages"));
+      console.log(chalk.bold.cyan("┌─ Workflow Stages"));
 
       for (let i = 0; i < PIPELINE.length; i++) {
         const stage = PIPELINE[i];

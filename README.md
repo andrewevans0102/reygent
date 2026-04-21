@@ -100,7 +100,7 @@ The reygent workflow will:
 reygent run --spec spec.md --dry-run
 ```
 
-Prints the workflow stages as JSON without running anything.
+Prints the workflow stages as a tree diagram without running anything.
 
 ## Commands
 
