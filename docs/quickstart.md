@@ -66,13 +66,13 @@ Alternatively, generate a spec from a short description:
 reygent generate-spec "user avatar upload feature"
 ```
 
-## Run the Full Pipeline
+## Run the Reygent Workflow
 
 ```bash
 reygent run --spec spec.md
 ```
 
-This kicks off the 7-stage pipeline:
+This kicks off the 7-stage reygent workflow:
 
 1. **Plan** — Planner agent breaks down the spec into goals, tasks, constraints, and definition of done
 2. **Implement** — Dev agent writes code + unit tests; QE agent writes functional tests (in parallel when auto-approved)
@@ -114,16 +114,16 @@ reygent run --spec PROJ-456
 ## Quick Options
 
 ```bash
-# Preview pipeline stages without running anything
+# Preview workflow stages without running anything
 reygent run --spec spec.md --dry-run
 
 # Skip all prompts — fully autonomous
 reygent run --spec spec.md --auto-approve --skip-clarification
 
-# Run a single agent on a custom prompt
+# Run a single agent outside the reygent workflow
 reygent agent dev "Add input validation to the signup form"
 
-# Create a PR from current branch without the full pipeline
+# Create a PR from current branch without the full reygent workflow
 reygent pr-create --title "Fix login bug"
 ```
 
@@ -131,5 +131,5 @@ reygent pr-create --title "Fix login bug"
 
 - [Commands Reference](./commands.md) — all commands and their options
 - [Agents Guide](./agents.md) — how each agent works and how to customize them
-- [Workflows](./workflows.md) — visual diagrams of the pipeline and retry logic
+- [Reygent Workflow](./workflows.md) — visual diagrams of the reygent workflow and retry logic
 - [Architecture](./architecture.md) — deep technical walkthrough of how it all works under the hood

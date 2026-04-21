@@ -4,7 +4,7 @@
 
 An AI-powered CLI that orchestrates multiple Claude agents to automate the software development lifecycle — from spec to shipped PR.
 
-Reygent reads a spec (markdown file, Jira issue, or Linear issue), then runs a pipeline of specialized agents that plan the work, implement code, write tests, run quality gates, perform a security review, create a pull request, and review the PR.
+Reygent reads a spec (markdown file, Jira issue, or Linear issue), then runs the reygent workflow — a sequence of specialized agents that plan the work, implement code, write tests, run quality gates, perform a security review, create a pull request, and review the PR.
 
 ## Prerequisites
 
@@ -79,16 +79,16 @@ Or create a markdown file by hand:
 - Tests cover success and failure paths
 ```
 
-### 3. Run the full pipeline
+### 3. Run the reygent workflow
 
 ```bash
 reygent run --spec spec.md
 ```
 
-Reygent will:
+The reygent workflow will:
 1. **Plan** — Validate the spec and break it into goals, tasks, and constraints
 2. **Implement** — Run dev and QE agents in parallel (code + tests)
-3. **Gate: Unit Tests** — Run unit tests; fail the pipeline if they don't pass
+3. **Gate: Unit Tests** — Run unit tests; halt the workflow if they don't pass
 4. **Gate: Functional Tests** — Run functional tests written by the QE agent
 5. **Security Review** — Scan for vulnerabilities (OWASP Top 10)
 6. **Create PR** — Branch, commit, push, and open a pull request
@@ -100,7 +100,7 @@ Reygent will:
 reygent run --spec spec.md --dry-run
 ```
 
-Prints the pipeline stages as JSON without running anything.
+Prints the workflow stages as JSON without running anything.
 
 ## Commands
 
@@ -147,25 +147,25 @@ Available agents: `dev`, `qe`, `planner`, `security-reviewer`, `pr-reviewer`, `a
 
 ### `reygent run --spec <source> [options]`
 
-Run the full orchestration pipeline.
+Run the reygent workflow.
 
 | Option | Default | Description |
 |---|---|---|
 | `--spec <source>` | *(required)* | Markdown file path, Jira key, or Linear issue |
-| `--dry-run` | `false` | Print pipeline stages without executing |
+| `--dry-run` | `false` | Print workflow stages without executing |
 | `--security-threshold <level>` | `HIGH` | Minimum severity to fail: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` |
 
 ```bash
 # Run with a lower security threshold
 reygent run --spec spec.md --security-threshold CRITICAL
 
-# Dry run to inspect the pipeline
+# Dry run to inspect the workflow
 reygent run --spec ENG-456 --dry-run
 ```
 
-## Pipeline
+## Reygent Workflow
 
-The pipeline runs seven stages sequentially. Gates halt the pipeline on failure.
+The reygent workflow runs seven stages sequentially. Gates halt the workflow on failure.
 
 ```
 spec
@@ -177,10 +177,10 @@ spec
 [2] Implement ─────────── Dev + QE agents run in parallel (code and tests)
  |
  v
-[3] Gate: Unit Tests ──── Dev agent runs unit tests (pipeline fails if tests fail)
+[3] Gate: Unit Tests ──── Dev agent runs unit tests (workflow halts if tests fail)
  |
  v
-[4] Gate: Func Tests ──── QE agent runs functional tests (pipeline fails if tests fail)
+[4] Gate: Func Tests ──── QE agent runs functional tests (workflow halts if tests fail)
  |
  v
 [5] Security Review ───── Security agent scans for vulnerabilities

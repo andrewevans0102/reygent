@@ -1,10 +1,10 @@
 # Agents Guide
 
-Reygent orchestrates multiple specialized AI agents, each with a distinct role, toolset, and set of constraints. This doc covers what each agent does, how they interact, and how to customize them.
+Reygent orchestrates multiple specialized AI agents, each with a distinct role, toolset, and set of constraints. This doc covers what each agent does, how they interact within the reygent workflow, and how to customize them.
 
 ## Agent Architecture
 
-Every agent is a Claude CLI subprocess. Reygent spawns agents via `claude -p <prompt> --output-format stream-json --verbose`, parses the streaming JSON output, and extracts structured results. Agents don't talk to each other directly — the pipeline threads a `TaskContext` object through each stage and injects relevant context into each agent's prompt.
+Every agent is a Claude CLI subprocess. Reygent spawns agents via `claude -p <prompt> --output-format stream-json --verbose`, parses the streaming JSON output, and extracts structured results. Agents don't talk to each other directly — the reygent workflow threads a `TaskContext` object through each stage and injects relevant context into each agent's prompt.
 
 ## Built-in Agents
 
@@ -120,7 +120,7 @@ The user answers each question interactively, and the planner re-runs with the a
 
 **Severity levels:** `CRITICAL` > `HIGH` > `MEDIUM` > `LOW`
 
-The pipeline fails the security gate when any finding is at or above the `--security-threshold` (default: `HIGH`). In interactive mode, the user can choose to continue anyway. In auto-approve mode, the security gate is bypassed with a warning.
+The reygent workflow fails the security gate when any finding is at or above the `--security-threshold` (default: `HIGH`). In interactive mode, the user can choose to continue anyway. In auto-approve mode, the security gate is bypassed with a warning.
 
 ---
 
@@ -160,12 +160,12 @@ The review is posted as a comment on the PR via `gh pr comment`.
 | **Tools** | `read`, `write`, `bash`, `search` |
 | **Timeout** | 15 minutes |
 
-**Purpose:** Freeform one-off tasks. Follows instructions precisely without pipeline constraints.
+**Purpose:** Freeform one-off tasks. Follows instructions precisely without workflow constraints.
 
 **When to use:**
-- Quick code changes outside the pipeline
+- Quick code changes outside the reygent workflow
 - Exploratory tasks
-- Anything that doesn't fit the structured pipeline model
+- Anything that doesn't fit the structured workflow model
 
 ```bash
 reygent agent adhoc "Convert all var declarations to const/let in src/"
