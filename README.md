@@ -279,6 +279,12 @@ Reygent searches upward from the current directory to find `.reygent/`, so you c
 | `pr-reviewer` | Reviewer | Creates PRs and performs code review |
 | `adhoc` | General | Runs one-off tasks with full tool access |
 
+## Disclaimer
+
+This software is provided "as is", without warranty of any kind. See the [MIT License](./LICENSE) for full terms.
+
+**AI-generated output:** Reygent orchestrates AI agents that produce code, tests, and reviews. All AI-generated output should be reviewed by a human before merging or deploying. The authors are not responsible for any damages resulting from the use of this tool or its output.
+
 ## Development
 
 ```bash
