@@ -5,6 +5,7 @@ import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { extractJSON } from "./planner.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
+import type { UsageInfo } from "./usage.js";
 
 function buildPRReviewPrompt(
   systemPrompt: string,
@@ -248,7 +249,7 @@ async function resolvePRNumber(context: TaskContext): Promise<number> {
 export async function runPRReview(
   context: TaskContext,
   options?: AgentSpawnOptions,
-): Promise<PRReviewOutput> {
+): Promise<{ output: PRReviewOutput; usage?: UsageInfo }> {
   const prNumber = await resolvePRNumber(context);
 
   const agents = getAgents();
@@ -267,7 +268,7 @@ export async function runPRReview(
     );
   }
 
-  return extractPRReviewOutput(result.stdout);
+  return { output: extractPRReviewOutput(result.stdout), usage: result.usage };
 }
 
 /**

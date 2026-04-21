@@ -3,10 +3,12 @@ import { createInterface } from "node:readline";
 import chalk from "chalk";
 import { TaskError } from "./task.js";
 import { resolveModel } from "./model.js";
+import type { UsageInfo } from "./usage.js";
 
 export interface SpawnResult {
   stdout: string;
   exitCode: number;
+  usage?: UsageInfo;
 }
 
 interface StreamAssistantMessage {
@@ -23,6 +25,12 @@ interface StreamResultMessage {
   type: "result";
   subtype: string;
   result: string;
+  cost_usd?: number;
+  duration_ms?: number;
+  num_turns?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  usage?: { input_tokens?: number; output_tokens?: number };
 }
 
 type StreamEvent = StreamAssistantMessage | StreamResultMessage | { type: string };
@@ -68,6 +76,7 @@ export async function spawnAgentStream(
     const child = spawn("claude", args, { stdio: [stdinMode, "pipe", "pipe"] });
 
     let resultText = "";
+    let resultUsage: UsageInfo | undefined;
     const textChunks: string[] = [];
 
     const timeout = setTimeout(() => {
@@ -83,7 +92,7 @@ export async function spawnAgentStream(
       if (stdoutEnded && stderrEnded && processExitCode !== null) {
         clearTimeout(timeout);
         const stdout = resultText || textChunks.join("\n");
-        resolve({ stdout, exitCode: processExitCode });
+        resolve({ stdout, exitCode: processExitCode, usage: resultUsage });
       }
     };
 
@@ -117,6 +126,25 @@ export async function spawnAgentStream(
       } else if (event.type === "result") {
         const msg = event as StreamResultMessage;
         resultText = msg.result;
+
+        const inputTokens = msg.input_tokens ?? msg.usage?.input_tokens;
+        const outputTokens = msg.output_tokens ?? msg.usage?.output_tokens;
+        const hasUsage =
+          msg.cost_usd !== undefined ||
+          msg.duration_ms !== undefined ||
+          msg.num_turns !== undefined ||
+          inputTokens !== undefined ||
+          outputTokens !== undefined;
+
+        if (hasUsage) {
+          resultUsage = {
+            ...(msg.cost_usd !== undefined ? { costUsd: msg.cost_usd } : {}),
+            ...(msg.duration_ms !== undefined ? { durationMs: msg.duration_ms } : {}),
+            ...(msg.num_turns !== undefined ? { numTurns: msg.num_turns } : {}),
+            ...(inputTokens !== undefined ? { inputTokens } : {}),
+            ...(outputTokens !== undefined ? { outputTokens } : {}),
+          };
+        }
       }
     });
     stdoutRL.on("close", () => {

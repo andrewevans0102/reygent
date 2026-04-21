@@ -31,7 +31,7 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
 
     while (!plan && attempts < maxAttempts) {
       attempts++;
-      const result = await runPlanner(spec, clarificationAnswers);
+      const { result } = await runPlanner(spec, clarificationAnswers);
 
       if ("needsClarification" in result && result.needsClarification) {
         spinner.stop();

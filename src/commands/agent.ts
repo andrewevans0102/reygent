@@ -5,6 +5,7 @@ import { isDebug } from "../debug.js";
 import { spawnAgent } from "../implement.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { TaskError } from "../task.js";
+import { formatDuration } from "../usage.js";
 
 interface AgentOptions {
   spec?: string;
@@ -76,6 +77,14 @@ ${userPrompt}`;
     }
 
     const result = await spawnAgent(name, prompt, { autoApprove });
+
+    if (result.usage) {
+      console.log(
+        chalk.gray("\nUsage: ") +
+        chalk.cyan(`$${result.usage.costUsd.toFixed(2)}`) +
+        chalk.gray(` (${formatDuration(result.usage.durationMs)})`),
+      );
+    }
 
     if (result.exitCode !== 0) {
       process.exit(1);

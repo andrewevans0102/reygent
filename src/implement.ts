@@ -11,6 +11,7 @@ import type {
   ImplementOutput,
 } from "./task.js";
 import { TaskError } from "./task.js";
+import type { UsageInfo } from "./usage.js";
 
 export type { SpawnResult };
 
@@ -185,12 +186,17 @@ function extractQEOutput(stdout: string): QEOutput {
   return { testFiles: [] };
 }
 
+export interface ImplementResult {
+  implement: ImplementOutput;
+  usages: Array<{ agent: string; usage?: UsageInfo }>;
+}
+
 export async function runImplement(
   spec: SpecPayload,
   plan: PlannerOutput,
   options?: AgentSpawnOptions,
   retryOptions?: RetryOptions,
-): Promise<ImplementOutput> {
+): Promise<ImplementResult> {
   const agents = getAgents();
   const devAgent = agents.find((a) => a.name === "dev");
   const qeAgent = agents.find((a) => a.name === "qe");
@@ -214,6 +220,7 @@ export async function runImplement(
 
   let dev: DevOutput | null = null;
   let qe: QEOutput | null = null;
+  const usages: Array<{ agent: string; usage?: UsageInfo }> = [];
 
   if (options?.autoApprove) {
     // Parallel: no stdin needed
@@ -241,27 +248,29 @@ export async function runImplement(
 
     if (runDev) {
       const devResult = results[idx++];
-      if (devResult.status === "fulfilled" && devResult.value.exitCode === 0) {
-        dev = extractDevOutput(devResult.value.stdout);
+      if (devResult.status === "fulfilled") {
+        usages.push({ agent: "dev", usage: devResult.value.usage });
+        if (devResult.value.exitCode === 0) {
+          dev = extractDevOutput(devResult.value.stdout);
+        } else {
+          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.value.exitCode}`);
+        }
       } else {
-        const reason =
-          devResult.status === "rejected"
-            ? devResult.reason
-            : `exit code ${devResult.value.exitCode}`;
-        console.log(chalk.red("dev agent failed:"), reason);
+        console.log(chalk.red("dev agent failed:"), devResult.reason);
       }
     }
 
     if (runQE) {
       const qeResult = results[idx++];
-      if (qeResult.status === "fulfilled" && qeResult.value.exitCode === 0) {
-        qe = extractQEOutput(qeResult.value.stdout);
+      if (qeResult.status === "fulfilled") {
+        usages.push({ agent: "qe", usage: qeResult.value.usage });
+        if (qeResult.value.exitCode === 0) {
+          qe = extractQEOutput(qeResult.value.stdout);
+        } else {
+          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.value.exitCode}`);
+        }
       } else {
-        const reason =
-          qeResult.status === "rejected"
-            ? qeResult.reason
-            : `exit code ${qeResult.value.exitCode}`;
-        console.log(chalk.red("qe agent failed:"), reason);
+        console.log(chalk.red("qe agent failed:"), qeResult.reason);
       }
     }
   } else {
@@ -272,7 +281,9 @@ export async function runImplement(
         const devResult = await spawnAgent("dev", devPrompt, options);
         if (devResult.exitCode === 0) {
           dev = extractDevOutput(devResult.stdout);
-        } else {
+        }
+        usages.push({ agent: "dev", usage: devResult.usage });
+        if (devResult.exitCode !== 0) {
           console.log(chalk.red("dev agent failed:"), `exit code ${devResult.exitCode}`);
         }
       } catch (err) {
@@ -286,7 +297,9 @@ export async function runImplement(
         const qeResult = await spawnAgent("qe", qePrompt, options);
         if (qeResult.exitCode === 0) {
           qe = extractQEOutput(qeResult.stdout);
-        } else {
+        }
+        usages.push({ agent: "qe", usage: qeResult.usage });
+        if (qeResult.exitCode !== 0) {
           console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.exitCode}`);
         }
       } catch (err) {
@@ -306,5 +319,5 @@ export async function runImplement(
     throw new TaskError("Implement: qe agent failed");
   }
 
-  return { dev, qe };
+  return { implement: { dev, qe }, usages };
 }
