@@ -12,6 +12,9 @@ dist/
 .vscode/
 .idea/
 
+# Test coverage
+coverage/
+
 # OS
 .DS_Store
 Thumbs.db
