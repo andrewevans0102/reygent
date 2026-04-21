@@ -25,7 +25,9 @@ program
   .description("Reygent CLI tool")
   .version(pkg.version)
   .option("--debug", "Show full stack traces on errors (or set REYGENT_DEBUG=1)")
-  .option("--model <id>", "Anthropic model ID (e.g. claude-sonnet-4-5, claude-opus-4-6)");
+  .option("--model <id>", "Anthropic model ID (e.g. claude-sonnet-4-5, claude-opus-4-6)")
+  .addHelpText("after", `
+${chalk.yellow("Disclaimer:")} This software is provided "as is" with no warranty. AI-generated output should be reviewed by a human. See LICENSE for full terms.`);
 
 program
   .command("init")

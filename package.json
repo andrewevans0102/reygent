@@ -19,7 +19,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@inquirer/prompts": "^8.4.1",
     "@types/cli-progress": "^3.11.6",
