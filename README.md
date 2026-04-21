@@ -165,7 +165,9 @@ reygent run --spec ENG-456 --dry-run
 
 ## Reygent Workflow
 
-The reygent workflow runs seven stages sequentially. Gates halt the workflow on failure.
+The reygent workflow is an implementation of the **agent harness pattern** — a structured framework for orchestrating AI agents through complex, multi-stage tasks. See [Harness Pattern](./docs/harness-pattern.md) for a detailed explanation and how it maps to the concepts in Anthropic's [Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents).
+
+The workflow runs seven stages sequentially. Gates halt the workflow on failure.
 
 ```
 spec
