@@ -127,13 +127,20 @@ export async function spawnAgentStream(
         const msg = event as StreamResultMessage;
         resultText = msg.result;
 
-        if (msg.cost_usd !== undefined || msg.duration_ms !== undefined) {
-          const inputTokens = msg.input_tokens ?? msg.usage?.input_tokens;
-          const outputTokens = msg.output_tokens ?? msg.usage?.output_tokens;
+        const inputTokens = msg.input_tokens ?? msg.usage?.input_tokens;
+        const outputTokens = msg.output_tokens ?? msg.usage?.output_tokens;
+        const hasUsage =
+          msg.cost_usd !== undefined ||
+          msg.duration_ms !== undefined ||
+          msg.num_turns !== undefined ||
+          inputTokens !== undefined ||
+          outputTokens !== undefined;
+
+        if (hasUsage) {
           resultUsage = {
-            costUsd: msg.cost_usd ?? 0,
-            durationMs: msg.duration_ms ?? 0,
-            numTurns: msg.num_turns ?? 0,
+            ...(msg.cost_usd !== undefined ? { costUsd: msg.cost_usd } : {}),
+            ...(msg.duration_ms !== undefined ? { durationMs: msg.duration_ms } : {}),
+            ...(msg.num_turns !== undefined ? { numTurns: msg.num_turns } : {}),
             ...(inputTokens !== undefined ? { inputTokens } : {}),
             ...(outputTokens !== undefined ? { outputTokens } : {}),
           };

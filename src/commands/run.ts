@@ -105,7 +105,9 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     const retrySpinner = ora(chalk.blue(`re-running ${gateName}...`)).start();
     const { gate: gateResult, usage: gateUsage } = await gateRunner();
 
-    if (gateUsage) tracker.record(gateName, `${stageName}-retry`, gateUsage);
+    const gateAgentName =
+      gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests";
+    if (gateUsage) tracker.record(gateAgentName, `${stageName}-retry`, gateUsage);
 
     if (!context.gates) context.gates = {};
     if (gateName === "unit tests") {

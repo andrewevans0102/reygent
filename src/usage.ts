@@ -1,9 +1,9 @@
 import chalk from "chalk";
 
 export interface UsageInfo {
-  costUsd: number;
-  durationMs: number;
-  numTurns: number;
+  costUsd?: number;
+  durationMs?: number;
+  numTurns?: number;
   inputTokens?: number;
   outputTokens?: number;
 }
@@ -22,14 +22,14 @@ export class UsageTracker {
   }
 
   getTotalCost(): number {
-    return this.entries.reduce((sum, e) => sum + e.usage.costUsd, 0);
+    return this.entries.reduce((sum, e) => sum + (e.usage.costUsd ?? 0), 0);
   }
 
   getByAgent(): Map<string, { cost: number; inputTokens: number; outputTokens: number; calls: number }> {
     const map = new Map<string, { cost: number; inputTokens: number; outputTokens: number; calls: number }>();
     for (const entry of this.entries) {
       const existing = map.get(entry.agent) ?? { cost: 0, inputTokens: 0, outputTokens: 0, calls: 0 };
-      existing.cost += entry.usage.costUsd;
+      existing.cost += entry.usage.costUsd ?? 0;
       existing.inputTokens += entry.usage.inputTokens ?? 0;
       existing.outputTokens += entry.usage.outputTokens ?? 0;
       existing.calls += 1;
@@ -68,7 +68,7 @@ export function printUsageSummary(tracker: UsageTracker): void {
   if (entries.length === 0) return;
 
   const totalCost = tracker.getTotalCost();
-  const totalDuration = entries.reduce((sum, e) => sum + e.usage.durationMs, 0);
+  const totalDuration = entries.reduce((sum, e) => sum + (e.usage.durationMs ?? 0), 0);
   const totalInput = entries.reduce((sum, e) => sum + (e.usage.inputTokens ?? 0), 0);
   const totalOutput = entries.reduce((sum, e) => sum + (e.usage.outputTokens ?? 0), 0);
   const byAgent = tracker.getByAgent();
@@ -106,7 +106,7 @@ export function printVerboseUsage(tracker: UsageTracker): void {
     console.log(
       chalk.cyan("│") +
       `  ${chalk.bold(agent)} ${chalk.gray(`(${stage})`)}  ` +
-      `${formatCost(usage.costUsd)}  ${formatDuration(usage.durationMs)}  ${usage.numTurns} turns${tokens}`,
+      `${formatCost(usage.costUsd ?? 0)}  ${formatDuration(usage.durationMs ?? 0)}  ${usage.numTurns ?? 0} turns${tokens}`,
     );
   }
 

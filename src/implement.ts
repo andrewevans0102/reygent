@@ -248,29 +248,29 @@ export async function runImplement(
 
     if (runDev) {
       const devResult = results[idx++];
-      if (devResult.status === "fulfilled" && devResult.value.exitCode === 0) {
-        dev = extractDevOutput(devResult.value.stdout);
+      if (devResult.status === "fulfilled") {
         usages.push({ agent: "dev", usage: devResult.value.usage });
+        if (devResult.value.exitCode === 0) {
+          dev = extractDevOutput(devResult.value.stdout);
+        } else {
+          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.value.exitCode}`);
+        }
       } else {
-        const reason =
-          devResult.status === "rejected"
-            ? devResult.reason
-            : `exit code ${devResult.value.exitCode}`;
-        console.log(chalk.red("dev agent failed:"), reason);
+        console.log(chalk.red("dev agent failed:"), devResult.reason);
       }
     }
 
     if (runQE) {
       const qeResult = results[idx++];
-      if (qeResult.status === "fulfilled" && qeResult.value.exitCode === 0) {
-        qe = extractQEOutput(qeResult.value.stdout);
+      if (qeResult.status === "fulfilled") {
         usages.push({ agent: "qe", usage: qeResult.value.usage });
+        if (qeResult.value.exitCode === 0) {
+          qe = extractQEOutput(qeResult.value.stdout);
+        } else {
+          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.value.exitCode}`);
+        }
       } else {
-        const reason =
-          qeResult.status === "rejected"
-            ? qeResult.reason
-            : `exit code ${qeResult.value.exitCode}`;
-        console.log(chalk.red("qe agent failed:"), reason);
+        console.log(chalk.red("qe agent failed:"), qeResult.reason);
       }
     }
   } else {
