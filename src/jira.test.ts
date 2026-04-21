@@ -45,6 +45,7 @@ describe("readJiraSpec", () => {
       else process.env[key] = val;
     }
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("throws when credentials not set", async () => {

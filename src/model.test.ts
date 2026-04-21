@@ -62,21 +62,25 @@ describe("validateModel", () => {
 });
 
 describe("setModelOverride / getModel", () => {
-  beforeEach(() => {
-    // Reset override by setting a known state
-    // getModel reads override first, then config
+  let setModelOverrideLocal: typeof setModelOverride;
+  let getModelLocal: typeof getModel;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.mock("@inquirer/prompts", () => ({ select: vi.fn() }));
+    vi.mock("./config.js", () => ({ loadConfig: vi.fn(() => ({})) }));
+    const mod = await import("./model.js");
+    setModelOverrideLocal = mod.setModelOverride;
+    getModelLocal = mod.getModel;
   });
 
   it("getModel returns null when no override and no config", () => {
-    // model override is module-level state; fresh import would be null
-    // but we can't easily reset it. We test that setModelOverride works.
-    setModelOverride("claude-opus-4-6");
-    expect(getModel()).toBe("claude-opus-4-6");
+    expect(getModelLocal()).toBeNull();
   });
 
   it("override takes precedence", () => {
-    setModelOverride("claude-opus-4-6");
-    expect(getModel()).toBe("claude-opus-4-6");
+    setModelOverrideLocal("claude-opus-4-6");
+    expect(getModelLocal()).toBe("claude-opus-4-6");
   });
 });
 

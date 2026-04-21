@@ -52,6 +52,7 @@ describe("readLinearSpec", () => {
       else process.env[key] = val;
     }
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("throws when LINEAR_API_KEY not set", async () => {
