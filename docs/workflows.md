@@ -1,10 +1,10 @@
-# Workflows
+# Reygent Workflow
 
-Visual diagrams of reygent's pipeline, decision flows, and agent interactions.
+Visual diagrams of the reygent workflow, decision flows, and agent interactions.
 
-## Full Pipeline Overview
+## Full Workflow Overview
 
-The complete flow from spec input to reviewed pull request:
+The complete reygent workflow from spec input to reviewed pull request:
 
 ```mermaid
 flowchart TD
@@ -102,7 +102,7 @@ What happens when tests fail:
 ```mermaid
 flowchart TD
     A[Run Test Gate] --> B{Passed?}
-    B -->|Yes| C[Continue pipeline]
+    B -->|Yes| C[Continue workflow]
     B -->|No| D{Auto-approve?}
 
     D -->|Yes| F[Auto-retry]
@@ -200,7 +200,7 @@ How each agent subprocess works:
 
 ```mermaid
 sequenceDiagram
-    participant R as Reygent Pipeline
+    participant R as Reygent Workflow
     participant C as Claude CLI Process
     participant FS as Filesystem
 
@@ -220,7 +220,7 @@ sequenceDiagram
 
 ## Complete Data Flow
 
-How `TaskContext` flows through the pipeline:
+How `TaskContext` flows through the reygent workflow:
 
 ```mermaid
 flowchart TD

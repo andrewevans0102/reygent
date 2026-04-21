@@ -79,7 +79,7 @@ Without `--clarify`, outputs the raw spec as JSON. With `--clarify`, runs the pl
 
 ## `reygent agent <name> [prompt]`
 
-Run a single agent in isolation, outside the pipeline.
+Run a single agent in isolation, outside the reygent workflow.
 
 ```bash
 reygent agent <name> [prompt] [--spec <source>] [--auto-approve]
@@ -112,7 +112,7 @@ reygent agent adhoc "Update all console.log statements to use the logger utility
 
 ## `reygent run`
 
-Run the full 7-stage pipeline from spec to reviewed PR.
+Run the full reygent workflow from spec to reviewed PR.
 
 ```bash
 reygent run --spec <source> [options]
@@ -121,7 +121,7 @@ reygent run --spec <source> [options]
 | Option | Default | Description |
 |---|---|---|
 | `--spec <source>` | **(required)** | Path to `.md` file, issue key, or Linear URL |
-| `--dry-run` | `false` | Print pipeline stages as a tree diagram without executing |
+| `--dry-run` | `false` | Print workflow stages as a tree diagram without executing |
 | `--security-threshold <level>` | `HIGH` | Minimum severity to fail security review (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) |
 | `--auto-approve` | `false` | Auto-approve all file edits and actions without prompting |
 | `--insecure` | `false` | Skip SSL certificate verification for API calls |
@@ -131,13 +131,13 @@ reygent run --spec <source> [options]
 **Examples:**
 
 ```bash
-# Full pipeline with interactive prompts
+# Full reygent workflow with interactive prompts
 reygent run --spec feature.md
 
 # Fully autonomous — no prompts at all
 reygent run --spec ENG-123 --auto-approve --skip-clarification
 
-# Preview what stages would run
+# Preview what workflow stages would run
 reygent run --spec feature.md --dry-run
 
 # Strict security — fail on any finding
@@ -150,7 +150,7 @@ reygent run --spec feature.md --max-retries 5
 reygent run --spec feature.md --insecure
 ```
 
-### Pipeline Stages
+### Reygent Workflow Stages
 
 | # | Stage | Agent(s) | What happens |
 |---|---|---|---|
@@ -174,7 +174,7 @@ When running without `--auto-approve`, you'll be prompted for:
 
 ## `reygent pr-create`
 
-Create a pull request from the current branch, independent of the full pipeline.
+Create a pull request from the current branch, independent of the full reygent workflow.
 
 ```bash
 reygent pr-create [options]
