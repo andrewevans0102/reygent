@@ -11,9 +11,11 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
   const targetDir = join(process.cwd(), ".reygent");
   const configPath = join(targetDir, "config.json");
 
+  const skillsDir = join(targetDir, "skills");
+
   const defaultConfig: ReygentConfig = {
     agents: builtinAgents,
-    skills: {},
+    skills: { path: "skills" },
     model: DEFAULT_MODEL,
   };
 
@@ -21,6 +23,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
     console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
     console.log(chalk.bold("Would create:"));
     console.log(chalk.gray("  dir:  "), chalk.cyan(targetDir));
+    console.log(chalk.gray("  dir:  "), chalk.cyan(skillsDir));
     console.log(chalk.gray("  file: "), chalk.cyan(configPath));
     console.log("");
     console.log(chalk.bold("Config preview:"));
@@ -44,9 +47,12 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
   const spinner = ora("Creating .reygent folder").start();
 
   try {
-    // Create folder
+    // Create folders
     if (!existsSync(targetDir)) {
       mkdirSync(targetDir, { recursive: true });
+    }
+    if (!existsSync(skillsDir)) {
+      mkdirSync(skillsDir, { recursive: true });
     }
 
     writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2) + "\n", "utf-8");
@@ -57,6 +63,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
     console.log(chalk.bold("Next steps:"));
     console.log(chalk.gray("  • Edit"), chalk.cyan(".reygent/config.json"), chalk.gray("to customize agents"));
     console.log(chalk.gray("  • Add custom agents to the"), chalk.cyan("agents"), chalk.gray("array"));
+    console.log(chalk.gray("  • Add skills to"), chalk.cyan(".reygent/skills/"), chalk.gray("(each in its own folder with SKILL.md)"));
     console.log(chalk.gray("  • Run"), chalk.cyan("reygent agent <name>"), chalk.gray("to use your local config"));
     console.log("");
   } catch (err) {

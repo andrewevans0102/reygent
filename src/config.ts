@@ -1,11 +1,18 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import chalk from "chalk";
 import type { AgentConfig } from "./agents.js";
 import { builtinAgents } from "./agents.js";
+import { discoverSkills, skillToAgentConfig } from "./skills.js";
+
+export interface SkillsConfig {
+  path?: string;
+  disabled?: string[];
+}
 
 export interface ReygentConfig {
   agents?: AgentConfig[];
-  skills?: Record<string, unknown>; // For future skill support
+  skills?: SkillsConfig;
   model?: string;
 }
 
@@ -43,17 +50,27 @@ export function loadConfig(): ReygentConfig {
  * Search upward from startDir to find .reygent/config.json
  */
 function findLocalConfig(startDir: string): string | null {
+  const configDir = findLocalConfigDir(startDir);
+  if (!configDir) return null;
+  const configPath = join(configDir, "config.json");
+  return existsSync(configPath) ? configPath : null;
+}
+
+/**
+ * Search upward from startDir to find .reygent/ directory.
+ */
+export function findLocalConfigDir(startDir: string): string | null {
   let currentDir = startDir;
   const root = "/";
 
   while (currentDir !== root) {
-    const configPath = join(currentDir, ".reygent", "config.json");
-    if (existsSync(configPath)) {
-      return configPath;
+    const reygentDir = join(currentDir, ".reygent");
+    if (existsSync(reygentDir)) {
+      return reygentDir;
     }
 
     const parentDir = join(currentDir, "..");
-    if (parentDir === currentDir) break; // Reached filesystem root
+    if (parentDir === currentDir) break;
     currentDir = parentDir;
   }
 
@@ -61,9 +78,50 @@ function findLocalConfig(startDir: string): string | null {
 }
 
 /**
- * Get resolved agents (local or builtin)
+ * Resolve skills directory path from config.
+ */
+export function resolveSkillsPath(config: ReygentConfig, configDir: string): string {
+  const skillsRelPath = config.skills?.path ?? "skills";
+  return join(configDir, skillsRelPath);
+}
+
+/**
+ * Discover skills and convert to AgentConfig[].
+ */
+export function getSkillsAsAgents(): AgentConfig[] {
+  const configDir = findLocalConfigDir(process.cwd());
+  if (!configDir) return [];
+
+  const config = loadConfig();
+  const skillsPath = resolveSkillsPath(config, configDir);
+  const manifests = discoverSkills(skillsPath);
+  const disabled = config.skills?.disabled ?? [];
+
+  return manifests
+    .filter((m) => !disabled.includes(m.name))
+    .map(skillToAgentConfig);
+}
+
+/**
+ * Get resolved agents (local or builtin), merged with skills.
  */
 export function getAgents(): AgentConfig[] {
   const config = loadConfig();
-  return config.agents ?? [];
+  const configAgents = config.agents ?? [];
+  const skillAgents = getSkillsAsAgents();
+
+  const configNames = new Set(configAgents.map((a) => a.name));
+  const merged = [...configAgents];
+
+  for (const skill of skillAgents) {
+    if (configNames.has(skill.name)) {
+      console.log(
+        chalk.yellow(`Warning: skill "${skill.name}" shadowed by config agent with same name`),
+      );
+      continue;
+    }
+    merged.push(skill);
+  }
+
+  return merged;
 }
