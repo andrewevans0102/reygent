@@ -29,6 +29,16 @@ license: MIT
 metadata:
   role: skill
   author: test
+allowed-tools: read bash
+---
+
+# Code Reviewer
+
+You review code.`;
+
+const validSkillMdWithArray = `---
+name: code-reviewer
+description: Reviews code for quality
 allowed-tools:
   - read
   - bash
@@ -121,6 +131,16 @@ describe("parseSkillMd", () => {
     expect(result.license).toBeUndefined();
     expect(result.allowedTools).toBeUndefined();
     expect(result.metadata).toBeUndefined();
+  });
+
+  it("parses allowed-tools as YAML array (lenient)", () => {
+    const result = parseSkillMd(validSkillMdWithArray, "/skills/code-reviewer");
+    expect(result.allowedTools).toEqual(["read", "bash"]);
+  });
+
+  it("throws on non-string entries in allowed-tools array", () => {
+    const md = `---\nname: test\ndescription: test\nallowed-tools:\n  - read\n  - 123\n---\nbody`;
+    expect(() => parseSkillMd(md, "/x")).toThrow(/must be strings.*index 1/i);
   });
 });
 
