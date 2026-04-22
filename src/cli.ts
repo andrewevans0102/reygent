@@ -12,6 +12,7 @@ import { runCommand } from "./commands/run.js";
 import { prCreateCommand } from "./commands/pr-create.js";
 import { initCommand } from "./commands/init.js";
 import { chatCommand } from "./commands/chat.js";
+import { registerSkillsCommand } from "./commands/skills.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -88,6 +89,8 @@ program
   .option("--no-push", "Don't push (assume branch already pushed)")
   .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .action(prCreateCommand);
+
+registerSkillsCommand(program);
 
 // Show header on commands that do actual work (not --help or --version)
 const isHelpOrVersion = process.argv.includes("--help") ||

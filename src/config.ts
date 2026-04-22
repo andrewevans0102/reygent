@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { homedir } from "node:os";
 import chalk from "chalk";
 import type { AgentConfig } from "./agents.js";
 import { builtinAgents } from "./agents.js";
@@ -78,6 +79,27 @@ export function findLocalConfigDir(startDir: string): string | null {
 }
 
 /**
+ * Resolve the global ~/.reygent directory path.
+ */
+export function resolveGlobalConfigDir(): string {
+  return join(homedir(), ".reygent");
+}
+
+/**
+ * Resolve skills directory for given scope.
+ * Returns null if the base config dir doesn't exist.
+ */
+export function resolveSkillsDir(scope: "local" | "global"): string | null {
+  if (scope === "global") {
+    return join(resolveGlobalConfigDir(), "skills");
+  }
+  const configDir = findLocalConfigDir(process.cwd());
+  if (!configDir) return null;
+  const config = loadConfig();
+  return resolveSkillsPath(config, configDir);
+}
+
+/**
  * Resolve skills directory path from config.
  */
 export function resolveSkillsPath(config: ReygentConfig, configDir: string): string {
@@ -87,19 +109,37 @@ export function resolveSkillsPath(config: ReygentConfig, configDir: string): str
 
 /**
  * Discover skills and convert to AgentConfig[].
+ * Scans local skills first, then global ~/.reygent/skills/.
+ * Local takes precedence over global on name conflict.
  */
 export function getSkillsAsAgents(): AgentConfig[] {
-  const configDir = findLocalConfigDir(process.cwd());
-  if (!configDir) return [];
-
   const config = loadConfig();
-  const skillsPath = resolveSkillsPath(config, configDir);
-  const manifests = discoverSkills(skillsPath);
   const disabled = config.skills?.disabled ?? [];
+  const seenNames = new Set<string>();
+  const agents: AgentConfig[] = [];
 
-  return manifests
-    .filter((m) => !disabled.includes(m.name))
-    .map(skillToAgentConfig);
+  // Local skills
+  const localConfigDir = findLocalConfigDir(process.cwd());
+  if (localConfigDir) {
+    const localSkillsPath = resolveSkillsPath(config, localConfigDir);
+    const localManifests = discoverSkills(localSkillsPath);
+    for (const m of localManifests) {
+      if (disabled.includes(m.name)) continue;
+      seenNames.add(m.name);
+      agents.push(skillToAgentConfig(m));
+    }
+  }
+
+  // Global skills
+  const globalSkillsPath = join(resolveGlobalConfigDir(), "skills");
+  const globalManifests = discoverSkills(globalSkillsPath);
+  for (const m of globalManifests) {
+    if (disabled.includes(m.name)) continue;
+    if (seenNames.has(m.name)) continue; // local takes precedence
+    agents.push(skillToAgentConfig(m));
+  }
+
+  return agents;
 }
 
 /**
