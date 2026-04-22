@@ -72,9 +72,17 @@ export function parseSkillMd(content: string, skillPath: string): SkillManifest 
     );
   }
 
-  const allowedTools = frontmatter["allowed-tools"];
-  if (allowedTools !== undefined && !Array.isArray(allowedTools)) {
-    throw new Error("SKILL.md 'allowed-tools' must be an array");
+  // allowed-tools: spec uses space-separated string, but we also accept arrays
+  const rawTools = frontmatter["allowed-tools"];
+  let allowedTools: string[] | undefined;
+  if (rawTools !== undefined) {
+    if (typeof rawTools === "string") {
+      allowedTools = rawTools.split(/\s+/).filter(Boolean);
+    } else if (Array.isArray(rawTools)) {
+      allowedTools = rawTools.map(String);
+    } else {
+      throw new Error("SKILL.md 'allowed-tools' must be a space-separated string or array");
+    }
   }
 
   const metadata = frontmatter.metadata;
