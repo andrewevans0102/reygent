@@ -12,7 +12,7 @@ Get from zero to your first AI-driven pull request in minutes.
 ## 2. Install
 
 ```bash
-git clone https://github.com/andrewevans0102/reygent.git
+git clone https://github.com/<your-org>/reygent.git
 cd reygent
 npm install
 npm run build
@@ -76,12 +76,14 @@ Or generate one from a description:
 reygent generate-spec "Add a health-check endpoint" --output spec.md
 ```
 
-Or point directly at a Linear/Jira issue:
+Or point directly at a Linear or Jira issue:
 
 ```bash
-reygent run --spec ENG-123          # Linear issue
-reygent run --spec PROJ-456         # Jira issue
+reygent run --spec ENG-123
+reygent run --spec https://linear.app/your-team/issue/ENG-123/your-issue
 ```
+
+Issue keys (e.g. `ENG-123`) are resolved based on which credentials are configured in `.env`. If both Linear and Jira are configured, Linear is tried first.
 
 ## 6. Run the Workflow
 
