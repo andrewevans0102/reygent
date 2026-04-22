@@ -79,7 +79,17 @@ export function parseSkillMd(content: string, skillPath: string): SkillManifest 
     if (typeof rawTools === "string") {
       allowedTools = rawTools.split(/\s+/).filter(Boolean);
     } else if (Array.isArray(rawTools)) {
-      allowedTools = rawTools.map(String);
+      allowedTools = rawTools
+        .map((tool, index) => {
+          if (typeof tool !== "string") {
+            const type = tool === null ? "null" : Array.isArray(tool) ? "array" : typeof tool;
+            throw new Error(
+              `SKILL.md 'allowed-tools' array entries must be strings; found ${type} at index ${index}`,
+            );
+          }
+          return tool.trim();
+        })
+        .filter(Boolean);
     } else {
       throw new Error("SKILL.md 'allowed-tools' must be a space-separated string or array");
     }

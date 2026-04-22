@@ -65,7 +65,7 @@ Agent instructions go here. This becomes the systemPrompt.
 | `license` | SPDX identifier or reference to bundled LICENSE file |
 | `compatibility` | 1-500 chars. Environment requirements (tools, runtime, network) |
 | `metadata` | Key-value map of strings. Common keys: `role`, `author`, `version` |
-| `allowed-tools` | Space-separated string of tool names (e.g., `read write bash`) |
+| `allowed-tools` | Space-separated string of tool names (e.g., `read write bash`). Reygent also accepts a YAML array (e.g., `[read, bash]`) as a convenience extension. |
 
 ## Configuration
 
