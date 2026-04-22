@@ -97,8 +97,13 @@ export async function listRemoteSkills(): Promise<RegistrySkillEntry[]> {
         compatibility: manifest.compatibility,
         version: manifest.metadata?.version,
       });
-    } catch {
-      // Skip skills with invalid SKILL.md
+    } catch (err) {
+      // Skip individual skill errors (missing SKILL.md, invalid manifest)
+      // but rethrow network/rate-limit errors so they surface to user
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("rate limit") || msg.includes("GitHub API error")) {
+        throw err;
+      }
     }
   }
 

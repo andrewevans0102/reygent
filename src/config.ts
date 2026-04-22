@@ -87,7 +87,8 @@ export function resolveGlobalConfigDir(): string {
 
 /**
  * Resolve skills directory for given scope.
- * Returns null if the base config dir doesn't exist.
+ * Global always returns a path (~/.reygent/skills/).
+ * Local returns null if no .reygent/ dir found.
  */
 export function resolveSkillsDir(scope: "local" | "global"): string | null {
   if (scope === "global") {

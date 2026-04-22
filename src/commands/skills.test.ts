@@ -12,7 +12,6 @@ vi.mock("node:fs", () => ({
 }));
 
 vi.mock("../config.js", () => ({
-  findLocalConfigDir: vi.fn(),
   resolveGlobalConfigDir: vi.fn(() => "/home/user/.reygent"),
   resolveSkillsDir: vi.fn(),
 }));
@@ -59,7 +58,7 @@ vi.mock("chalk", () => {
   return { default: new Proxy({}, handler) };
 });
 
-import { findLocalConfigDir, resolveGlobalConfigDir, resolveSkillsDir } from "../config.js";
+import { resolveGlobalConfigDir, resolveSkillsDir } from "../config.js";
 import { listRemoteSkills, fetchSkillManifest, fetchSkillFiles, checkCompatibility } from "../registry.js";
 import { validateSkillName } from "../skills.js";
 
@@ -67,7 +66,6 @@ const mockExistsSync = vi.mocked(existsSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockRmSync = vi.mocked(rmSync);
-const mockFindLocalConfigDir = vi.mocked(findLocalConfigDir);
 const mockResolveSkillsDir = vi.mocked(resolveSkillsDir);
 const mockListRemoteSkills = vi.mocked(listRemoteSkills);
 const mockFetchSkillManifest = vi.mocked(fetchSkillManifest);
@@ -145,7 +143,9 @@ describe("skills add", () => {
   });
 
   it("installs skill to local dir", async () => {
-    mockFindLocalConfigDir.mockReturnValue("/project/.reygent");
+    mockResolveSkillsDir.mockImplementation((scope) =>
+      scope === "local" ? "/project/.reygent/skills" : "/home/user/.reygent/skills"
+    );
     mockExistsSync.mockReturnValue(false); // skill not already installed
     mockFetchSkillManifest.mockResolvedValue({
       name: "code-reviewer",
@@ -188,7 +188,9 @@ describe("skills add", () => {
   });
 
   it("errors when skill already installed", async () => {
-    mockFindLocalConfigDir.mockReturnValue("/project/.reygent");
+    mockResolveSkillsDir.mockImplementation((scope) =>
+      scope === "local" ? "/project/.reygent/skills" : "/home/user/.reygent/skills"
+    );
     mockExistsSync.mockReturnValue(true); // already exists
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -206,7 +208,7 @@ describe("skills add", () => {
   });
 
   it("errors when no local .reygent and not --global", async () => {
-    mockFindLocalConfigDir.mockReturnValue(null);
+    mockResolveSkillsDir.mockReturnValue(null);
     mockExistsSync.mockReturnValue(false);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -248,7 +250,9 @@ describe("skills remove", () => {
   });
 
   it("removes installed skill", async () => {
-    mockFindLocalConfigDir.mockReturnValue("/project/.reygent");
+    mockResolveSkillsDir.mockImplementation((scope) =>
+      scope === "local" ? "/project/.reygent/skills" : "/home/user/.reygent/skills"
+    );
     mockExistsSync.mockReturnValue(true);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -263,7 +267,9 @@ describe("skills remove", () => {
   });
 
   it("errors when skill not found", async () => {
-    mockFindLocalConfigDir.mockReturnValue("/project/.reygent");
+    mockResolveSkillsDir.mockImplementation((scope) =>
+      scope === "local" ? "/project/.reygent/skills" : "/home/user/.reygent/skills"
+    );
     mockExistsSync.mockReturnValue(false);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});

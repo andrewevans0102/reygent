@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import ora from "ora";
 import { validateSkillName } from "../skills.js";
-import { findLocalConfigDir, resolveGlobalConfigDir, resolveSkillsDir } from "../config.js";
+import { resolveGlobalConfigDir, resolveSkillsDir } from "../config.js";
 import {
   listRemoteSkills,
   fetchSkillManifest,
@@ -16,7 +16,7 @@ import { isDebug } from "../debug.js";
 
 function getVersion(): string {
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const pkg = JSON.parse(readFileSync(join(__dirname, "..", "..", "package.json"), "utf-8"));
+  const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
   return pkg.version;
 }
 
@@ -88,13 +88,13 @@ async function addAction(name: string, options: { global: boolean }): Promise<vo
   if (options.global) {
     targetBase = join(resolveGlobalConfigDir(), "skills");
   } else {
-    const localConfigDir = findLocalConfigDir(process.cwd());
-    if (!localConfigDir) {
+    const localSkillsDir = resolveSkillsDir("local");
+    if (!localSkillsDir) {
       console.log(chalk.red.bold("Error:"), "No .reygent/ directory found.");
       console.log(chalk.gray("  Run"), chalk.cyan("reygent init"), chalk.gray("first, or use"), chalk.cyan("--global"));
       process.exit(1);
     }
-    targetBase = join(localConfigDir, "skills");
+    targetBase = localSkillsDir;
   }
 
   const targetDir = join(targetBase, name);
@@ -157,12 +157,12 @@ async function removeAction(name: string, options: { global: boolean }): Promise
   if (options.global) {
     targetBase = join(resolveGlobalConfigDir(), "skills");
   } else {
-    const localConfigDir = findLocalConfigDir(process.cwd());
-    if (!localConfigDir) {
+    const localSkillsDir = resolveSkillsDir("local");
+    if (!localSkillsDir) {
       console.log(chalk.red.bold("Error:"), "No .reygent/ directory found.");
       process.exit(1);
     }
-    targetBase = join(localConfigDir, "skills");
+    targetBase = localSkillsDir;
   }
 
   const targetDir = join(targetBase, name);
@@ -172,8 +172,15 @@ async function removeAction(name: string, options: { global: boolean }): Promise
     process.exit(1);
   }
 
-  rmSync(targetDir, { recursive: true, force: true });
-  console.log(chalk.green(`Removed "${name}" from ${targetDir}`));
+  try {
+    rmSync(targetDir, { recursive: true, force: true });
+    console.log(chalk.green(`Removed "${name}" from ${targetDir}`));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(chalk.red.bold("Error:"), `Failed to remove "${name}": ${message}`);
+    if (isDebug()) console.error(err instanceof Error ? err.stack : err);
+    process.exit(1);
+  }
 }
 
 export function registerSkillsCommand(program: Command): void {
