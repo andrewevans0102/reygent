@@ -209,9 +209,72 @@ reygent pr-create --title "Feature X" --no-push
 
 ---
 
+## `reygent skills`
+
+Manage skills from the [reygent-skills](https://github.com/andrewevans0102/reygent-skills) registry.
+
+### `reygent skills list`
+
+List all available skills in the registry.
+
+```bash
+reygent skills list
+```
+
+Shows each skill's name, description, version, and license. Already-installed skills display an `[installed]` badge. Checks both local `.reygent/skills/` and global `~/.reygent/skills/`.
+
+### `reygent skills add <name>`
+
+Install a skill from the registry.
+
+```bash
+reygent skills add <name> [--global]
+```
+
+| Argument/Option | Description |
+|---|---|
+| `name` | Skill name to install (e.g., `code-reviewer`) |
+| `--global` | Install to `~/.reygent/skills/` instead of local `.reygent/skills/` |
+
+**Examples:**
+
+```bash
+# Install to local project
+reygent skills add code-reviewer
+
+# Install globally (available to all projects)
+reygent skills add code-reviewer --global
+```
+
+Checks compatibility with your reygent version before installing. Warns (but still installs) if the skill requires a newer version.
+
+Requires a local `.reygent/` directory for local installs. Run `reygent init` first, or use `--global`.
+
+### `reygent skills remove <name>`
+
+Remove an installed skill.
+
+```bash
+reygent skills remove <name> [--global]
+```
+
+| Argument/Option | Description |
+|---|---|
+| `name` | Skill name to remove |
+| `--global` | Remove from `~/.reygent/skills/` instead of local |
+
+**Examples:**
+
+```bash
+reygent skills remove code-reviewer
+reygent skills remove code-reviewer --global
+```
+
+---
+
 ## Environment Variables
 
-Set these in a `.env` file in your project root.
+Set these in a `.env` file in your project root (or export in your shell).
 
 | Variable | Used For |
 |---|---|
@@ -219,5 +282,6 @@ Set these in a `.env` file in your project root.
 | `JIRA_URL` | Jira instance URL (e.g., `https://company.atlassian.net`) |
 | `JIRA_EMAIL` | Jira account email |
 | `JIRA_API_TOKEN` | Jira API token |
+| `GITHUB_TOKEN` | GitHub API authentication for `reygent skills` commands (raises rate limit from 60 to 5,000 req/hr) |
 | `GIT_SSL_NO_VERIFY` | Skip SSL verification globally |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js TLS override (set to `0` to skip) |
