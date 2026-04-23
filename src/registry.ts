@@ -1,10 +1,18 @@
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  mkdirSync,
+} from "node:fs";
+import { join } from "node:path";
 import { parseSkillMd } from "./skills.js";
 import type { SkillManifest } from "./skills.js";
+import { resolveGlobalConfigDir } from "./config.js";
 
-const REPO_OWNER = "andrewevans0102";
-const REPO_NAME = "reygent-skills";
-const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`;
-const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main`;
+const REGISTRY_REPO_URL = "https://github.com/andrewevans0102/reygent-skills.git";
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface RegistrySkillEntry {
   name: string;
@@ -19,77 +27,94 @@ export interface SkillFile {
   content: string;
 }
 
-interface GitHubContentEntry {
-  name: string;
-  path: string;
-  type: "file" | "dir";
-  download_url?: string;
+/**
+ * Path to the local registry cache directory.
+ */
+function getCacheDir(): string {
+  return join(resolveGlobalConfigDir(), "cache", "registry");
 }
 
-function getHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github.v3+json",
-    "User-Agent": "reygent-cli",
-  };
-  const token = process.env.GITHUB_TOKEN;
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
-}
-
-async function githubApiFetch(path: string): Promise<Response> {
-  const url = `${API_BASE}/contents/${path}`;
-  const res = await fetch(url, { headers: getHeaders() });
-
-  if (res.status === 403) {
-    const body = await res.text();
-    if (body.includes("rate limit")) {
+/**
+ * Run a git command, throwing a clear error if git is not installed.
+ */
+function runGit(args: string[], cwd?: string): string {
+  try {
+    return execFileSync("git", args, {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch (err: unknown) {
+    const error = err as NodeJS.ErrnoException;
+    if (error.code === "ENOENT") {
       throw new Error(
-        "GitHub API rate limit exceeded. Set GITHUB_TOKEN env var for higher limits.",
+        "Git is not installed or not found in PATH. Install git to use the skills registry.",
       );
     }
-    throw new Error(`GitHub API forbidden (403): ${body}`);
+    throw err;
   }
-
-  if (res.status === 404) {
-    throw new Error(`Not found: ${path}`);
-  }
-
-  if (!res.ok) {
-    throw new Error(`GitHub API error ${res.status}: ${await res.text()}`);
-  }
-
-  return res;
 }
 
-async function fetchRaw(path: string): Promise<string> {
-  const url = `${RAW_BASE}/${path}`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": "reygent-cli" },
-  });
+/**
+ * Check if the cache is stale by comparing FETCH_HEAD mtime to TTL.
+ */
+function isCacheStale(cacheDir: string): boolean {
+  const fetchHead = join(cacheDir, ".git", "FETCH_HEAD");
+  if (!existsSync(fetchHead)) return true;
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${path}: ${res.status}`);
+  const mtime = statSync(fetchHead).mtimeMs;
+  return Date.now() - mtime > CACHE_TTL_MS;
+}
+
+/**
+ * Ensure registry cache exists and is reasonably fresh.
+ * - No cache → shallow clone
+ * - Stale cache → pull (silently falls back to stale on failure)
+ * - Fresh cache → no-op
+ */
+function ensureCache(): string {
+  const cacheDir = getCacheDir();
+  const gitDir = join(cacheDir, ".git");
+
+  if (!existsSync(gitDir)) {
+    // First time — clone
+    const parentDir = join(cacheDir, "..");
+    mkdirSync(parentDir, { recursive: true });
+    runGit(["clone", "--depth", "1", REGISTRY_REPO_URL, cacheDir]);
+    return cacheDir;
   }
 
-  return res.text();
+  if (isCacheStale(cacheDir)) {
+    try {
+      runGit(["pull", "--ff-only"], cacheDir);
+    } catch {
+      // Offline or conflict — use stale cache silently
+    }
+  }
+
+  return cacheDir;
 }
 
 /**
  * List all skills available in the remote registry.
  */
 export async function listRemoteSkills(): Promise<RegistrySkillEntry[]> {
-  const res = await githubApiFetch("");
-  const entries: GitHubContentEntry[] = await res.json();
-  const dirs = entries.filter((e) => e.type === "dir");
-
+  const cacheDir = ensureCache();
+  const entries = readdirSync(cacheDir);
   const skills: RegistrySkillEntry[] = [];
 
-  for (const dir of dirs) {
+  for (const entry of entries) {
+    if (entry.startsWith(".")) continue;
+
+    const entryPath = join(cacheDir, entry);
+    if (!statSync(entryPath).isDirectory()) continue;
+
+    const skillMdPath = join(entryPath, "SKILL.md");
+    if (!existsSync(skillMdPath)) continue;
+
     try {
-      const content = await fetchRaw(`${dir.name}/SKILL.md`);
-      const manifest = parseSkillMd(content, dir.name);
+      const content = readFileSync(skillMdPath, "utf-8");
+      const manifest = parseSkillMd(content, entry);
       skills.push({
         name: manifest.name,
         description: manifest.description,
@@ -97,13 +122,8 @@ export async function listRemoteSkills(): Promise<RegistrySkillEntry[]> {
         compatibility: manifest.compatibility,
         version: manifest.metadata?.version,
       });
-    } catch (err) {
-      // Skip individual skill errors (missing SKILL.md, invalid manifest)
-      // but rethrow network/rate-limit errors so they surface to user
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("rate limit") || msg.includes("GitHub API error")) {
-        throw err;
-      }
+    } catch {
+      // Skip skills with invalid SKILL.md
     }
   }
 
@@ -114,7 +134,14 @@ export async function listRemoteSkills(): Promise<RegistrySkillEntry[]> {
  * Fetch SKILL.md manifest for a single skill.
  */
 export async function fetchSkillManifest(skillName: string): Promise<SkillManifest> {
-  const content = await fetchRaw(`${skillName}/SKILL.md`);
+  const cacheDir = ensureCache();
+  const skillMdPath = join(cacheDir, skillName, "SKILL.md");
+
+  if (!existsSync(skillMdPath)) {
+    throw new Error(`Skill not found in registry: ${skillName}`);
+  }
+
+  const content = readFileSync(skillMdPath, "utf-8");
   return parseSkillMd(content, skillName);
 }
 
@@ -122,25 +149,34 @@ export async function fetchSkillManifest(skillName: string): Promise<SkillManife
  * Fetch all files for a skill, recursing into subdirectories.
  */
 export async function fetchSkillFiles(skillName: string): Promise<SkillFile[]> {
+  const cacheDir = ensureCache();
+  const skillDir = join(cacheDir, skillName);
+
+  if (!existsSync(skillDir) || !statSync(skillDir).isDirectory()) {
+    throw new Error(`Skill not found in registry: ${skillName}`);
+  }
+
   const files: SkillFile[] = [];
 
-  async function walkDir(dirPath: string): Promise<void> {
-    const res = await githubApiFetch(dirPath);
-    const entries: GitHubContentEntry[] = await res.json();
-
+  function walkDir(dir: string, prefix: string): void {
+    const entries = readdirSync(dir);
     for (const entry of entries) {
-      if (entry.type === "file") {
-        const content = await fetchRaw(entry.path);
-        // Store path relative to skill root
-        const relativePath = entry.path.slice(skillName.length + 1);
-        files.push({ path: relativePath, content });
-      } else if (entry.type === "dir") {
-        await walkDir(entry.path);
+      if (entry.startsWith(".")) continue;
+      const fullPath = join(dir, entry);
+      const relativePath = prefix ? `${prefix}/${entry}` : entry;
+
+      if (statSync(fullPath).isDirectory()) {
+        walkDir(fullPath, relativePath);
+      } else {
+        files.push({
+          path: relativePath,
+          content: readFileSync(fullPath, "utf-8"),
+        });
       }
     }
   }
 
-  await walkDir(skillName);
+  walkDir(skillDir, "");
   return files;
 }
 
