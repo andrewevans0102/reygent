@@ -12,7 +12,6 @@ import type { SkillManifest } from "./skills.js";
 import { resolveGlobalConfigDir } from "./config.js";
 
 const REGISTRY_REPO_URL = "https://github.com/andrewevans0102/reygent-skills.git";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface RegistrySkillEntry {
   name: string;
@@ -56,21 +55,10 @@ function runGit(args: string[], cwd?: string): string {
 }
 
 /**
- * Check if the cache is stale by comparing FETCH_HEAD mtime to TTL.
- */
-function isCacheStale(cacheDir: string): boolean {
-  const fetchHead = join(cacheDir, ".git", "FETCH_HEAD");
-  if (!existsSync(fetchHead)) return true;
-
-  const mtime = statSync(fetchHead).mtimeMs;
-  return Date.now() - mtime > CACHE_TTL_MS;
-}
-
-/**
- * Ensure registry cache exists and is reasonably fresh.
- * - No cache → shallow clone
- * - Stale cache → pull (silently falls back to stale on failure)
- * - Fresh cache → no-op
+ * Ensure registry cache exists and is up to date.
+ * Always attempts a fresh pull when called — this should only be
+ * triggered by explicit user interaction (skills list/add/remove).
+ * Falls back to stale cache if pull fails (offline, etc.).
  */
 function ensureCache(): string {
   const cacheDir = getCacheDir();
@@ -84,12 +72,11 @@ function ensureCache(): string {
     return cacheDir;
   }
 
-  if (isCacheStale(cacheDir)) {
-    try {
-      runGit(["pull", "--ff-only"], cacheDir);
-    } catch {
-      // Offline or conflict — use stale cache silently
-    }
+  // Pull latest on every explicit skills command
+  try {
+    runGit(["pull", "--ff-only"], cacheDir);
+  } catch {
+    // Offline or conflict — use existing cache silently
   }
 
   return cacheDir;
