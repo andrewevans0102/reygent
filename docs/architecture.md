@@ -64,11 +64,10 @@ src/
 ├── generate-spec.ts    # Spec generation from description
 └── commands/
     ├── init.ts          # `reygent init` handler
-    ├── agent.ts         # `reygent agent` handler
+    ├── agent.ts         # `reygent agent` handler (interactive sessions)
     ├── spec.ts          # `reygent spec` handler
     ├── generate-spec.ts # `reygent generate-spec` handler
-    ├── run.ts           # `reygent run` handler (pipeline orchestrator)
-    └── pr-create.ts     # `reygent pr-create` handler (standalone)
+    └── run.ts           # `reygent run` handler (pipeline orchestrator)
 ```
 
 ## Entry Point: How a Command Starts

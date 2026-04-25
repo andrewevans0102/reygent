@@ -77,35 +77,33 @@ Without `--clarify`, outputs the raw spec as JSON. With `--clarify`, runs the pl
 
 ---
 
-## `reygent agent <name> [prompt]`
+## `reygent agent [name]`
 
-Run a single agent in isolation, outside the reygent workflow.
+Start an interactive agent session. Spawns the Claude CLI with the agent's system prompt injected.
 
 ```bash
-reygent agent <name> [prompt] [--spec <source>] [--auto-approve]
+reygent agent [name] [--spec <source>]
 ```
 
 | Argument/Option | Description |
 |---|---|
-| `name` | Agent name: `dev`, `qe`, `planner`, `security-reviewer`, `pr-reviewer`, `adhoc` |
-| `prompt` | Freeform prompt for the agent (alternative to `--spec`) |
-| `--spec <source>` | Path to `.md` file, issue key, or Linear URL |
-| `--auto-approve` | Auto-approve file edits without prompting |
+| `name` | Agent name: `dev`, `qe`, `planner`, `security-reviewer`, `pr-reviewer`, `adhoc` (prompted interactively if omitted) |
+| `--spec <source>` | Path to `.md` file, issue key, or Linear URL — appended to the agent's system prompt |
 
 **Examples:**
 
 ```bash
-# Run dev agent with a freeform prompt
-reygent agent dev "Refactor the auth middleware to use async/await"
+# Pick agent interactively
+reygent agent
 
-# Run QE agent against a spec
+# Start interactive session with dev agent
+reygent agent dev
+
+# Interactive session with spec context
 reygent agent qe --spec ./feature-spec.md
 
-# Run security reviewer with auto-approve
-reygent agent security-reviewer --spec PROJ-123 --auto-approve
-
-# Run adhoc agent for a one-off task
-reygent agent adhoc "Update all console.log statements to use the logger utility"
+# Use a skill from the registry
+reygent agent code-reviewer
 ```
 
 ---
@@ -169,43 +167,6 @@ When running without `--auto-approve`, you'll be prompted for:
 2. **Clarification preference** — whether the planner should ask questions or make assumptions
 3. **Retry decisions** — when a test gate fails, whether to retry
 4. **Security bypass** — when the security review fails, whether to continue
-
----
-
-## `reygent pr-create`
-
-Create a pull request from the current branch, independent of the full reygent workflow.
-
-```bash
-reygent pr-create [options]
-```
-
-| Option | Default | Description |
-|---|---|---|
-| `--title <title>` | Spec title or last commit message | PR title |
-| `--body <body>` | Auto-generated from spec | PR body/description |
-| `--spec <source>` | *(optional)* | Path to `.md` file, issue key, or Linear URL |
-| `--base <branch>` | Auto-detected (`origin/HEAD`) | Base branch for the PR |
-| `--push` / `--no-push` | `--push` | Whether to push the branch before creating PR |
-| `--insecure` | `false` | Skip SSL certificate verification |
-
-**Examples:**
-
-```bash
-# Simple PR from current branch
-reygent pr-create --title "Fix login timeout"
-
-# PR with a spec for auto-generated body
-reygent pr-create --spec feature.md
-
-# PR against a specific base branch
-reygent pr-create --title "Hotfix" --base release/2.0
-
-# Already pushed — just create the PR
-reygent pr-create --title "Feature X" --no-push
-```
-
-**Supports:** GitHub (including Enterprise), GitLab. Auth resolved via `git credential fill`.
 
 ---
 

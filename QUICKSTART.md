@@ -168,10 +168,9 @@ See [Skills](./docs/skills.md) for the full guide.
 | `reygent init` | Initialize `.reygent/` config in current project |
 | `reygent generate-spec "..."` | Generate spec from description |
 | `reygent spec spec.md` | Load and display a parsed spec |
-| `reygent agent dev --spec spec.md` | Run a single agent in isolation |
-| `reygent chat dev` | Interactive chat with an agent |
+| `reygent agent dev` | Start interactive session with an agent |
+| `reygent agent dev --spec spec.md` | Interactive session with spec context |
 | `reygent run --spec spec.md` | Run full 7-stage workflow |
-| `reygent pr-create` | Create a PR from current branch |
 | `reygent skills list` | Browse available skills in the registry |
 | `reygent skills add <name>` | Install a skill from the registry |
 | `reygent skills remove <name>` | Remove an installed skill |
