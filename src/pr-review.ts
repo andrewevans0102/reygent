@@ -174,6 +174,44 @@ export function formatPRReviewOutput(output: PRReviewOutput): string {
   return lines.join("\n");
 }
 
+export function formatPRReviewTerminal(output: PRReviewOutput): string {
+  const lines: string[] = [];
+
+  lines.push("");
+  lines.push(chalk.cyan.bold("Summary"));
+  lines.push(`  ${output.summary}`);
+  lines.push("");
+
+  if (output.comments.length > 0) {
+    lines.push(chalk.cyan.bold(`Comments (${output.comments.length}):`));
+
+    const byFile = new Map<string, PRReviewComment[]>();
+    for (const c of output.comments) {
+      const group = byFile.get(c.file) ?? [];
+      group.push(c);
+      byFile.set(c.file, group);
+    }
+
+    for (const [file, comments] of byFile) {
+      lines.push(`  ${chalk.bold(file)}`);
+      for (const c of comments) {
+        const lineRef = c.line !== null ? chalk.gray(`:${c.line}`) : "";
+        lines.push(`    ${chalk.yellow("•")} ${lineRef}${lineRef ? " " : ""}${c.comment}`);
+      }
+    }
+    lines.push("");
+  }
+
+  if (output.recommendedActions.length > 0) {
+    lines.push(chalk.cyan.bold("Recommended Actions:"));
+    for (const action of output.recommendedActions) {
+      lines.push(`  ${chalk.gray("-")} ${action}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 function exec(
   cmd: string,
   args: string[],
@@ -260,7 +298,7 @@ export async function runPRReview(
 
   const diff = await getDiff(prNumber);
   const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff);
-  const result = await spawnAgent("pr-review", prompt, options);
+  const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true });
 
   if (result.exitCode !== 0) {
     throw new TaskError(

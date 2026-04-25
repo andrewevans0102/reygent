@@ -138,6 +138,29 @@ You can also override the model per-run:
 reygent run --spec spec.md --model claude-opus-4-6
 ```
 
+## 8. Install Skills from the Registry
+
+Browse and install community skills without manually copying files:
+
+```bash
+# See what's available
+reygent skills list
+
+# Install a skill to your project
+reygent skills add code-reviewer
+
+# Use it
+reygent agent code-reviewer
+
+# Install globally (shared across all projects)
+reygent skills add code-reviewer --global
+
+# Remove when done
+reygent skills remove code-reviewer
+```
+
+See [Skills](./docs/skills.md) for the full guide.
+
 ## Useful Commands
 
 | Command | Description |
@@ -149,6 +172,9 @@ reygent run --spec spec.md --model claude-opus-4-6
 | `reygent chat dev` | Interactive chat with an agent |
 | `reygent run --spec spec.md` | Run full 7-stage workflow |
 | `reygent pr-create` | Create a PR from current branch |
+| `reygent skills list` | Browse available skills in the registry |
+| `reygent skills add <name>` | Install a skill from the registry |
+| `reygent skills remove <name>` | Remove an installed skill |
 
 ## Next Steps
 

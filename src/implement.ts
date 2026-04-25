@@ -19,6 +19,7 @@ const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
 
 export interface AgentSpawnOptions {
   autoApprove?: boolean;
+  quiet?: boolean;
 }
 
 export interface FailureContext {
