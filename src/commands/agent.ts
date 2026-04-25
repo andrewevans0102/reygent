@@ -1,62 +1,82 @@
-import { createInterface } from "node:readline";
+import { spawn } from "node:child_process";
+import { constants } from "node:os";
+import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { getAgents } from "../config.js";
+import type { AgentConfig } from "../agents.js";
 import { isDebug } from "../debug.js";
-import { spawnAgent } from "../implement.js";
+import { resolveModel } from "../model.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { TaskError } from "../task.js";
-import { formatDuration } from "../usage.js";
 
 interface AgentOptions {
   spec?: string;
-  autoApprove: boolean;
+}
+
+function spawnInteractiveChat(
+  systemPrompt: string,
+  modelId: string,
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "claude",
+      ["--append-system-prompt", systemPrompt, "--model", modelId],
+      { stdio: "inherit" },
+    );
+
+    child.on("error", (err) => {
+      reject(
+        new TaskError(
+          `Failed to start claude CLI: ${err.message}. Is claude installed?`,
+        ),
+      );
+    });
+
+    child.on("close", (code, signal) => {
+      if (signal) {
+        const sigNum = constants.signals[signal];
+        resolve(sigNum ? 128 + sigNum : 1);
+      } else {
+        resolve(code ?? 0);
+      }
+    });
+  });
 }
 
 export async function agentCommand(
-  name: string,
-  userPrompt: string | undefined,
+  name: string | undefined,
   options: AgentOptions,
 ): Promise<void> {
-  const agents = getAgents();
-  const agent = agents.find((a) => a.name === name);
-
-  if (!agent) {
-    const validNames = agents.map((a) => a.name).join(", ");
-    console.log(chalk.red.bold("Error:"), `Unknown agent "${name}". Valid agents: ${validNames}`);
-    process.exit(1);
-  }
-
-  if (agent.role === "skill") {
-    console.log(chalk.magenta("skill") + chalk.gray(` → ${agent.name}`) + chalk.gray(` — ${agent.description}`));
-  }
-
   try {
-    // Prompt for permission mode if not specified
-    let autoApprove = options.autoApprove;
-    if (!autoApprove) {
-      const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
+    const agents = getAgents();
+    let agent: AgentConfig;
 
-      const answer = await new Promise<string>((resolve) => {
-        rl.question(
-          "\nAgent may write files and run commands. Auto-approve all actions? (y/n) ",
-          resolve,
-        );
+    if (name) {
+      const found = agents.find((a) => a.name === name);
+      if (!found) {
+        const validNames = agents.map((a) => a.name).join(", ");
+        console.log(chalk.red.bold("Error:"), `Unknown agent "${name}". Valid agents: ${validNames}`);
+        process.exit(1);
+      }
+      agent = found;
+    } else {
+      if (agents.length === 0) {
+        throw new TaskError("No agents configured. Add agents to .reygent/config.json or check built-in agents.");
+      }
+      agent = await select({
+        message: "Select agent:",
+        choices: agents.map((a) => ({
+          name: `${a.name} — ${a.description}`,
+          value: a,
+        })),
       });
-      rl.close();
-
-      autoApprove = answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
-      console.log("");
     }
 
-    let prompt: string;
+    let systemPrompt = agent.systemPrompt;
 
     if (options.spec) {
-      // Spec mode: load spec and build prompt with spec context
       const spec = await loadSpec(options.spec);
-      prompt = `${agent.systemPrompt}
+      systemPrompt += `
 
 ---
 
@@ -65,34 +85,18 @@ export async function agentCommand(
 **Title:** ${spec.title}
 
 ${spec.content}`;
-    } else if (userPrompt) {
-      // Interactive mode: use user prompt directly
-      prompt = `${agent.systemPrompt}
-
----
-
-${userPrompt}`;
-    } else {
-      console.log(chalk.red.bold("Error:"), "either provide a prompt or use --spec\n");
-      console.log(chalk.cyan("Examples:"));
-      console.log(chalk.gray("  reygent agent security-reviewer \"review this auth code\""));
-      console.log(chalk.gray("  reygent agent qe --spec spec.md"));
-      process.exit(1);
     }
 
-    const result = await spawnAgent(name, prompt, { autoApprove });
+    const modelId = await resolveModel();
 
-    if (result.usage) {
-      console.log(
-        chalk.gray("\nUsage: ") +
-        chalk.cyan(`$${result.usage.costUsd.toFixed(2)}`) +
-        chalk.gray(` (${formatDuration(result.usage.durationMs)})`),
-      );
-    }
+    console.log(
+      chalk.bold.cyan(`\nStarting session with ${agent.name} agent`) +
+        chalk.gray(` (${modelId})`) +
+        "\n",
+    );
 
-    if (result.exitCode !== 0) {
-      process.exit(1);
-    }
+    const exitCode = await spawnInteractiveChat(systemPrompt, modelId);
+    process.exit(exitCode);
   } catch (err) {
     if (err instanceof SpecError || err instanceof TaskError) {
       console.log(chalk.red.bold("Error:"), err.message);

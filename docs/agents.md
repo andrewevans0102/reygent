@@ -168,7 +168,7 @@ The review is posted as a comment on the PR via `gh pr comment`.
 - Anything that doesn't fit the structured workflow model
 
 ```bash
-reygent agent adhoc "Convert all var declarations to const/let in src/"
+reygent agent adhoc
 ```
 
 ---
