@@ -206,7 +206,7 @@ export async function runSecurityReview(
   }
 
   const prompt = buildSecurityReviewPrompt(agent.systemPrompt, context);
-  const result = await spawnAgent("security-review", prompt, options);
+  const result = await spawnAgent("security-review", prompt, { ...options, quiet: true });
 
   if (result.exitCode !== 0) {
     throw new TaskError(

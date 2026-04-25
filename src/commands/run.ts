@@ -7,7 +7,7 @@ import { runImplement } from "../implement.js";
 import type { FailureContext } from "../implement.js";
 import { runPlanner } from "../planner.js";
 import { runPRCreate } from "../pr-create.js";
-import { runPRReview, formatPRReviewOutput, postPRReviewComment } from "../pr-review.js";
+import { runPRReview, formatPRReviewTerminal, postPRReviewComment } from "../pr-review.js";
 import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
@@ -538,7 +538,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         if (prUsage) tracker.record("pr-review", stage.name, prUsage);
         spinner.succeed(chalk.green("PR review complete"));
 
-        console.log(formatPRReviewOutput(reviewOutput));
+        console.log(formatPRReviewTerminal(reviewOutput));
 
         const commentSpinner = ora(chalk.blue("posting review comment to PR...")).start();
         try {

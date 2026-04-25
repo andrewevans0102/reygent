@@ -26,6 +26,10 @@ export async function agentCommand(
     process.exit(1);
   }
 
+  if (agent.role === "skill") {
+    console.log(chalk.magenta("skill") + chalk.gray(` → ${agent.name}`) + chalk.gray(` — ${agent.description}`));
+  }
+
   try {
     // Prompt for permission mode if not specified
     let autoApprove = options.autoApprove;
