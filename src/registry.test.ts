@@ -303,13 +303,18 @@ describe("ensureCache (via public functions)", () => {
     );
   });
 
-  it("skips pull when cache is fresh", async () => {
+  it("always pulls when cache exists", async () => {
     setupFreshCache();
+    mockExecFileSync.mockReturnValue("");
     mockReaddirSync.mockReturnValue([] as unknown as ReturnType<typeof readdirSync>);
 
     await listRemoteSkills();
 
-    expect(mockExecFileSync).not.toHaveBeenCalled();
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "git",
+      ["pull", "--ff-only"],
+      expect.objectContaining({ cwd: CACHE_DIR }),
+    );
   });
 
   it("throws clear error when git is not installed", async () => {
