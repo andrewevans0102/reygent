@@ -45,7 +45,14 @@ export async function generateSpecCommand(
       while (!ready && attempts < maxAttempts) {
         attempts++;
         const spinner = ora(chalk.blue("Checking if clarification needed...")).start();
-        const result = await runClarification(description!, clarificationAnswers);
+
+        let result: Awaited<ReturnType<typeof runClarification>>;
+        try {
+          result = await runClarification(description!, clarificationAnswers);
+        } catch (err) {
+          spinner.fail(chalk.red("Failed to check clarification needs"));
+          throw err;
+        }
 
         if ("ready" in result && result.ready) {
           spinner.succeed(chalk.green("No clarification needed"));
@@ -63,22 +70,24 @@ export async function generateSpecCommand(
             output: process.stdout,
           });
 
-          for (let i = 0; i < result.questions.length; i++) {
-            const question = result.questions[i];
-            const answer = await new Promise<string>((resolve) => {
-              rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
-            });
+          try {
+            for (let i = 0; i < result.questions.length; i++) {
+              const question = result.questions[i];
+              const answer = await new Promise<string>((resolve) => {
+                rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
+              });
 
-            if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
-              rl.close();
-              console.log(chalk.red("Aborted."));
-              process.exit(0);
+              if (answer.trim().toLowerCase() === "abort" || answer.trim().toLowerCase() === "cancel") {
+                console.log(chalk.red("Aborted."));
+                process.exit(0);
+              }
+
+              answers.push(`Q: ${question}\nA: ${answer}`);
             }
-
-            answers.push(`Q: ${question}\nA: ${answer}`);
+          } finally {
+            rl.close();
           }
 
-          rl.close();
           clarificationAnswers = answers.join("\n\n");
 
           if (attempts < maxAttempts) {

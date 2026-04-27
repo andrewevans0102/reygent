@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
-import { constants } from "node:os";
+import { writeFileSync, unlinkSync, readFileSync } from "node:fs";
+import { constants, tmpdir } from "node:os";
+import { join } from "node:path";
 import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { getAgents } from "../config.js";
@@ -13,18 +15,43 @@ interface AgentOptions {
   spec?: string;
 }
 
+// Safe argv limit — conservative to leave room for env vars and other args
+const MAX_PROMPT_BYTES = 200_000;
+
 function spawnInteractiveChat(
   systemPrompt: string,
   modelId: string,
 ): Promise<number> {
+  // Write prompt to temp file, then read back to pass as arg.
+  // Temp file ensures prompt survives intact (no encoding issues)
+  // and provides a clear path if claude CLI adds --system-prompt-file in future.
+  const tmpFile = join(tmpdir(), `reygent-prompt-${process.pid}-${Date.now()}.txt`);
+  writeFileSync(tmpFile, systemPrompt, "utf-8");
+
+  const prompt = readFileSync(tmpFile, "utf-8");
+  const promptBytes = Buffer.byteLength(prompt);
+
+  if (promptBytes > MAX_PROMPT_BYTES) {
+    unlinkSync(tmpFile);
+    throw new TaskError(
+      `System prompt too large (${promptBytes} bytes, limit ${MAX_PROMPT_BYTES}). ` +
+      `Try a smaller spec or split into sections.`,
+    );
+  }
+
+  const cleanup = () => {
+    try { unlinkSync(tmpFile); } catch {}
+  };
+
   return new Promise((resolve, reject) => {
     const child = spawn(
       "claude",
-      ["--append-system-prompt", systemPrompt, "--model", modelId],
+      ["--append-system-prompt", prompt, "--model", modelId],
       { stdio: "inherit" },
     );
 
     child.on("error", (err) => {
+      cleanup();
       reject(
         new TaskError(
           `Failed to start claude CLI: ${err.message}. Is claude installed?`,
@@ -33,6 +60,7 @@ function spawnInteractiveChat(
     });
 
     child.on("close", (code, signal) => {
+      cleanup();
       if (signal) {
         const sigNum = constants.signals[signal];
         resolve(sigNum ? 128 + sigNum : 1);

@@ -26,13 +26,14 @@ reygent init
 Generate a full markdown spec from a short description.
 
 ```bash
-reygent generate-spec [description] [--output <file>]
+reygent generate-spec [description] [--output <file>] [--skip-clarification]
 ```
 
 | Argument/Option | Description |
 |---|---|
 | `description` | Short description of the feature (prompted interactively if omitted) |
 | `--output <file>` | File path to write the spec to (prompted interactively if omitted) |
+| `--skip-clarification` | Skip clarifying questions and generate spec directly |
 
 **Example:**
 

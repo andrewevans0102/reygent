@@ -116,6 +116,10 @@ export async function runClarification(
     throw new TaskError("generate-spec: failed to parse clarification response as JSON");
   }
 
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ready: true };
+  }
+
   const obj = parsed as Record<string, unknown>;
 
   if (obj.ready === true) {
