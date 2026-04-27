@@ -113,7 +113,7 @@ export async function runPlanner(
   const { stdout: raw, exitCode, usage } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true });
 
   if (exitCode !== 0) {
-    throw new TaskError(`Planner: claude CLI exited with code ${exitCode}`);
+    throw new TaskError(`Planner: agent exited with code ${exitCode}`);
   }
 
   let parsed: unknown;

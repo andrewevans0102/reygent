@@ -4,6 +4,8 @@ export interface AgentConfig {
   systemPrompt: string;
   tools: string[];
   role: string;
+  provider?: string;
+  model?: string;
 }
 
 export const builtinAgents: AgentConfig[] = [

@@ -15,6 +15,7 @@ export interface ReygentConfig {
   agents?: AgentConfig[];
   skills?: SkillsConfig;
   model?: string;
+  provider?: string;
 }
 
 /**
@@ -32,6 +33,7 @@ export function loadConfig(): ReygentConfig {
         agents: config.agents ?? builtinAgents,
         skills: config.skills ?? {},
         model: config.model,
+        provider: config.provider,
       };
     } catch (err) {
       throw new Error(

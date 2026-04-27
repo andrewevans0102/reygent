@@ -107,7 +107,7 @@ export async function runClarification(
   const { stdout: raw, exitCode } = await spawnAgentStream("generate-spec", prompt, 120_000, { quiet: true });
 
   if (exitCode !== 0) {
-    throw new TaskError(`generate-spec: claude CLI exited with code ${exitCode}`);
+    throw new TaskError(`generate-spec: agent exited with code ${exitCode}`);
   }
 
   let parsed: unknown;
@@ -152,11 +152,11 @@ export async function generateSpec(description: string, clarificationAnswers?: s
   const { stdout, exitCode } = await spawnAgentStream("generate-spec", prompt, 120_000);
 
   if (exitCode !== 0) {
-    throw new TaskError(`generate-spec: claude CLI exited with code ${exitCode}`);
+    throw new TaskError(`generate-spec: agent exited with code ${exitCode}`);
   }
 
   if (!stdout) {
-    throw new TaskError("generate-spec: empty result from claude CLI");
+    throw new TaskError("generate-spec: empty result from agent");
   }
 
   return stdout;
