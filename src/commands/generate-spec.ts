@@ -51,7 +51,11 @@ export async function generateSpecCommand(
           result = await runClarification(description!, clarificationAnswers);
         } catch (err) {
           spinner.fail(chalk.red("Failed to check clarification needs"));
-          throw err;
+          if (err instanceof TaskError) {
+            throw err;
+          }
+          const message = err instanceof Error ? err.message : String(err);
+          throw new TaskError(`Clarification check failed: ${message}`);
         }
 
         if ("ready" in result && result.ready) {

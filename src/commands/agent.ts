@@ -16,37 +16,39 @@ interface AgentOptions {
 }
 
 // Safe argv limit — conservative to leave room for env vars and other args
+// Claude CLI uses argv for --append-system-prompt; most systems limit argv to ~2MB
+// but we cap at 200KB to leave headroom for other args and env vars
 const MAX_PROMPT_BYTES = 200_000;
 
 function spawnInteractiveChat(
   systemPrompt: string,
   modelId: string,
 ): Promise<number> {
-  // Write prompt to temp file, then read back to pass as arg.
-  // Temp file ensures prompt survives intact (no encoding issues)
-  // and provides a clear path if claude CLI adds --system-prompt-file in future.
-  const tmpFile = join(tmpdir(), `reygent-prompt-${process.pid}-${Date.now()}.txt`);
-  writeFileSync(tmpFile, systemPrompt, "utf-8");
-
-  const prompt = readFileSync(tmpFile, "utf-8");
-  const promptBytes = Buffer.byteLength(prompt);
+  const promptBytes = Buffer.byteLength(systemPrompt);
 
   if (promptBytes > MAX_PROMPT_BYTES) {
-    unlinkSync(tmpFile);
     throw new TaskError(
       `System prompt too large (${promptBytes} bytes, limit ${MAX_PROMPT_BYTES}). ` +
       `Try a smaller spec or split into sections.`,
     );
   }
 
+  // Write prompt to temp file. Temp file path provides clear upgrade path
+  // if claude CLI adds --system-prompt-file option in future.
+  const tmpFile = join(tmpdir(), `reygent-prompt-${process.pid}-${Date.now()}.txt`);
+  writeFileSync(tmpFile, systemPrompt, "utf-8");
+
+  let cleanupDone = false;
   const cleanup = () => {
+    if (cleanupDone) return;
+    cleanupDone = true;
     try { unlinkSync(tmpFile); } catch {}
   };
 
   return new Promise((resolve, reject) => {
     const child = spawn(
       "claude",
-      ["--append-system-prompt", prompt, "--model", modelId],
+      ["--append-system-prompt", systemPrompt, "--model", modelId],
       { stdio: "inherit" },
     );
 
