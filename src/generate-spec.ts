@@ -1,4 +1,5 @@
 import { getAgents } from "./config.js";
+import { isDebug } from "./debug.js";
 import { extractJSON } from "./planner.js";
 import { spawnAgentStream } from "./spawn.js";
 import { TaskError } from "./task.js";
@@ -116,6 +117,13 @@ export async function runClarification(
     throw new TaskError("generate-spec: failed to parse clarification response as JSON");
   }
 
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (isDebug()) {
+      console.error("Clarification response malformed (not an object), falling back to ready. Raw:", raw);
+    }
+    return { ready: true };
+  }
+
   const obj = parsed as Record<string, unknown>;
 
   if (obj.ready === true) {
@@ -133,6 +141,9 @@ export async function runClarification(
   }
 
   // Default to ready if response doesn't match expected shapes
+  if (isDebug()) {
+    console.error("Clarification response didn't match expected shape, falling back to ready. Parsed:", parsed);
+  }
   return { ready: true };
 }
 
