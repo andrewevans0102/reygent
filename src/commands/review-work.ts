@@ -21,6 +21,11 @@ import { TaskError } from "../task.js";
 
 interface ReviewWorkOptions {
   spec?: string;
+  /**
+   * Skip SSL certificate verification for API calls.
+   * Note: Only applies to GitLab MR detection/posting via HTTPS API.
+   * Does not affect gh CLI operations (GitHub PR workflow).
+   */
   insecure?: boolean;
 }
 
@@ -32,7 +37,7 @@ function exec(
     execFile(
       cmd,
       args,
-      { maxBuffer: 10 * 1024 * 1024 },
+      { maxBuffer: 50 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) {
           reject(
@@ -50,7 +55,7 @@ function exec(
 
 async function getCurrentBranch(): Promise<string> {
   const branch = (await exec("git", ["branch", "--show-current"])).trim();
-  if (!branch) {
+  if (!branch || !branch.trim()) {
     throw new TaskError("review-work: not on a branch (detached HEAD?)");
   }
   return branch;
@@ -283,9 +288,9 @@ async function runAgentReview(
   spec?: { title: string; content: string },
 ): Promise<PRReviewOutput> {
   const agents = getAgents();
-  const agent = agents.find((a) => a.name === "pr-reviewer");
+  const agent = agents.find((a) => a.role === "reviewer");
   if (!agent) {
-    throw new TaskError("review-work: missing pr-reviewer agent config");
+    throw new TaskError("review-work: no agent with role 'reviewer' found in config");
   }
 
   const prompt = buildReviewPrompt(agent.systemPrompt, diff, spec);
@@ -365,11 +370,6 @@ export async function reviewWorkCommand(
           results: [],
         };
 
-        // Suppress plan fields when no spec provided
-        if (!spec) {
-          context.plan = undefined;
-        }
-
         console.log();
         const reviewSpinner = ora("Running PR review...").start();
         const { output } = await runPRReview(context, { quiet: true });
@@ -411,7 +411,11 @@ export async function reviewWorkCommand(
       let token: string;
       try {
         token = await resolveToken(remote.host);
-      } catch {
+      } catch (err) {
+        if (isDebug()) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(chalk.gray(`[debug] Token resolution failed: ${msg}`));
+        }
         spinner.info(chalk.yellow("Could not resolve GitLab token — skipping MR detection"));
         token = "";
       }

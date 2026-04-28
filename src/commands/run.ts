@@ -1,7 +1,9 @@
 import { createInterface } from "node:readline";
 import chalk from "chalk";
 import ora from "ora";
+import { select, input } from "@inquirer/prompts";
 import { isDebug } from "../debug.js";
+import { loadEnvFile } from "../env.js";
 import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import type { FailureContext } from "../implement.js";
@@ -17,7 +19,7 @@ import { UsageTracker, printUsageSummary, printVerboseUsage } from "../usage.js"
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
 interface RunOptions {
-  spec: string;
+  spec?: string;
   dryRun: boolean;
   securityThreshold: string;
   autoApprove: boolean;
@@ -129,9 +131,87 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
   process.exit(1);
 }
 
+async function promptLinearSpec(): Promise<string> {
+  loadEnvFile();
+  if (!process.env.LINEAR_API_KEY) {
+    console.log(chalk.red.bold("Error:"), "LINEAR_API_KEY not set. Add it to your .env file.");
+    process.exit(1);
+  }
+  const value = await input({
+    message: "Linear issue URL or ID (e.g. https://linear.app/team/ENG-123 or ENG-123):",
+    validate: (v) => {
+      const trimmed = v.trim();
+      if (!trimmed) return "Required";
+      if (/^https:\/\/linear\.app\/.+/.test(trimmed)) return true;
+      if (/^[A-Z]+-\d+$/i.test(trimmed)) return true;
+      return "Enter a Linear URL or issue ID (e.g. ENG-123)";
+    },
+  });
+  return value.trim();
+}
+
+async function promptJiraSpec(): Promise<string> {
+  loadEnvFile();
+  const missing: string[] = [];
+  if (!process.env.JIRA_URL) missing.push("JIRA_URL");
+  if (!process.env.JIRA_EMAIL) missing.push("JIRA_EMAIL");
+  if (!process.env.JIRA_API_TOKEN) missing.push("JIRA_API_TOKEN");
+  if (missing.length > 0) {
+    console.log(chalk.red.bold("Error:"), `Missing env vars: ${missing.join(", ")}. Add them to your .env file.`);
+    process.exit(1);
+  }
+  const value = await input({
+    message: "Jira issue key (e.g. PROJ-123):",
+    validate: (v) => {
+      const trimmed = v.trim();
+      if (!trimmed) return "Required";
+      if (/^[A-Z]+-\d+$/i.test(trimmed)) return true;
+      return "Enter a Jira issue key (e.g. PROJ-123)";
+    },
+  });
+  return value.trim();
+}
+
+async function promptMarkdownSpec(): Promise<string> {
+  const value = await input({
+    message: "Path to markdown spec file:",
+    validate: (v) => (v.trim() ? true : "Required"),
+  });
+  return value.trim();
+}
+
+async function promptForSpec(): Promise<string> {
+  const source = await select({
+    message: "Where is the workflow spec?",
+    choices: [
+      { name: "Local Markdown file", value: "markdown" },
+      { name: "Linear issue", value: "linear" },
+      { name: "Jira issue", value: "jira" },
+    ],
+  });
+
+  switch (source) {
+    case "linear":
+      return promptLinearSpec();
+    case "jira":
+      return promptJiraSpec();
+    case "markdown":
+    default:
+      return promptMarkdownSpec();
+  }
+}
+
 export async function runCommand(options: RunOptions): Promise<void> {
   try {
-    const spec = await loadSpec(options.spec);
+    let specSource = options.spec;
+    if (!specSource) {
+      if (!process.stdin.isTTY) {
+        console.log(chalk.red.bold("Error:"), "--spec is required in non-interactive environments.");
+        process.exit(1);
+      }
+      specSource = await promptForSpec();
+    }
+    const spec = await loadSpec(specSource);
 
     if (options.dryRun) {
       console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
@@ -574,6 +654,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
       printVerboseUsage(tracker);
     }
   } catch (err) {
+    if (err instanceof Error && err.name === "ExitPromptError") {
+      process.exit(0);
+    }
     if (err instanceof SpecError || err instanceof TaskError) {
       console.log(chalk.red.bold("Error:"), err.message);
       if (isDebug()) console.error(err.stack);

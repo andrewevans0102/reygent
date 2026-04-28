@@ -62,7 +62,7 @@ program
 program
   .command("run")
   .description("Run the reygent workflow from spec to reviewed PR")
-  .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
+  .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL (prompts if omitted in interactive mode)")
   .option("--dry-run", "Preview workflow stages without executing", false)
   .option("--security-threshold <level>", "Minimum severity to fail security review (CRITICAL, HIGH, MEDIUM, LOW)", "HIGH")
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
