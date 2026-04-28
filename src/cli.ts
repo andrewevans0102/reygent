@@ -13,6 +13,7 @@ import { runCommand } from "./commands/run.js";
 import { initCommand } from "./commands/init.js";
 import { registerSkillsCommand } from "./commands/skills.js";
 import { reviewWorkCommand } from "./commands/review-work.js";
+import { reviewCommentsCommand } from "./commands/review-comments.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -78,6 +79,13 @@ program
   .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
   .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .action(reviewWorkCommand);
+
+program
+  .command("review-comments")
+  .description("Fetch PR/MR review comments and address them with an agent")
+  .option("--insecure", "Skip SSL certificate verification for API calls", false)
+  .option("--auto-approve", "Auto-approve plan and execute without prompting", false)
+  .action(reviewCommentsCommand);
 
 registerSkillsCommand(program);
 
