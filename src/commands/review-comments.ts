@@ -38,7 +38,7 @@ function exec(cmd: string, args: string[]): Promise<string> {
         if (error) {
           reject(
             new TaskError(
-              `review-comments: command failed: ${cmd} ${args.join(" ")}\n${stderr || error.message}`,
+              `review-comments: command failed: ${cmd} ${args.join(" ")}\n${stderr || stdout || error.message}`,
             ),
           );
           return;
