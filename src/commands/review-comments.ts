@@ -676,7 +676,8 @@ export async function reviewCommentsCommand(
     const execSpinner = ora("Running dev agent to address comments...").start();
     execSpinner.stop();
 
-    await executeWithDevAgent(comments, plan, options.autoApprove);
+    // User approved the plan (or --auto-approve was set), so dev agent can write freely
+    await executeWithDevAgent(comments, plan, true);
 
     // 11. Commit and push changes
     console.log();
@@ -687,13 +688,19 @@ export async function reviewCommentsCommand(
       await exec("git", ["push", "origin", branch]);
       pushSpinner.succeed(chalk.green("Changes committed and pushed."));
     } catch (pushErr) {
-      // If nothing to commit, that's fine — agent may have committed already
       const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
       if (msg.includes("nothing to commit")) {
-        // Still try to push in case agent committed but didn't push
+        // Agent may have committed already — check if we have unpushed commits
         try {
-          await exec("git", ["push", "origin", branch]);
-          pushSpinner.succeed(chalk.green("Changes pushed."));
+          const { stdout: ahead } = await exec("git", [
+            "rev-list", "--count", `origin/${branch}..HEAD`,
+          ]);
+          if (parseInt(ahead.trim(), 10) > 0) {
+            await exec("git", ["push", "origin", branch]);
+            pushSpinner.succeed(chalk.green("Changes pushed."));
+          } else {
+            pushSpinner.warn(chalk.yellow("No changes were made by the dev agent."));
+          }
         } catch {
           pushSpinner.warn(chalk.yellow("Nothing to commit or push."));
         }
