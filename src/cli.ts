@@ -12,6 +12,7 @@ import { specCommand } from "./commands/spec.js";
 import { runCommand } from "./commands/run.js";
 import { initCommand } from "./commands/init.js";
 import { registerSkillsCommand } from "./commands/skills.js";
+import { reviewWorkCommand } from "./commands/review-work.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -61,7 +62,7 @@ program
 program
   .command("run")
   .description("Run the reygent workflow from spec to reviewed PR")
-  .requiredOption("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
+  .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
   .option("--dry-run", "Preview workflow stages without executing", false)
   .option("--security-threshold <level>", "Minimum severity to fail security review (CRITICAL, HIGH, MEDIUM, LOW)", "HIGH")
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
@@ -70,6 +71,13 @@ program
   .option("--max-retries <count>", "Max retry attempts when gate tests fail", "2")
   .option("--verbose", "Show detailed per-agent token and cost breakdown", false)
   .action(runCommand);
+
+program
+  .command("review-work")
+  .description("Review current branch and post summary to PR/MR")
+  .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
+  .option("--insecure", "Skip SSL certificate verification for API calls", false)
+  .action(reviewWorkCommand);
 
 registerSkillsCommand(program);
 
