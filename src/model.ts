@@ -1,5 +1,3 @@
-import { select } from "@inquirer/prompts";
-import chalk from "chalk";
 import { loadConfig } from "./config.js";
 import { TaskError } from "./task.js";
 import { getProvider } from "./providers/index.js";
@@ -85,42 +83,13 @@ export function getModel(providerName?: string): string | null {
 }
 
 /**
- * Interactive arrow-key picker. Shows models from resolved provider.
- */
-export async function promptModelSelection(providerName?: string): Promise<string> {
-  const name = providerName ?? resolveProvider();
-  const provider = getProvider(name);
-
-  const selected = await select({
-    message: `Select ${name} model:`,
-    choices: provider.supportedModels.map((m) => ({
-      name: m.label,
-      value: m.id,
-    })),
-    default: provider.defaultModel,
-  });
-  setModelOverride(selected);
-  console.log(chalk.gray(`Using model: ${selected}\n`));
-  return selected;
-}
-
-/**
- * Resolve model: override → config → provider default (for non-interactive) → interactive picker.
+ * Resolve model: override → config → provider default.
  */
 export async function resolveModel(providerName?: string): Promise<string> {
   const name = providerName ?? resolveProvider();
   const model = getModel(name);
   if (model) return model;
 
-  // For non-interactive or non-TTY, use provider default
-  if (!process.stdin.isTTY) {
-    return getProvider(name).defaultModel;
-  }
-
-  // OpenRouter accepts any model — no interactive picker, use default
-  if (name === "openrouter") {
-    return getProvider(name).defaultModel;
-  }
-
-  return promptModelSelection(name);
+  // Use provider default when no explicit model configured
+  return getProvider(name).defaultModel;
 }
