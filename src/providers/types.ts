@@ -4,6 +4,7 @@ export type ProviderName = "claude" | "gemini" | "codex" | "openrouter";
 
 export interface SpawnAdapterOptions {
   prompt: string;
+  systemPrompt?: string;
   model: string;
   autoApprove?: boolean;
   quiet?: boolean;

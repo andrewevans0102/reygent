@@ -48,9 +48,6 @@ export const geminiAdapter: ProviderAdapter = {
       if (options.model) {
         args.push("--model", options.model);
       }
-      if (options.autoApprove) {
-        args.push("--sandbox=false");
-      }
 
       const name = options.agentName;
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
@@ -98,9 +95,11 @@ export const geminiAdapter: ProviderAdapter = {
 
   async spawnInteractive(systemPrompt: string, model: string): Promise<number> {
     return new Promise((resolve, reject) => {
+      // Gemini CLI has no --system-prompt flag; use -i to inject instructions
+      // then continue interactively
       const child = spawn(
         "gemini",
-        ["--model", model, "--system-prompt", systemPrompt],
+        ["--model", model, "-i", `Follow these instructions for this session:\n\n${systemPrompt}`],
         { stdio: "inherit" },
       );
 

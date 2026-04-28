@@ -2,7 +2,7 @@ import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { loadConfig } from "./config.js";
 import { TaskError } from "./task.js";
-import { getProvider, PROVIDER_NAMES } from "./providers/index.js";
+import { getProvider } from "./providers/index.js";
 import type { ModelEntry } from "./providers/types.js";
 
 // Re-export for backward compat

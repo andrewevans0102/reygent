@@ -44,7 +44,7 @@ export const codexAdapter: ProviderAdapter = {
 
   async spawn(options: SpawnAdapterOptions): Promise<SpawnResult> {
     return new Promise((resolve, reject) => {
-      const args = ["-p", options.prompt, "--output-format", "json"];
+      const args = ["exec", options.prompt, "--json"];
       if (options.model) {
         args.push("--model", options.model);
       }
@@ -96,9 +96,10 @@ export const codexAdapter: ProviderAdapter = {
 
   async spawnInteractive(systemPrompt: string, model: string): Promise<number> {
     return new Promise((resolve, reject) => {
+      // Codex CLI has no --system-prompt flag; pass instructions as initial prompt
       const child = spawn(
         "codex",
-        ["--model", model, "--system-prompt", systemPrompt],
+        ["--model", model, systemPrompt],
         { stdio: "inherit" },
       );
 

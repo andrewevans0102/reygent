@@ -2,12 +2,9 @@ import chalk from "chalk";
 import { TaskError } from "../task.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
-const SUPPORTED_MODELS: ModelEntry[] = [
-  { id: "anthropic/claude-sonnet-4-5", label: "Claude Sonnet 4.5 via OpenRouter" },
-  { id: "anthropic/claude-opus-4-6", label: "Claude Opus 4.6 via OpenRouter" },
-  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro via OpenRouter" },
-  { id: "openai/o3", label: "OpenAI o3 via OpenRouter" },
-];
+// OpenRouter supports 200+ models — no whitelist needed.
+// model.ts already special-cases openrouter to skip validation.
+const SUPPORTED_MODELS: ModelEntry[] = [];
 
 const SHORT_ALIASES: Record<string, string> = {};
 
@@ -41,10 +38,12 @@ export const openrouterAdapter: ProviderAdapter = {
     const name = options.agentName;
 
     // Warn about file system limitations for agents with write tools
-    console.log(
-      chalk.yellow(`[${name}] Warning: OpenRouter is an API provider — no file system access. `) +
-      chalk.yellow(`Tool calls (Bash, Write, Edit) will not work.`),
-    );
+    if (!options.quiet) {
+      console.error(
+        chalk.yellow(`[${name}] Warning: OpenRouter is an API provider — no file system access. `) +
+        chalk.yellow(`Tool calls (Bash, Write, Edit) will not work.`),
+      );
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
@@ -61,6 +60,9 @@ export const openrouterAdapter: ProviderAdapter = {
         body: JSON.stringify({
           model: options.model,
           messages: [
+            ...(options.systemPrompt
+              ? [{ role: "system", content: options.systemPrompt }]
+              : []),
             { role: "user", content: options.prompt },
           ],
         }),
@@ -103,7 +105,7 @@ export const openrouterAdapter: ProviderAdapter = {
     }
   },
 
-  async spawnInteractive(): Promise<number> {
+  async spawnInteractive(_systemPrompt: string, _model: string): Promise<number> {
     throw new TaskError(
       "OpenRouter is an API provider and does not support interactive sessions. " +
       "Use a CLI provider (claude, gemini, codex) for interactive mode.",

@@ -1,8 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { writeFileSync, unlinkSync } from "node:fs";
-import { constants, tmpdir } from "node:os";
-import { join } from "node:path";
+import { constants } from "node:os";
 import chalk from "chalk";
 import { TaskError } from "../task.js";
 import type { UsageInfo } from "../usage.js";
@@ -220,16 +218,6 @@ export const claudeAdapter: ProviderAdapter = {
       );
     }
 
-    const tmpFile = join(tmpdir(), `reygent-prompt-${process.pid}-${Date.now()}.txt`);
-    writeFileSync(tmpFile, systemPrompt, "utf-8");
-
-    let cleanupDone = false;
-    const cleanup = () => {
-      if (cleanupDone) return;
-      cleanupDone = true;
-      try { unlinkSync(tmpFile); } catch {}
-    };
-
     return new Promise((resolve, reject) => {
       const child = spawn(
         "claude",
@@ -238,16 +226,14 @@ export const claudeAdapter: ProviderAdapter = {
       );
 
       child.on("error", (err) => {
-        cleanup();
         reject(
           new TaskError(
-            `Failed to start claude CLI: ${err.message}. Is claude installed?`,
+            `Failed to start ${this.name} CLI: ${err.message}. Is ${this.name} installed?`,
           ),
         );
       });
 
       child.on("close", (code, signal) => {
-        cleanup();
         if (signal) {
           const sigNum = constants.signals[signal];
           resolve(sigNum ? 128 + sigNum : 1);
