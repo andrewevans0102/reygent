@@ -2,46 +2,57 @@ import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { loadConfig } from "./config.js";
 import { TaskError } from "./task.js";
+import { getProvider } from "./providers/index.js";
+import type { ModelEntry } from "./providers/types.js";
 
-export interface ModelEntry {
-  id: string;
-  label: string;
-}
+// Re-export for backward compat
+export type { ModelEntry };
 
-export const SUPPORTED_MODELS: ModelEntry[] = [
-  { id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5 (recommended)" },
-  { id: "claude-opus-4-6", label: "Opus 4.6" },
-  { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
-];
-
-const SHORT_ALIASES: Record<string, string> = {
-  "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
-  "claude-haiku-4-5": "claude-haiku-4-5-20251001",
-};
-
-export const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
+// Legacy exports — delegate to Claude adapter
+export const SUPPORTED_MODELS: ModelEntry[] = getProvider("claude").supportedModels;
+export const DEFAULT_MODEL = getProvider("claude").defaultModel;
 
 let modelOverride: string | null = null;
+let providerOverride: string | null = null;
 
 export function setModelOverride(id: string): void {
   modelOverride = id;
 }
 
-export function resolveAlias(id: string): string {
-  return SHORT_ALIASES[id] ?? id;
+export function setProviderOverride(name: string): void {
+  providerOverride = name;
 }
 
-export function validateModel(id: string): string {
-  const resolved = resolveAlias(id);
-  const valid = SUPPORTED_MODELS.some((m) => m.id === resolved);
+/**
+ * Resolve alias for a given provider. Falls back to identity if no alias found.
+ */
+export function resolveAlias(id: string, providerName?: string): string {
+  const provider = getProvider(providerName ?? resolveProvider());
+  return provider.shortAliases[id] ?? id;
+}
+
+/**
+ * Validate model ID against a provider's supported models.
+ * If provider not specified, uses resolved provider.
+ * Pass-through providers (openrouter) accept any model.
+ */
+export function validateModel(id: string, providerName?: string): string {
+  const name = providerName ?? resolveProvider();
+  const provider = getProvider(name);
+  const resolved = provider.shortAliases[id] ?? id;
+
+  // OpenRouter accepts any model slug — pass-through
+  if (name === "openrouter") return resolved;
+
+  const valid = provider.supportedModels.some((m) => m.id === resolved);
   if (!valid) {
-    const list = SUPPORTED_MODELS.map((m) => `  ${m.id} — ${m.label}`).join("\n");
-    const aliases = Object.entries(SHORT_ALIASES)
+    const list = provider.supportedModels.map((m) => `  ${m.id} — ${m.label}`).join("\n");
+    const aliases = Object.entries(provider.shortAliases)
       .map(([alias, full]) => `  ${alias} → ${full}`)
       .join("\n");
-    throw new TaskError(
-      `Unknown model: ${id}\n\nSupported models:\n${list}\n\nShort aliases:\n${aliases}`,
-    );
+    let msg = `Unknown model: ${id}\n\nSupported models for ${name}:\n${list}`;
+    if (aliases) msg += `\n\nShort aliases:\n${aliases}`;
+    throw new TaskError(msg);
   }
   return resolved;
 }
@@ -52,28 +63,41 @@ export function getConfigModel(): string | null {
 }
 
 /**
+ * Resolve provider: CLI flag → config → "claude"
+ */
+export function resolveProvider(agentProvider?: string): string {
+  if (agentProvider) return agentProvider;
+  if (providerOverride) return providerOverride;
+  const config = loadConfig();
+  return config.provider ?? "claude";
+}
+
+/**
  * Get model from override or config. Returns null if neither set.
  */
-export function getModel(): string | null {
+export function getModel(providerName?: string): string | null {
   if (modelOverride) return modelOverride;
   const configModel = getConfigModel();
   if (configModel) {
-    return validateModel(configModel);
+    return validateModel(configModel, providerName);
   }
   return null;
 }
 
 /**
- * Interactive arrow-key picker. Shown once per invocation when no model configured.
+ * Interactive arrow-key picker. Shows models from resolved provider.
  */
-export async function promptModelSelection(): Promise<string> {
+export async function promptModelSelection(providerName?: string): Promise<string> {
+  const name = providerName ?? resolveProvider();
+  const provider = getProvider(name);
+
   const selected = await select({
-    message: "Select Claude model:",
-    choices: SUPPORTED_MODELS.map((m) => ({
+    message: `Select ${name} model:`,
+    choices: provider.supportedModels.map((m) => ({
       name: m.label,
       value: m.id,
     })),
-    default: DEFAULT_MODEL,
+    default: provider.defaultModel,
   });
   setModelOverride(selected);
   console.log(chalk.gray(`Using model: ${selected}\n`));
@@ -81,15 +105,22 @@ export async function promptModelSelection(): Promise<string> {
 }
 
 /**
- * Resolve model: override → config → interactive picker.
+ * Resolve model: override → config → provider default (for non-interactive) → interactive picker.
  */
-export async function resolveModel(): Promise<string> {
-  const model = getModel();
+export async function resolveModel(providerName?: string): Promise<string> {
+  const name = providerName ?? resolveProvider();
+  const model = getModel(name);
   if (model) return model;
+
+  // For non-interactive or non-TTY, use provider default
   if (!process.stdin.isTTY) {
-    throw new TaskError(
-      "No model configured. Pass --model <id> or set \"model\" in .reygent/config.json",
-    );
+    return getProvider(name).defaultModel;
   }
-  return promptModelSelection();
+
+  // OpenRouter accepts any model — no interactive picker, use default
+  if (name === "openrouter") {
+    return getProvider(name).defaultModel;
+  }
+
+  return promptModelSelection(name);
 }

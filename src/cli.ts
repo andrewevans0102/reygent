@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { setDebug } from "./debug.js";
-import { setModelOverride, validateModel } from "./model.js";
+import { setModelOverride, setProviderOverride, validateModel } from "./model.js";
+import { getProvider, PROVIDER_NAMES } from "./providers/index.js";
 import { agentCommand } from "./commands/agent.js";
 import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
@@ -24,7 +25,8 @@ program
   .description("Reygent CLI tool")
   .version(pkg.version)
   .option("--debug", "Show full stack traces on errors (or set REYGENT_DEBUG=1)")
-  .option("--model <id>", "Anthropic model ID (e.g. claude-sonnet-4-5, claude-opus-4-6)")
+  .option("--model <id>", "Model ID (e.g. claude-sonnet-4-5, gemini-2.5-pro, o4-mini)")
+  .option("--provider <name>", `AI provider (${PROVIDER_NAMES.join(", ")})`)
   .addHelpText("after", `
 ${chalk.yellow("Disclaimer:")} This software is provided "as is" with no warranty. AI-generated output should be reviewed by a human. See LICENSE for full terms.`);
 
@@ -82,15 +84,28 @@ if (!isHelpOrVersion) {
   console.log(chalk.bold.cyan(`\nreygent`) + chalk.gray(` v${pkg.version}`) + "\n");
 }
 
-// Set debug flag and model override before any command action runs
+// Set debug flag, provider, and model override before any command action runs
 program.hook("preAction", () => {
   if (program.opts().debug) {
     setDebug(true);
   }
+
+  const providerFlag = program.opts().provider;
+  if (providerFlag) {
+    try {
+      // Validate provider name
+      getProvider(providerFlag);
+      setProviderOverride(providerFlag);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      program.error(message);
+    }
+  }
+
   const modelFlag = program.opts().model;
   if (modelFlag) {
     try {
-      const resolved = validateModel(modelFlag);
+      const resolved = validateModel(modelFlag, providerFlag);
       setModelOverride(resolved);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
