@@ -174,12 +174,39 @@ export function formatPRReviewOutput(output: PRReviewOutput): string {
   return lines.join("\n");
 }
 
+function wrapText(text: string, indent: number, maxWidth: number): string {
+  const cols = maxWidth;
+  const available = cols - indent;
+  if (available <= 20 || text.length <= available) return text;
+
+  const words = text.split(" ");
+  const wrappedLines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (currentLine.length === 0) {
+      currentLine = word;
+    } else if (currentLine.length + 1 + word.length <= available) {
+      currentLine += " " + word;
+    } else {
+      wrappedLines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) wrappedLines.push(currentLine);
+
+  const pad = " ".repeat(indent);
+  return wrappedLines.join("\n" + pad);
+}
+
 export function formatPRReviewTerminal(output: PRReviewOutput): string {
   const lines: string[] = [];
+  const cols = process.stdout.columns || 80;
 
   lines.push("");
   lines.push(chalk.cyan.bold("Summary"));
-  lines.push(`  ${output.summary}`);
+  //  summary indent = 2
+  lines.push(`  ${wrapText(output.summary, 2, cols)}`);
   lines.push("");
 
   if (output.comments.length > 0) {
@@ -192,11 +219,20 @@ export function formatPRReviewTerminal(output: PRReviewOutput): string {
       byFile.set(c.file, group);
     }
 
+    // comment text indent = 6 (4 spaces + bullet + space)
+    const commentIndent = 6;
     for (const [file, comments] of byFile) {
+      lines.push("");
       lines.push(`  ${chalk.bold(file)}`);
       for (const c of comments) {
-        const lineRef = c.line !== null ? chalk.gray(`:${c.line}`) : "";
-        lines.push(`    ${chalk.yellow("•")} ${lineRef}${lineRef ? " " : ""}${c.comment}`);
+        const lineRef = c.line !== null ? `:${c.line}` : "";
+        const prefix = lineRef ? `${lineRef} ` : "";
+        const wrapped = wrapText(prefix + c.comment, commentIndent, cols);
+        // Re-apply chalk to the line ref portion of first line
+        const display = c.line !== null
+          ? chalk.gray(`:${c.line}`) + " " + wrapped.slice(prefix.length)
+          : wrapped;
+        lines.push(`    ${chalk.yellow("•")} ${display}`);
       }
     }
     lines.push("");
@@ -204,8 +240,10 @@ export function formatPRReviewTerminal(output: PRReviewOutput): string {
 
   if (output.recommendedActions.length > 0) {
     lines.push(chalk.cyan.bold("Recommended Actions:"));
+    lines.push("");
+    // action indent = 4 (2 spaces + dash + space)
     for (const action of output.recommendedActions) {
-      lines.push(`  ${chalk.gray("-")} ${action}`);
+      lines.push(`  ${chalk.gray("-")} ${wrapText(action, 4, cols)}`);
     }
   }
 
