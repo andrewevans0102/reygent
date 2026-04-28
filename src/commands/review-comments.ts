@@ -692,7 +692,7 @@ export async function reviewCommentsCommand(
       if (msg.includes("nothing to commit")) {
         // Agent may have committed already — check if we have unpushed commits
         try {
-          const { stdout: ahead } = await exec("git", [
+          const ahead = await exec("git", [
             "rev-list", "--count", `origin/${branch}..HEAD`,
           ]);
           if (parseInt(ahead.trim(), 10) > 0) {
