@@ -678,6 +678,30 @@ export async function reviewCommentsCommand(
 
     await executeWithDevAgent(comments, plan, options.autoApprove);
 
+    // 11. Commit and push changes
+    console.log();
+    const pushSpinner = ora("Committing and pushing changes...").start();
+    try {
+      await exec("git", ["add", "-A"]);
+      await exec("git", ["commit", "-m", "fix: address PR review comments"]);
+      await exec("git", ["push", "origin", branch]);
+      pushSpinner.succeed(chalk.green("Changes committed and pushed."));
+    } catch (pushErr) {
+      // If nothing to commit, that's fine — agent may have committed already
+      const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+      if (msg.includes("nothing to commit")) {
+        // Still try to push in case agent committed but didn't push
+        try {
+          await exec("git", ["push", "origin", branch]);
+          pushSpinner.succeed(chalk.green("Changes pushed."));
+        } catch {
+          pushSpinner.warn(chalk.yellow("Nothing to commit or push."));
+        }
+      } else {
+        pushSpinner.fail(chalk.red(`Push failed: ${msg}`));
+      }
+    }
+
     console.log();
     console.log(chalk.green.bold("  Done!"), chalk.gray("Review comments addressed."));
     console.log();
