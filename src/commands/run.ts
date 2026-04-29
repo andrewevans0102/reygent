@@ -405,6 +405,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         for (const c of plan.constraints) console.log(`  ${chalk.gray("-")} ${c}`);
         console.log(chalk.cyan("\nDefinition of Done:"));
         for (const d of plan.dod) console.log(`  ${chalk.gray("-")} ${d}`);
+        console.log();
 
         context.results.push({
           stage: stage.name,
