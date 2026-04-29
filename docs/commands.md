@@ -4,6 +4,29 @@ All available CLI commands with options, arguments, and usage examples.
 
 ---
 
+## Global Flags
+
+These flags apply to all commands:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model <id>` | Provider default | Override the AI model (e.g., `claude-opus-4-6`, `gemini-2.5-pro`) |
+| `--provider <name>` | `claude` | AI provider: `claude`, `gemini`, `codex`, `openrouter` |
+| `--debug` | `false` | Show full stack traces on errors |
+
+```bash
+# Use a different model
+reygent run --spec spec.md --model claude-opus-4-6
+
+# Use a different provider
+reygent agent dev --provider gemini
+
+# Debug mode for troubleshooting
+reygent run --spec spec.md --debug
+```
+
+---
+
 ## `reygent init`
 
 Initialize a `.reygent/` config folder in your project.
@@ -126,6 +149,7 @@ reygent run --spec <source> [options]
 | `--insecure` | `false` | Skip SSL certificate verification for API calls |
 | `--skip-clarification` | `false` | Skip planner clarification questions; make assumptions instead |
 | `--max-retries <count>` | `2` | Maximum retry attempts when gate tests fail |
+| `--verbose` | `false` | Show detailed token/cost breakdown per agent, including input/output tokens and estimated cost |
 
 **Examples:**
 
@@ -147,6 +171,19 @@ reygent run --spec feature.md --max-retries 5
 
 # Corporate network with self-signed certs
 reygent run --spec feature.md --insecure
+
+# Show detailed token/cost breakdown
+reygent run --spec feature.md --verbose
+```
+
+**Verbose output example:**
+
+```
+[dev] Input tokens: 12,345 | Output tokens: 3,456 | Cost: $0.15
+[qe] Input tokens: 8,901 | Output tokens: 2,345 | Cost: $0.09
+[planner] Input tokens: 5,678 | Output tokens: 1,234 | Cost: $0.06
+---
+Total cost: $0.30
 ```
 
 ### Reygent Workflow Stages
@@ -168,6 +205,91 @@ When running without `--auto-approve`, you'll be prompted for:
 2. **Clarification preference** — whether the planner should ask questions or make assumptions
 3. **Retry decisions** — when a test gate fails, whether to retry
 4. **Security bypass** — when the security review fails, whether to continue
+
+---
+
+## `reygent review-work`
+
+Review the current branch's changes and optionally post the review to an open PR or MR.
+
+```bash
+reygent review-work [--spec <source>] [--insecure]
+```
+
+| Option | Description |
+|---|---|
+| `--spec <source>` | Optional spec to review the diff against (provides context for the review) |
+| `--insecure` | Skip SSL certificate verification for GitLab API calls |
+
+**What it does:**
+
+1. Detects the current branch and git platform (GitHub or GitLab)
+2. Checks for an open PR/MR on the current branch
+3. Gets the diff between the current branch and the default branch
+4. Runs the `pr-reviewer` agent to review the diff
+5. If a PR/MR exists, posts the review as a comment
+
+**Examples:**
+
+```bash
+# Review current branch
+reygent review-work
+
+# Review with spec context
+reygent review-work --spec feature-spec.md
+
+# Review on GitLab with self-signed certs
+reygent review-work --insecure
+```
+
+**Platform behavior:**
+
+- **GitHub:** Uses `gh pr view` to detect PRs and `gh pr comment` to post reviews
+- **GitLab:** Uses the GitLab API to detect MRs and post review notes
+- **No PR/MR found:** Review is printed to the console only
+
+---
+
+## `reygent review-comments`
+
+Fetch review comments from an open PR/MR and run the dev agent to address them.
+
+```bash
+reygent review-comments [--insecure] [--auto-approve]
+```
+
+| Option | Description |
+|---|---|
+| `--insecure` | Skip SSL certificate verification for GitLab API calls |
+| `--auto-approve` | Skip plan approval prompt and execute immediately |
+
+**What it does:**
+
+1. Detects the current branch and git platform
+2. Finds the open PR/MR and fetches all review comments
+3. Displays a summary of the comments
+4. Runs the planner agent to create a plan addressing the comments
+5. Presents the plan for approval (unless `--auto-approve`)
+6. Runs the dev agent to implement the fixes
+7. Commits and pushes the changes
+
+**Examples:**
+
+```bash
+# Address review comments interactively
+reygent review-comments
+
+# Fully autonomous — no approval prompt
+reygent review-comments --auto-approve
+
+# GitLab with self-signed certs
+reygent review-comments --insecure
+```
+
+**Approval loop:** When not using `--auto-approve`, you can:
+- **Approve** — execute the plan
+- **Provide feedback** — regenerate the plan with your notes
+- **Reject** — exit without changes
 
 ---
 

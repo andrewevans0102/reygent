@@ -49,11 +49,14 @@ src/
 ├── cli.ts              # Entry point, Commander setup, command registration
 ├── agents.ts           # AgentConfig interface + builtinAgents array
 ├── config.ts           # Config resolution (local .reygent/ → built-in fallback)
+├── debug.ts            # Debug flag management
 ├── env.ts              # .env file parser
+├── model.ts            # Model validation, provider resolution, aliases
+├── usage.ts            # Token/cost tracking and reporting
 ├── spec.ts             # Spec loading (markdown, Jira, Linear dispatch)
 ├── linear.ts           # Linear GraphQL API client
 ├── jira.ts             # Jira REST API client
-├── spawn.ts            # Claude CLI subprocess spawner + stream-json parser
+├── spawn.ts            # Agent spawner — delegates to provider adapter
 ├── task.ts             # Type definitions, TaskContext, PIPELINE constant
 ├── planner.ts          # Planner agent execution + JSON extraction
 ├── implement.ts        # Dev + QE agent orchestration (parallel/sequential)
@@ -62,12 +65,24 @@ src/
 ├── pr-create.ts        # Git operations + GitHub/GitLab API PR creation
 ├── pr-review.ts        # PR diff review + comment posting
 ├── generate-spec.ts    # Spec generation from description
+├── skills.ts           # Skill manifest parsing, discovery, validation
+├── registry.ts         # Remote skill registry client (GitHub-based)
+├── providers/
+│   ├── types.ts         # ProviderAdapter interface, SpawnAdapterOptions
+│   ├── index.ts         # Provider factory (getProvider), PROVIDER_NAMES
+│   ├── claude.ts        # Claude CLI adapter (stream-json parsing)
+│   ├── gemini.ts        # Gemini CLI adapter
+│   ├── codex.ts         # Codex CLI adapter
+│   └── openrouter.ts    # OpenRouter HTTP API adapter
 └── commands/
-    ├── init.ts          # `reygent init` handler
-    ├── agent.ts         # `reygent agent` handler (interactive sessions)
-    ├── spec.ts          # `reygent spec` handler
-    ├── generate-spec.ts # `reygent generate-spec` handler
-    └── run.ts           # `reygent run` handler (pipeline orchestrator)
+    ├── init.ts              # `reygent init` handler
+    ├── agent.ts             # `reygent agent` handler (interactive sessions)
+    ├── spec.ts              # `reygent spec` handler
+    ├── generate-spec.ts     # `reygent generate-spec` handler
+    ├── run.ts               # `reygent run` handler (pipeline orchestrator)
+    ├── review-work.ts       # `reygent review-work` handler
+    ├── review-comments.ts   # `reygent review-comments` handler
+    └── skills.ts            # `reygent skills` handler (list/add/remove)
 ```
 
 ## Entry Point: How a Command Starts
