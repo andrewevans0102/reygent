@@ -134,6 +134,7 @@ describe("generateSpec", () => {
       "generate-spec",
       expect.any(String),
       120_000,
+      { onActivity: undefined },
     );
   });
 

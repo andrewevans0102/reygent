@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { getAgents } from "./config.js";
 import { extractJSON } from "./planner.js";
+import type { ActivityEvent } from "./providers/types.js";
 import { spawnAgentStream } from "./spawn.js";
 import type { SpawnResult } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
@@ -20,6 +21,7 @@ const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
 export interface AgentSpawnOptions {
   autoApprove?: boolean;
   quiet?: boolean;
+  onActivity?: (event: ActivityEvent) => void;
 }
 
 export interface FailureContext {

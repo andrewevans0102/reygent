@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import chalk from "chalk";
+import { registerChild } from "../child-registry.js";
 import { TaskError } from "../task.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
@@ -52,6 +53,7 @@ export const geminiAdapter: ProviderAdapter = {
       const name = options.agentName;
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
       const child = spawn("gemini", args, { stdio: [stdinMode, "pipe", "pipe"] });
+      registerChild(child);
 
       let stdout = "";
 
@@ -68,7 +70,12 @@ export const geminiAdapter: ProviderAdapter = {
       child.stderr!.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
         stderrChunks.push(text);
-        process.stderr.write(`${chalk.gray(`[${name}]`)} ${text}`);
+        if (options.onActivity) {
+          const line = text.trim();
+          if (line) options.onActivity({ agent: name, detail: line.slice(0, 80) });
+        } else {
+          process.stderr.write(`${chalk.gray(`[${name}]`)} ${text}`);
+        }
       });
 
       child.on("error", (err) => {
@@ -102,6 +109,7 @@ export const geminiAdapter: ProviderAdapter = {
         ["--model", model, "-i", `Follow these instructions for this session:\n\n${systemPrompt}`],
         { stdio: "inherit" },
       );
+      registerChild(child);
 
       child.on("error", (err) => {
         reject(

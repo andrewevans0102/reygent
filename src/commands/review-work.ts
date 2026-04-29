@@ -6,6 +6,8 @@ import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
 import { loadEnvFile } from "../env.js";
 import { isDebug } from "../debug.js";
+import { createLiveStatus } from "../live-status.js";
+import type { ActivityEvent } from "../providers/types.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { parseRemote, resolveToken } from "../pr-create.js";
 import type { RemoteInfo } from "../pr-create.js";
@@ -286,6 +288,7 @@ ${diff}
 async function runAgentReview(
   diff: string,
   spec?: { title: string; content: string },
+  onActivity?: (event: ActivityEvent) => void,
 ): Promise<PRReviewOutput> {
   const agents = getAgents();
   const agent = agents.find((a) => a.role === "reviewer");
@@ -294,7 +297,7 @@ async function runAgentReview(
   }
 
   const prompt = buildReviewPrompt(agent.systemPrompt, diff, spec);
-  const result = await spawnAgent("pr-review", prompt, { quiet: true });
+  const result = await spawnAgent("pr-review", prompt, { quiet: true, onActivity });
 
   if (result.exitCode !== 0) {
     throw new TaskError(
@@ -371,9 +374,9 @@ export async function reviewWorkCommand(
         };
 
         console.log();
-        const reviewSpinner = ora("Running PR review...").start();
-        const { output } = await runPRReview(context, { quiet: true });
-        reviewSpinner.succeed(chalk.green("Review complete"));
+        const prReviewStatus = createLiveStatus("Running PR review...");
+        const { output } = await runPRReview(context, { quiet: true, onActivity: prReviewStatus.onActivity });
+        prReviewStatus.succeed(chalk.green("Review complete"));
 
         console.log(formatPRReviewTerminal(output));
         console.log();
@@ -397,9 +400,9 @@ export async function reviewWorkCommand(
           return;
         }
 
-        const reviewSpinner = ora("Running review...").start();
-        const output = await runAgentReview(diff, spec);
-        reviewSpinner.succeed(chalk.green("Review complete"));
+        const reviewStatus = createLiveStatus("Running review...");
+        const output = await runAgentReview(diff, spec, reviewStatus.onActivity);
+        reviewStatus.succeed(chalk.green("Review complete"));
 
         console.log(formatPRReviewTerminal(output));
         console.log();
@@ -437,9 +440,9 @@ export async function reviewWorkCommand(
       }
 
       console.log();
-      const reviewSpinner = ora("Running review...").start();
-      const output = await runAgentReview(diff, spec);
-      reviewSpinner.succeed(chalk.green("Review complete"));
+      const glReviewStatus = createLiveStatus("Running review...");
+      const output = await runAgentReview(diff, spec, glReviewStatus.onActivity);
+      glReviewStatus.succeed(chalk.green("Review complete"));
 
       console.log(formatPRReviewTerminal(output));
       console.log();

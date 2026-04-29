@@ -1,4 +1,5 @@
 import { getAgents } from "./config.js";
+import type { ActivityEvent } from "./providers/types.js";
 import { spawnAgentStream } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
 import type { PlannerOutput, PlannerClarification, PlannerResult } from "./task.js";
@@ -33,6 +34,7 @@ export function extractJSON(text: string): string {
 
 export interface PlannerOptions {
   makeAssumptions?: boolean;
+  onActivity?: (event: ActivityEvent) => void;
 }
 
 function buildPrompt(spec: SpecPayload, previousAnswers?: string, options?: PlannerOptions): string {
@@ -110,7 +112,7 @@ export async function runPlanner(
   options?: PlannerOptions,
 ): Promise<{ result: PlannerResult; usage?: UsageInfo }> {
   const prompt = buildPrompt(spec, previousAnswers, options);
-  const { stdout: raw, exitCode, usage } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true });
+  const { stdout: raw, exitCode, usage } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true, onActivity: options?.onActivity });
 
   if (exitCode !== 0) {
     throw new TaskError(`Planner: agent exited with code ${exitCode}`);

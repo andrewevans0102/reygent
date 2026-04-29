@@ -95,6 +95,7 @@ describe("spawnAgentStream", () => {
       quiet: true,
       timeoutMs: 60_000,
       agentName: "dev",
+      onActivity: undefined,
     });
   });
 

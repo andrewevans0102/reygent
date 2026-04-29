@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
+import { killAllChildren } from "./child-registry.js";
 import { setDebug } from "./debug.js";
 import { setModelOverride, setProviderOverride, validateModel } from "./model.js";
 import { getProvider, PROVIDER_NAMES } from "./providers/index.js";
@@ -134,6 +135,12 @@ program.hook("preAction", () => {
       program.error(message);
     }
   }
+});
+
+// Fallback SIGINT handler: kill child processes when no live-status handler is active
+process.on("SIGINT", () => {
+  killAllChildren();
+  process.exit(130);
 });
 
 program.parse();

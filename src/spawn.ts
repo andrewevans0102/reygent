@@ -1,6 +1,7 @@
 import { getProvider } from "./providers/index.js";
 import { resolveModel, resolveProvider } from "./model.js";
 import { TaskError } from "./task.js";
+import type { ActivityEvent } from "./providers/types.js";
 import type { UsageInfo } from "./usage.js";
 
 export interface SpawnResult {
@@ -15,8 +16,14 @@ export interface SpawnOptions {
   provider?: string;
   model?: string;
   systemPrompt?: string;
+  onActivity?: (event: ActivityEvent) => void;
 }
 
+/**
+ * Spawns an agent in stream mode with a single prompt.
+ * Interactive mode (via spawnInteractive) does not support onActivity
+ * since it's used for terminal sessions where live status is not applicable.
+ */
 export async function spawnAgentStream(
   name: string,
   prompt: string,
@@ -41,5 +48,6 @@ export async function spawnAgentStream(
     quiet: options?.quiet,
     timeoutMs,
     agentName: name,
+    onActivity: options?.onActivity,
   });
 }
