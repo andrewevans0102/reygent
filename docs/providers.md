@@ -68,7 +68,7 @@ reygent run --spec spec.md --provider openrouter
 reygent run --spec spec.md --provider openrouter --model google/gemini-2.5-pro
 ```
 
-**Limitation:** OpenRouter is an API provider, so agents **cannot** access the filesystem. Tool calls (Bash, Write, Edit) will not work. This provider is best suited for read-only stages like planning and review.
+**Limitation:** OpenRouter is an API provider, so agents **cannot** access the filesystem. Unlike CLI providers (Claude, Gemini, Codex) which spawn local subprocesses with full tool access, API providers send HTTP requests and receive text responses only. Tool calls (Bash, Write, Edit, Read, Glob, Grep) will not work. This provider is best suited for read-only stages like planning and review where agents only need to generate text, not modify files or execute commands.
 
 ## Provider Resolution
 
@@ -115,6 +115,30 @@ All providers implement the `ProviderAdapter` interface:
 The `type` field indicates how the provider works:
 - **`cli`** — Spawns a CLI subprocess (Claude, Gemini, Codex)
 - **`api`** — Makes HTTP API requests (OpenRouter)
+
+## Provider Architecture
+
+```
+CLI Providers (claude, gemini, codex)
+┌──────────────────────────────────────────────────────────────┐
+│ Reygent Agent                                                 │
+│   ├─ Spawns local subprocess (e.g., `claude --model ...`)    │
+│   ├─ Agent has full tool access:                             │
+│   │    ├─ Read, Write, Edit (filesystem)                     │
+│   │    ├─ Bash (command execution)                           │
+│   │    └─ Glob, Grep (search)                                │
+│   └─ Stream JSON output parsed in real-time                  │
+└──────────────────────────────────────────────────────────────┘
+
+API Providers (openrouter)
+┌──────────────────────────────────────────────────────────────┐
+│ Reygent Agent                                                 │
+│   ├─ Sends HTTP POST to provider API                         │
+│   ├─ No local subprocess, no tool access                     │
+│   ├─ Agent receives text-only response                       │
+│   └─ Best for: planning, review, text generation             │
+└──────────────────────────────────────────────────────────────┘
+```
 
 ## Internals
 

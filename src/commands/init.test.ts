@@ -146,6 +146,33 @@ describe("initCommand", () => {
     );
   });
 
+  it("creates skills dir when .reygent exists but skills dir missing", async () => {
+    // .reygent dir exists, config.json does not, skills dir does NOT exist
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("config.json")) return false;
+      if (path.endsWith("skills")) return false;
+      // .reygent dir exists
+      if (path.endsWith(".reygent")) return true;
+      return false;
+    });
+
+    await initCommand({ dryRun: false });
+
+    // Should create the skills directory
+    expect(mockMkdirSync).toHaveBeenCalledWith(
+      expect.stringContaining("skills"),
+      { recursive: true },
+    );
+
+    // Should write config.json
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining("config.json"),
+      expect.any(String),
+      "utf-8",
+    );
+  });
+
   it("config includes builtinAgents, skills config, and model", async () => {
     mockExistsSync.mockReturnValue(false);
 

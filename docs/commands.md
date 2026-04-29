@@ -149,7 +149,7 @@ reygent run --spec <source> [options]
 | `--insecure` | `false` | Skip SSL certificate verification for API calls |
 | `--skip-clarification` | `false` | Skip planner clarification questions; make assumptions instead |
 | `--max-retries <count>` | `2` | Maximum retry attempts when gate tests fail |
-| `--verbose` | `false` | Show detailed token/cost breakdown per agent |
+| `--verbose` | `false` | Show detailed token/cost breakdown per agent, including input/output tokens and estimated cost |
 
 **Examples:**
 
@@ -171,6 +171,19 @@ reygent run --spec feature.md --max-retries 5
 
 # Corporate network with self-signed certs
 reygent run --spec feature.md --insecure
+
+# Show detailed token/cost breakdown
+reygent run --spec feature.md --verbose
+```
+
+**Verbose output example:**
+
+```
+[dev] Input tokens: 12,345 | Output tokens: 3,456 | Cost: $0.15
+[qe] Input tokens: 8,901 | Output tokens: 2,345 | Cost: $0.09
+[planner] Input tokens: 5,678 | Output tokens: 1,234 | Cost: $0.06
+---
+Total cost: $0.30
 ```
 
 ### Reygent Workflow Stages

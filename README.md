@@ -48,9 +48,9 @@ npm unlink -g reygent
 See the full **[Quickstart Guide](./QUICKSTART.md)** to go from zero to your first AI-driven PR.
 
 ```bash
-reygent init                               # initialize local config
-reygent generate-spec "Add login endpoint" # generate a spec
-reygent run --spec spec.md                 # run the full workflow
+reygent init                                               # initialize local config
+reygent generate-spec "Add login endpoint" --output spec.md # generate a spec
+reygent run --spec spec.md                                 # run the full workflow
 ```
 
 ## Commands
@@ -167,7 +167,9 @@ Requires corresponding API keys in `.env` for tracker sources. See [Commands Ref
       "role": "developer"
     }
   ],
-  "skills": { "path": "skills" },
+  "skills": {
+    "path": "skills"  // Agents can access custom skills from this directory
+  },
   "model": "claude-sonnet-4-5-20250929"
 }
 ```

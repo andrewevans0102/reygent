@@ -102,6 +102,22 @@ describe("runClarification", () => {
       questions: ["Valid question?", "Another valid?"],
     });
   });
+
+  it("filters out null and undefined questions", async () => {
+    mockSpawn.mockResolvedValue({
+      stdout: JSON.stringify({
+        needsClarification: true,
+        questions: ["Valid question?", null, undefined, "Another valid?"],
+      }),
+      exitCode: 0,
+    });
+
+    const result = await runClarification("build a REST API");
+    expect(result).toEqual({
+      needsClarification: true,
+      questions: ["Valid question?", "Another valid?"],
+    });
+  });
 });
 
 describe("generateSpec", () => {

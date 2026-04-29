@@ -15,10 +15,10 @@ vi.mock("./model.js", () => ({
   resolveProvider: vi.fn(() => "claude"),
 }));
 
-const { spawnAgentStream } = await import("./spawn.js");
-const { getProvider } = await import("./providers/index.js");
-const { resolveModel, resolveProvider } = await import("./model.js");
-const { TaskError } = await import("./task.js");
+import { spawnAgentStream } from "./spawn.js";
+import { getProvider } from "./providers/index.js";
+import { resolveModel, resolveProvider } from "./model.js";
+import { TaskError } from "./task.js";
 
 describe("spawnAgentStream", () => {
   beforeEach(() => {

@@ -102,21 +102,38 @@ describe("runImplement", () => {
 
   it("runs dev and qe in parallel when autoApprove=true", async () => {
     const callOrder: string[] = [];
+    let devResolve: () => void;
+    let qeResolve: () => void;
+
+    const devPromise = new Promise<void>((r) => { devResolve = r; });
+    const qePromise = new Promise<void>((r) => { qeResolve = r; });
 
     mockSpawnAgentStream.mockImplementation(async (name: string) => {
       callOrder.push(`start:${name}`);
-      // Simulate async work; both should start before either resolves
-      await new Promise((r) => setTimeout(r, 10));
+      if (name === "dev") {
+        await devPromise;
+      } else {
+        await qePromise;
+      }
       callOrder.push(`end:${name}`);
       return { stdout: "{}", exitCode: 0 };
     });
 
-    await runImplement(spec, plan, { autoApprove: true });
+    const runPromise = runImplement(spec, plan, { autoApprove: true });
 
-    expect(mockSpawnAgentStream).toHaveBeenCalledTimes(2);
-    // Both starts should occur before either end in parallel execution
+    // Wait for both agents to start
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Both should have started before either resolves
     expect(callOrder[0]).toBe("start:dev");
     expect(callOrder[1]).toBe("start:qe");
+
+    // Now allow them to complete
+    devResolve!();
+    qeResolve!();
+
+    await runPromise;
+    expect(mockSpawnAgentStream).toHaveBeenCalledTimes(2);
   });
 
   it("runs dev then qe sequentially when autoApprove is falsy", async () => {
