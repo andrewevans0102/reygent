@@ -87,7 +87,7 @@ export const codexAdapter: ProviderAdapter = {
 
       child.on("close", (code) => {
         clearTimeout(timeout);
-        const durationMs = Date.now() - startTime;
+        const durationMs = Math.max(0, Date.now() - startTime);
 
         // Try to parse Codex JSON output
         let resultText = stdout;
