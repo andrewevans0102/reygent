@@ -14,6 +14,7 @@ import { initCommand } from "./commands/init.js";
 import { registerSkillsCommand } from "./commands/skills.js";
 import { reviewWorkCommand } from "./commands/review-work.js";
 import { reviewCommentsCommand } from "./commands/review-comments.js";
+import { configCommand } from "./commands/config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -86,6 +87,11 @@ program
   .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .option("--auto-approve", "Auto-approve plan and execute without prompting", false)
   .action(reviewCommentsCommand);
+
+program
+  .command("config")
+  .description("Configure default provider, model, and per-agent overrides")
+  .action(configCommand);
 
 registerSkillsCommand(program);
 
