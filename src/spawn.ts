@@ -19,6 +19,11 @@ export interface SpawnOptions {
   onActivity?: (event: ActivityEvent) => void;
 }
 
+/**
+ * Spawns an agent in stream mode with a single prompt.
+ * Interactive mode (via spawnInteractive) does not support onActivity
+ * since it's used for terminal sessions where live status is not applicable.
+ */
 export async function spawnAgentStream(
   name: string,
   prompt: string,

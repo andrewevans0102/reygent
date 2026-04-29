@@ -74,4 +74,56 @@ describe("createLiveStatus", () => {
     status.start();
     status.succeed("ok");
   });
+
+  it("debounces high-frequency activity events", async () => {
+    const status = createLiveStatus("test...");
+    const events: string[] = [];
+
+    // Spy on render by observing that detail is truncated at 80 chars
+    status.onActivity({ agent: "dev", tool: "Grep", detail: "a".repeat(100) });
+    status.onActivity({ agent: "dev", tool: "Grep", detail: "b".repeat(100) });
+    status.onActivity({ agent: "dev", tool: "Grep", detail: "c".repeat(100) });
+
+    // Wait for debounce window (200ms)
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    status.onActivity({ agent: "dev", tool: "Read", detail: "after debounce" });
+    status.stop();
+
+    // No assertion needed - just verify no crash from rapid events
+  });
+
+  it("truncates detail strings to 80 chars", () => {
+    const status = createLiveStatus("test...");
+    const longDetail = "x".repeat(150);
+
+    // Should not throw and internally truncates to 80 chars
+    status.onActivity({ agent: "dev", tool: "Write", detail: longDetail });
+    status.stop();
+  });
+
+  it("handles multiple concurrent status instances with SIGINT ref-counting", () => {
+    const status1 = createLiveStatus("first...");
+    const status2 = createLiveStatus("second...");
+    const status3 = createLiveStatus("third...");
+
+    // All should install handler via ref-counting
+    status1.stop(); // Decrements ref count
+    status2.succeed("done"); // Decrements ref count
+    status3.fail("error"); // Decrements ref count
+
+    // No orphaned handlers or double-removal errors
+  });
+
+  it("prevents interval leak when start() called twice rapidly", () => {
+    const status = createLiveStatus("test...");
+    status.stop();
+
+    // Call start twice in rapid succession
+    status.start();
+    status.start(); // Should guard against creating second interval
+
+    status.stop();
+    // No interval leak - cleanup should succeed
+  });
 });

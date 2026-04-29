@@ -19,6 +19,17 @@ import { UsageTracker, printUsageSummary, printVerboseUsage } from "../usage.js"
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
+/**
+ * Helper to merge agentOptions with onActivity callback from a LiveStatus instance.
+ * Reduces boilerplate from repeated `{ ...agentOptions, onActivity: status.onActivity }` pattern.
+ */
+function withActivity(
+  agentOptions: { autoApprove: boolean },
+  status: { onActivity: (event: import("../live-status.js").ActivityEvent) => void },
+): { autoApprove: boolean; onActivity: (event: import("../live-status.js").ActivityEvent) => void } {
+  return { ...agentOptions, onActivity: status.onActivity };
+}
+
 interface RunOptions {
   spec?: string;
   dryRun: boolean;
@@ -85,10 +96,12 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     };
 
     const status = createLiveStatus(`re-running ${agentsToRun.join(" + ")} agent(s)...`);
-    const { implement: retryResult, usages: retryUsages } = await runImplement(context.spec, context.plan!, { ...agentOptions, onActivity: status.onActivity }, {
-      failureContext,
-      agentsToRun,
-    });
+    const { implement: retryResult, usages: retryUsages } = await runImplement(
+      context.spec,
+      context.plan!,
+      withActivity(agentOptions, status),
+      { failureContext, agentsToRun },
+    );
 
     // Record retry implementation usage
     for (const u of retryUsages) {
@@ -314,7 +327,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
         if (skipClarification) {
           // Skip clarification, make assumptions
-          const { result, usage: planUsage } = await runPlanner(context.spec, undefined, { makeAssumptions: true, onActivity: status.onActivity });
+          const { result, usage: planUsage } = await runPlanner(
+            context.spec,
+            undefined,
+            { makeAssumptions: true, onActivity: status.onActivity },
+          );
           if ("needsClarification" in result && result.needsClarification) {
             status.fail(chalk.red("Planner asked questions despite skip flag"));
             throw new TaskError("Planner: unexpected clarification request in assumption mode");
@@ -329,7 +346,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
           while (!plan && attempts < maxAttempts) {
             attempts++;
-            const { result, usage: planUsage } = await runPlanner(context.spec, clarificationAnswers, { onActivity: status.onActivity });
+            const { result, usage: planUsage } = await runPlanner(
+              context.spec,
+              clarificationAnswers,
+              { onActivity: status.onActivity },
+            );
             if (planUsage) tracker.record("planner", "plan", planUsage);
 
             if ("needsClarification" in result && result.needsClarification) {
@@ -399,7 +420,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const implStatus = createLiveStatus("spawning dev and qe agents...");
-        const { implement: impl, usages: implUsages } = await runImplement(context.spec, context.plan, { ...agentOptions, onActivity: implStatus.onActivity });
+        const { implement: impl, usages: implUsages } = await runImplement(
+          context.spec,
+          context.plan,
+          withActivity(agentOptions, implStatus),
+        );
         context.implement = impl;
 
         for (const u of implUsages) {
@@ -436,7 +461,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const unitStatus = createLiveStatus("running unit tests...");
-        const { gate: unitGateResult, usage: unitGateUsage } = await runUnitTestGate(context, { ...agentOptions, onActivity: unitStatus.onActivity });
+        const { gate: unitGateResult, usage: unitGateUsage } = await runUnitTestGate(
+          context,
+          withActivity(agentOptions, unitStatus),
+        );
         let gateResult = unitGateResult;
 
         if (unitGateUsage) tracker.record("gate:unit-tests", stage.name, unitGateUsage);
@@ -483,7 +511,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
         }
 
         const funcStatus = createLiveStatus("running functional tests...");
-        const { gate: funcGateResult, usage: funcGateUsage } = await runFunctionalTestGate(context, { ...agentOptions, onActivity: funcStatus.onActivity });
+        const { gate: funcGateResult, usage: funcGateUsage } = await runFunctionalTestGate(
+          context,
+          withActivity(agentOptions, funcStatus),
+        );
         let gateResult = funcGateResult;
 
         if (funcGateUsage) tracker.record("gate:functional-tests", stage.name, funcGateUsage);
@@ -534,7 +565,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const { output, passed, usage: secUsage } = await runSecurityReview(
           context,
           threshold as Severity,
-          { ...agentOptions, onActivity: secStatus.onActivity },
+          withActivity(agentOptions, secStatus),
         );
         if (secUsage) tracker.record("security-review", stage.name, secUsage);
         context.securityReview = output;
@@ -614,7 +645,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       if (stage.name === "pr-review") {
         const prStatus = createLiveStatus("reviewing pull request...");
-        const { output: reviewOutput, usage: prUsage } = await runPRReview(context, { ...agentOptions, onActivity: prStatus.onActivity });
+        const { output: reviewOutput, usage: prUsage } = await runPRReview(
+          context,
+          withActivity(agentOptions, prStatus),
+        );
         context.prReview = reviewOutput;
         if (prUsage) tracker.record("pr-review", stage.name, prUsage);
         prStatus.succeed(chalk.green("PR review complete"));

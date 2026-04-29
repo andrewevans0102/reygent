@@ -9,6 +9,10 @@ const TRACK_LENGTH = 4;
 
 const PAW_POSITIONS = [0, 1, 2, 3, 2, 1];
 
+// Ref-counting for SIGINT handlers to prevent multiple instances racing
+let sigintHandlerCount = 0;
+let globalSigintHandler: (() => void) | null = null;
+
 export function formatElapsed(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
@@ -62,6 +66,10 @@ export function createLiveStatus(label: string): LiveStatus {
   let lastActivity: ActivityEvent | undefined;
   const startTime = Date.now();
 
+  // Debounce activity events to max 5 Hz (200ms)
+  let lastActivityTime = 0;
+  const MIN_ACTIVITY_INTERVAL = 200;
+
   function render() {
     const pos = PAW_POSITIONS[frameIndex % PAW_POSITIONS.length];
     const elapsed = formatElapsed(Date.now() - startTime);
@@ -70,7 +78,12 @@ export function createLiveStatus(label: string): LiveStatus {
 
   render();
 
+  let interval: ReturnType<typeof setInterval> | null = null;
+
   function createInterval() {
+    // Guard against double creation
+    if (interval) return interval;
+
     const id = setInterval(() => {
       frameIndex++;
       render();
@@ -79,14 +92,22 @@ export function createLiveStatus(label: string): LiveStatus {
     return id;
   }
 
-  let interval: ReturnType<typeof setInterval> | null = createInterval();
+  interval = createInterval();
 
   function cleanup() {
     if (interval) {
       clearInterval(interval);
       interval = null;
     }
-    process.removeListener("SIGINT", onSigInt);
+
+    // Decrement ref count and remove global handler if last instance
+    if (sigintHandlerCount > 0) {
+      sigintHandlerCount--;
+      if (sigintHandlerCount === 0 && globalSigintHandler) {
+        process.removeListener("SIGINT", globalSigintHandler);
+        globalSigintHandler = null;
+      }
+    }
   }
 
   function onSigInt() {
@@ -96,11 +117,31 @@ export function createLiveStatus(label: string): LiveStatus {
     process.exit(130);
   }
 
-  process.on("SIGINT", onSigInt);
+  // Install global SIGINT handler with ref-counting
+  if (!globalSigintHandler) {
+    globalSigintHandler = onSigInt;
+    process.on("SIGINT", globalSigintHandler);
+  }
+  sigintHandlerCount++;
 
   return {
     onActivity(event: ActivityEvent) {
-      lastActivity = event;
+      // Debounce to prevent spam from high-frequency tools
+      const now = Date.now();
+      if (now - lastActivityTime < MIN_ACTIVITY_INTERVAL) {
+        // Update lastActivity but don't re-render yet
+        lastActivity = {
+          ...event,
+          detail: event.detail?.slice(0, 80), // Defensive truncation
+        };
+        return;
+      }
+
+      lastActivityTime = now;
+      lastActivity = {
+        ...event,
+        detail: event.detail?.slice(0, 80), // Cap detail length
+      };
       render();
     },
     succeed(msg: string) {
@@ -128,8 +169,16 @@ export function createLiveStatus(label: string): LiveStatus {
       if (!interval) {
         interval = createInterval();
       }
-      process.removeListener("SIGINT", onSigInt);
-      process.on("SIGINT", onSigInt);
+
+      // Re-increment ref count when restarting
+      if (globalSigintHandler) {
+        sigintHandlerCount++;
+      } else {
+        globalSigintHandler = onSigInt;
+        process.on("SIGINT", globalSigintHandler);
+        sigintHandlerCount++;
+      }
+
       render();
     },
   };

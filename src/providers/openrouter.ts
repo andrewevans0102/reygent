@@ -47,8 +47,15 @@ export const openrouterAdapter: ProviderAdapter = {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
+    const startTime = Date.now();
 
     options.onActivity?.({ agent: name, detail: "API request..." });
+
+    // Heartbeat every 5s during long waits to prevent stale elapsed time
+    const heartbeat = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      options.onActivity?.({ agent: name, detail: `API request (${elapsed}s)...` });
+    }, 5000);
 
     try {
       const response = await fetch(OPENROUTER_API_URL, {
@@ -72,6 +79,7 @@ export const openrouterAdapter: ProviderAdapter = {
       });
 
       clearTimeout(timeout);
+      clearInterval(heartbeat);
 
       if (!response.ok) {
         const body = await response.text();
@@ -98,6 +106,7 @@ export const openrouterAdapter: ProviderAdapter = {
       };
     } catch (err) {
       clearTimeout(timeout);
+      clearInterval(heartbeat);
       if (err instanceof TaskError) throw err;
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("aborted")) {
