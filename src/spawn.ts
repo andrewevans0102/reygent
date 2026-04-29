@@ -1,6 +1,7 @@
 import { getProvider } from "./providers/index.js";
 import { resolveModel, resolveProvider } from "./model.js";
 import { TaskError } from "./task.js";
+import type { ActivityEvent } from "./providers/types.js";
 import type { UsageInfo } from "./usage.js";
 
 export interface SpawnResult {
@@ -15,6 +16,7 @@ export interface SpawnOptions {
   provider?: string;
   model?: string;
   systemPrompt?: string;
+  onActivity?: (event: ActivityEvent) => void;
 }
 
 export async function spawnAgentStream(
@@ -41,5 +43,6 @@ export async function spawnAgentStream(
     quiet: options?.quiet,
     timeoutMs,
     agentName: name,
+    onActivity: options?.onActivity,
   });
 }

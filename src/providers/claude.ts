@@ -149,10 +149,14 @@ export const claudeAdapter: ProviderAdapter = {
           for (const block of msg.message.content) {
             if (block.type === "tool_use") {
               const detail = formatToolDetail(block.name, block.input);
-              const suffix = detail ? ` ${chalk.gray(detail)}` : "";
-              process.stderr.write(`${chalk.gray(`[${name}]`)} ${chalk.cyan("→")} ${chalk.blue(block.name)}${suffix}\n`);
+              if (options.onActivity) {
+                options.onActivity({ agent: name, tool: block.name, detail: detail || undefined });
+              } else {
+                const suffix = detail ? ` ${chalk.gray(detail)}` : "";
+                process.stderr.write(`${chalk.gray(`[${name}]`)} ${chalk.cyan("→")} ${chalk.blue(block.name)}${suffix}\n`);
+              }
             } else if (block.type === "text") {
-              if (!options.quiet) {
+              if (!options.quiet && !options.onActivity) {
                 console.log(chalk.gray(`[${name}]`), block.text);
               }
               textChunks.push(block.text);
@@ -189,7 +193,11 @@ export const claudeAdapter: ProviderAdapter = {
 
       const stderrRL = createInterface({ input: child.stderr! });
       stderrRL.on("line", (line) => {
-        process.stderr.write(`${chalk.gray(`[${name}]`)} ${line}\n`);
+        if (options.onActivity) {
+          options.onActivity({ agent: name, detail: line.slice(0, 80) });
+        } else {
+          process.stderr.write(`${chalk.gray(`[${name}]`)} ${line}\n`);
+        }
       });
       stderrRL.on("close", () => {
         stderrEnded = true;

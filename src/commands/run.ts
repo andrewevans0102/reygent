@@ -7,6 +7,7 @@ import { loadEnvFile } from "../env.js";
 import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
 import type { FailureContext } from "../implement.js";
+import { createLiveStatus } from "../live-status.js";
 import { runPlanner } from "../planner.js";
 import { runPRCreate } from "../pr-create.js";
 import { runPRReview, formatPRReviewTerminal, postPRReviewComment } from "../pr-review.js";
@@ -83,8 +84,8 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
       maxAttempts: maxRetries,
     };
 
-    const spinner = ora(chalk.blue(`re-running ${agentsToRun.join(" + ")} agent(s)...`)).start();
-    const { implement: retryResult, usages: retryUsages } = await runImplement(context.spec, context.plan!, agentOptions, {
+    const status = createLiveStatus(`re-running ${agentsToRun.join(" + ")} agent(s)...`);
+    const { implement: retryResult, usages: retryUsages } = await runImplement(context.spec, context.plan!, { ...agentOptions, onActivity: status.onActivity }, {
       failureContext,
       agentsToRun,
     });
@@ -101,10 +102,10 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     if (retryResult.qe && context.implement) {
       context.implement.qe = retryResult.qe;
     }
-    spinner.succeed(chalk.green("Retry implementation complete"));
+    status.succeed(chalk.green("Retry implementation complete"));
 
     // Re-run gate
-    const retrySpinner = ora(chalk.blue(`re-running ${gateName}...`)).start();
+    const retryStatus = createLiveStatus(`re-running ${gateName}...`);
     const { gate: gateResult, usage: gateUsage } = await gateRunner();
 
     const gateAgentName =
@@ -119,11 +120,11 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     }
 
     if (gateResult.passed) {
-      retrySpinner.succeed(chalk.green(`${gateName} PASSED on retry ${attempt}`));
+      retryStatus.succeed(chalk.green(`${gateName} PASSED on retry ${attempt}`));
       return gateResult;
     }
 
-    retrySpinner.fail(chalk.red(`${gateName} FAILED (retry ${attempt}/${maxRetries})`));
+    retryStatus.fail(chalk.red(`${gateName} FAILED (retry ${attempt}/${maxRetries})`));
   }
 
   // All retries exhausted
@@ -307,15 +308,15 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
     for (const stage of PIPELINE) {
       if (stage.name === "plan") {
-        const spinner = ora(chalk.blue("running planner...")).start();
+        const status = createLiveStatus("running planner...");
 
         let plan: PlannerOutput | null = null;
 
         if (skipClarification) {
           // Skip clarification, make assumptions
-          const { result, usage: planUsage } = await runPlanner(context.spec, undefined, { makeAssumptions: true });
+          const { result, usage: planUsage } = await runPlanner(context.spec, undefined, { makeAssumptions: true, onActivity: status.onActivity });
           if ("needsClarification" in result && result.needsClarification) {
-            spinner.fail(chalk.red("Planner asked questions despite skip flag"));
+            status.fail(chalk.red("Planner asked questions despite skip flag"));
             throw new TaskError("Planner: unexpected clarification request in assumption mode");
           }
           plan = result as PlannerOutput;
@@ -328,11 +329,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
           while (!plan && attempts < maxAttempts) {
             attempts++;
-            const { result, usage: planUsage } = await runPlanner(context.spec, clarificationAnswers);
+            const { result, usage: planUsage } = await runPlanner(context.spec, clarificationAnswers, { onActivity: status.onActivity });
             if (planUsage) tracker.record("planner", "plan", planUsage);
 
             if ("needsClarification" in result && result.needsClarification) {
-              spinner.stop();
+              status.stop();
               console.log(chalk.yellow("\nPlanner needs clarification:\n"));
 
               const answers: string[] = [];
@@ -358,21 +359,21 @@ export async function runCommand(options: RunOptions): Promise<void> {
               rl.close();
               clarificationAnswers = answers.join("\n\n");
               console.log(chalk.blue("\nRe-running planner with clarifications...\n"));
-              spinner.start();
+              status.start();
             } else {
               plan = result as PlannerOutput;
             }
           }
 
           if (!plan) {
-            spinner.fail(chalk.red("Planner failed"));
+            status.fail(chalk.red("Planner failed"));
             throw new TaskError(
               `Planner: failed to create valid plan after ${maxAttempts} attempts`,
             );
           }
         }
 
-        spinner.succeed(chalk.green("Plan created"));
+        status.succeed(chalk.green("Plan created"));
         context.plan = plan;
 
         console.log(chalk.cyan("\nGoals:"));
@@ -397,8 +398,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("Implement: plan stage must run before implement");
         }
 
-        const spinner = ora(chalk.blue("spawning dev and qe agents...")).start();
-        const { implement: impl, usages: implUsages } = await runImplement(context.spec, context.plan, agentOptions);
+        const implStatus = createLiveStatus("spawning dev and qe agents...");
+        const { implement: impl, usages: implUsages } = await runImplement(context.spec, context.plan, { ...agentOptions, onActivity: implStatus.onActivity });
         context.implement = impl;
 
         for (const u of implUsages) {
@@ -409,9 +410,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const qeSuccess = impl.qe !== null;
 
         if (devSuccess && qeSuccess) {
-          spinner.succeed(chalk.green("Implementation complete"));
+          implStatus.succeed(chalk.green("Implementation complete"));
         } else {
-          spinner.warn(chalk.yellow("Implementation partially failed"));
+          implStatus.warn(chalk.yellow("Implementation partially failed"));
         }
 
         if (impl.dev) {
@@ -434,8 +435,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("gate-unit-tests: implement stage must run first");
         }
 
-        const spinner = ora(chalk.blue("running unit tests...")).start();
-        const { gate: unitGateResult, usage: unitGateUsage } = await runUnitTestGate(context, agentOptions);
+        const unitStatus = createLiveStatus("running unit tests...");
+        const { gate: unitGateResult, usage: unitGateUsage } = await runUnitTestGate(context, { ...agentOptions, onActivity: unitStatus.onActivity });
         let gateResult = unitGateResult;
 
         if (unitGateUsage) tracker.record("gate:unit-tests", stage.name, unitGateUsage);
@@ -444,7 +445,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         context.gates.unitTests = gateResult;
 
         if (gateResult.passed) {
-          spinner.succeed(chalk.green("Unit tests PASSED"));
+          unitStatus.succeed(chalk.green("Unit tests PASSED"));
           context.results.push({
             stage: stage.name,
             success: true,
@@ -453,7 +454,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           continue;
         }
 
-        spinner.fail(chalk.red("Unit tests FAILED"));
+        unitStatus.fail(chalk.red("Unit tests FAILED"));
 
         // Retry loop — dev agent only for unit test failures
         gateResult = await retryGate({
@@ -481,8 +482,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("gate-functional-tests: implement stage must run first");
         }
 
-        const spinner = ora(chalk.blue("running functional tests...")).start();
-        const { gate: funcGateResult, usage: funcGateUsage } = await runFunctionalTestGate(context, agentOptions);
+        const funcStatus = createLiveStatus("running functional tests...");
+        const { gate: funcGateResult, usage: funcGateUsage } = await runFunctionalTestGate(context, { ...agentOptions, onActivity: funcStatus.onActivity });
         let gateResult = funcGateResult;
 
         if (funcGateUsage) tracker.record("gate:functional-tests", stage.name, funcGateUsage);
@@ -491,7 +492,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         context.gates.functionalTests = gateResult;
 
         if (gateResult.passed) {
-          spinner.succeed(chalk.green("Functional tests PASSED"));
+          funcStatus.succeed(chalk.green("Functional tests PASSED"));
           context.results.push({
             stage: stage.name,
             success: true,
@@ -500,7 +501,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           continue;
         }
 
-        spinner.fail(chalk.red("Functional tests FAILED"));
+        funcStatus.fail(chalk.red("Functional tests FAILED"));
         console.log(gateResult.output);
 
         // Retry loop — both dev + qe agents for functional test failures
@@ -529,19 +530,19 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("security-review: implement stage must run first");
         }
 
-        const spinner = ora(chalk.blue("running security review...")).start();
+        const secStatus = createLiveStatus("running security review...");
         const { output, passed, usage: secUsage } = await runSecurityReview(
           context,
           threshold as Severity,
-          agentOptions,
+          { ...agentOptions, onActivity: secStatus.onActivity },
         );
         if (secUsage) tracker.record("security-review", stage.name, secUsage);
         context.securityReview = output;
 
         if (passed) {
-          spinner.succeed(chalk.green("Security review PASSED"));
+          secStatus.succeed(chalk.green("Security review PASSED"));
         } else {
-          spinner.fail(chalk.red("Security review FAILED"));
+          secStatus.fail(chalk.red("Security review FAILED"));
         }
 
         console.log("");
@@ -612,11 +613,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
 
       if (stage.name === "pr-review") {
-        const spinner = ora(chalk.blue("reviewing pull request...")).start();
-        const { output: reviewOutput, usage: prUsage } = await runPRReview(context, agentOptions);
+        const prStatus = createLiveStatus("reviewing pull request...");
+        const { output: reviewOutput, usage: prUsage } = await runPRReview(context, { ...agentOptions, onActivity: prStatus.onActivity });
         context.prReview = reviewOutput;
         if (prUsage) tracker.record("pr-review", stage.name, prUsage);
-        spinner.succeed(chalk.green("PR review complete"));
+        prStatus.succeed(chalk.green("PR review complete"));
 
         console.log(formatPRReviewTerminal(reviewOutput));
 

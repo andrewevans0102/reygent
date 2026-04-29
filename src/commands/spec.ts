@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline";
 import chalk from "chalk";
-import ora from "ora";
 import { isDebug } from "../debug.js";
+import { createLiveStatus } from "../live-status.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { runPlanner } from "../planner.js";
 import { TaskError } from "../task.js";
@@ -22,7 +22,7 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
     }
 
     // Run planner with clarification loop
-    const spinner = ora(chalk.blue("running planner...")).start();
+    const status = createLiveStatus("running planner...");
 
     let plan: PlannerOutput | null = null;
     let clarificationAnswers = "";
@@ -31,10 +31,10 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
 
     while (!plan && attempts < maxAttempts) {
       attempts++;
-      const { result } = await runPlanner(spec, clarificationAnswers);
+      const { result } = await runPlanner(spec, clarificationAnswers, { onActivity: status.onActivity });
 
       if ("needsClarification" in result && result.needsClarification) {
-        spinner.stop();
+        status.stop();
         console.log(chalk.yellow("\nPlanner needs clarification:\n"));
 
         const answers: string[] = [];
@@ -60,18 +60,18 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
         rl.close();
         clarificationAnswers = answers.join("\n\n");
         console.log(chalk.blue("\nRe-running planner with clarifications...\n"));
-        spinner.start();
+        status.start();
       } else {
         plan = result as PlannerOutput;
       }
     }
 
     if (!plan) {
-      spinner.fail(chalk.red("Planner failed"));
+      status.fail(chalk.red("Planner failed"));
       throw new TaskError(`Planner: failed to create valid plan after ${maxAttempts} attempts`);
     }
 
-    spinner.succeed(chalk.green("Plan created"));
+    status.succeed(chalk.green("Plan created"));
 
     console.log(chalk.cyan("\nGoals:"));
     for (const g of plan.goals) console.log(`  ${chalk.gray("-")} ${g}`);

@@ -48,6 +48,8 @@ export const openrouterAdapter: ProviderAdapter = {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
 
+    options.onActivity?.({ agent: name, detail: "API request..." });
+
     try {
       const response = await fetch(OPENROUTER_API_URL, {
         method: "POST",

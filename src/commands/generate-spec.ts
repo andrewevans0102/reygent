@@ -2,9 +2,9 @@ import { createInterface } from "node:readline";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import chalk from "chalk";
-import ora from "ora";
 import { isDebug } from "../debug.js";
 import { generateSpec, runClarification } from "../generate-spec.js";
+import { createLiveStatus } from "../live-status.js";
 import { TaskError } from "../task.js";
 
 async function prompt(question: string, fallback?: string): Promise<string> {
@@ -44,13 +44,13 @@ export async function generateSpecCommand(
 
       while (!ready && attempts < maxAttempts) {
         attempts++;
-        const spinner = ora(chalk.blue("Checking if clarification needed...")).start();
+        const clarifyStatus = createLiveStatus("Checking if clarification needed...");
 
         let result: Awaited<ReturnType<typeof runClarification>>;
         try {
-          result = await runClarification(description!, clarificationAnswers);
+          result = await runClarification(description!, clarificationAnswers, clarifyStatus.onActivity);
         } catch (err) {
-          spinner.fail(chalk.red("Failed to check clarification needs"));
+          clarifyStatus.fail(chalk.red("Failed to check clarification needs"));
           if (err instanceof TaskError) {
             throw err;
           }
@@ -59,13 +59,13 @@ export async function generateSpecCommand(
         }
 
         if ("ready" in result && result.ready) {
-          spinner.succeed(chalk.green("No clarification needed"));
+          clarifyStatus.succeed(chalk.green("No clarification needed"));
           ready = true;
           break;
         }
 
         if ("needsClarification" in result && result.needsClarification) {
-          spinner.stop();
+          clarifyStatus.stop();
           console.log(chalk.yellow("\nClarifying questions:\n"));
 
           const answers: string[] = [];
@@ -106,14 +106,14 @@ export async function generateSpecCommand(
       }
     }
 
-    const spinner = ora(chalk.blue("Generating spec...")).start();
+    const genStatus = createLiveStatus("Generating spec...");
 
     let markdown: string;
     try {
-      markdown = await generateSpec(description!, clarificationAnswers);
-      spinner.succeed(chalk.green("Spec generated"));
+      markdown = await generateSpec(description!, clarificationAnswers, genStatus.onActivity);
+      genStatus.succeed(chalk.green("Spec generated"));
     } catch (err) {
-      spinner.fail(chalk.red("Failed to generate spec"));
+      genStatus.fail(chalk.red("Failed to generate spec"));
       throw err;
     }
 

@@ -69,7 +69,12 @@ export const codexAdapter: ProviderAdapter = {
 
       child.stderr!.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
-        process.stderr.write(`${chalk.gray(`[${name}]`)} ${text}`);
+        if (options.onActivity) {
+          const line = text.trim();
+          if (line) options.onActivity({ agent: name, detail: line.slice(0, 80) });
+        } else {
+          process.stderr.write(`${chalk.gray(`[${name}]`)} ${text}`);
+        }
       });
 
       child.on("error", (err) => {

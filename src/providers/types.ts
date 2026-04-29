@@ -2,6 +2,12 @@ import type { UsageInfo } from "../usage.js";
 
 export type ProviderName = "claude" | "gemini" | "codex" | "openrouter";
 
+export interface ActivityEvent {
+  agent: string;
+  tool?: string;
+  detail?: string;
+}
+
 export interface SpawnAdapterOptions {
   prompt: string;
   systemPrompt?: string;
@@ -10,6 +16,7 @@ export interface SpawnAdapterOptions {
   quiet?: boolean;
   timeoutMs: number;
   agentName: string;
+  onActivity?: (event: ActivityEvent) => void;
 }
 
 export interface SpawnResult {
