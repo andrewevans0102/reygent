@@ -21,7 +21,7 @@ interface StreamResultMessage {
   type: "result";
   subtype: string;
   result: string;
-  cost_usd?: number;
+  total_cost_usd?: number;
   duration_ms?: number;
   num_turns?: number;
   input_tokens?: number;
@@ -171,7 +171,7 @@ export const claudeAdapter: ProviderAdapter = {
           const inputTokens = msg.input_tokens ?? msg.usage?.input_tokens;
           const outputTokens = msg.output_tokens ?? msg.usage?.output_tokens;
           const hasUsage =
-            msg.cost_usd !== undefined ||
+            msg.total_cost_usd !== undefined ||
             msg.duration_ms !== undefined ||
             msg.num_turns !== undefined ||
             inputTokens !== undefined ||
@@ -179,7 +179,7 @@ export const claudeAdapter: ProviderAdapter = {
 
           if (hasUsage) {
             resultUsage = {
-              ...(msg.cost_usd !== undefined ? { costUsd: msg.cost_usd } : {}),
+              ...(msg.total_cost_usd !== undefined ? { costUsd: msg.total_cost_usd } : {}),
               ...(msg.duration_ms !== undefined ? { durationMs: msg.duration_ms } : {}),
               ...(msg.num_turns !== undefined ? { numTurns: msg.num_turns } : {}),
               ...(inputTokens !== undefined ? { inputTokens } : {}),

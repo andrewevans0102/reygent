@@ -45,6 +45,7 @@ export const geminiAdapter: ProviderAdapter = {
 
   async spawn(options: SpawnAdapterOptions): Promise<SpawnResult> {
     return new Promise((resolve, reject) => {
+      const startTime = Date.now();
       const args = ["-p", options.prompt, "--output-format", "json"];
       if (options.model) {
         args.push("--model", options.model);
@@ -85,17 +86,36 @@ export const geminiAdapter: ProviderAdapter = {
 
       child.on("close", (code) => {
         clearTimeout(timeout);
+        const durationMs = Math.max(0, Date.now() - startTime);
 
         // Try to parse Gemini JSON output
         let resultText = stdout;
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
         try {
-          const parsed = JSON.parse(stdout) as { response?: string; text?: string };
+          const parsed = JSON.parse(stdout) as {
+            response?: string;
+            text?: string;
+            usage_metadata?: { prompt_token_count?: number; candidates_token_count?: number };
+            input_tokens?: number;
+            output_tokens?: number;
+          };
           resultText = parsed.response ?? parsed.text ?? stdout;
+          inputTokens = parsed.usage_metadata?.prompt_token_count ?? parsed.input_tokens;
+          outputTokens = parsed.usage_metadata?.candidates_token_count ?? parsed.output_tokens;
         } catch {
           // Raw text output — use as-is
         }
 
-        resolve({ stdout: resultText, exitCode: code ?? 1 });
+        resolve({
+          stdout: resultText,
+          exitCode: code ?? 1,
+          usage: {
+            durationMs,
+            inputTokens,
+            outputTokens,
+          },
+        });
       });
     });
   },

@@ -45,6 +45,7 @@ export const codexAdapter: ProviderAdapter = {
 
   async spawn(options: SpawnAdapterOptions): Promise<SpawnResult> {
     return new Promise((resolve, reject) => {
+      const startTime = Date.now();
       const args = ["exec", options.prompt, "--json"];
       if (options.model) {
         args.push("--model", options.model);
@@ -86,17 +87,36 @@ export const codexAdapter: ProviderAdapter = {
 
       child.on("close", (code) => {
         clearTimeout(timeout);
+        const durationMs = Math.max(0, Date.now() - startTime);
 
         // Try to parse Codex JSON output
         let resultText = stdout;
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
         try {
-          const parsed = JSON.parse(stdout) as { response?: string; text?: string };
+          const parsed = JSON.parse(stdout) as {
+            response?: string;
+            text?: string;
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
+            input_tokens?: number;
+            output_tokens?: number;
+          };
           resultText = parsed.response ?? parsed.text ?? stdout;
+          inputTokens = parsed.usage?.prompt_tokens ?? parsed.input_tokens;
+          outputTokens = parsed.usage?.completion_tokens ?? parsed.output_tokens;
         } catch {
           // Raw text output — use as-is
         }
 
-        resolve({ stdout: resultText, exitCode: code ?? 1 });
+        resolve({
+          stdout: resultText,
+          exitCode: code ?? 1,
+          usage: {
+            durationMs,
+            inputTokens,
+            outputTokens,
+          },
+        });
       });
     });
   },
