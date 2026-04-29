@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import chalk from "chalk";
+import { registerChild } from "../child-registry.js";
 import { TaskError } from "../task.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
@@ -55,6 +56,7 @@ export const codexAdapter: ProviderAdapter = {
       const name = options.agentName;
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
       const child = spawn("codex", args, { stdio: [stdinMode, "pipe", "pipe"] });
+      registerChild(child);
 
       let stdout = "";
 
@@ -107,6 +109,7 @@ export const codexAdapter: ProviderAdapter = {
         ["--model", model, systemPrompt],
         { stdio: "inherit" },
       );
+      registerChild(child);
 
       child.on("error", (err) => {
         reject(
