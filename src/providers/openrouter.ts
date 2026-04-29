@@ -90,19 +90,24 @@ export const openrouterAdapter: ProviderAdapter = {
 
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_cost?: number };
+        total_cost?: number;
       };
 
       const content = data.choices?.[0]?.message?.content ?? "";
       const usage = data.usage;
+      const durationMs = Date.now() - startTime;
+      const costUsd = usage?.total_cost ?? data.total_cost;
 
       return {
         stdout: content,
         exitCode: 0,
-        usage: usage ? {
-          inputTokens: usage.prompt_tokens,
-          outputTokens: usage.completion_tokens,
-        } : undefined,
+        usage: {
+          durationMs,
+          inputTokens: usage?.prompt_tokens,
+          outputTokens: usage?.completion_tokens,
+          costUsd,
+        },
       };
     } catch (err) {
       clearTimeout(timeout);
