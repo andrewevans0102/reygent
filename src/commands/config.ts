@@ -37,13 +37,32 @@ async function runConfig(): Promise<void> {
   // 2. Load raw JSON (preserve unknown fields)
   let rawConfig: Record<string, unknown>;
   try {
-    rawConfig = JSON.parse(readFileSync(configPath, "utf-8"));
-  } catch {
-    console.log(chalk.red.bold("Error:"), `Failed to read ${configPath}`);
+    const content = readFileSync(configPath, "utf-8");
+    rawConfig = JSON.parse(content);
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      console.log(chalk.red.bold("Error:"), `Invalid JSON in ${configPath}`);
+      console.log(chalk.gray("  Parse error:"), err.message);
+    } else if (err && typeof err === "object" && "code" in err) {
+      const code = (err as { code?: string }).code;
+      if (code === "ENOENT") {
+        console.log(chalk.red.bold("Error:"), `File not found: ${configPath}`);
+      } else if (code === "EACCES") {
+        console.log(chalk.red.bold("Error:"), `Permission denied: ${configPath}`);
+      } else {
+        console.log(chalk.red.bold("Error:"), `Failed to read ${configPath}`);
+        if (isDebug()) console.error(err);
+      }
+    } else {
+      console.log(chalk.red.bold("Error:"), `Failed to read ${configPath}`);
+      if (isDebug()) console.error(err);
+    }
     process.exit(2);
   }
 
-  const agents: AgentConfig[] = (rawConfig.agents as AgentConfig[] | undefined) ?? builtinAgents;
+  // Initialize agents array before loop to ensure it always exists in output
+  rawConfig.agents = (rawConfig.agents as AgentConfig[] | undefined) ?? builtinAgents;
+  const agents: AgentConfig[] = rawConfig.agents as AgentConfig[];
 
   // 3. Check provider availability
   const availability: Record<string, { available: boolean; reason?: string }> = {};
@@ -71,11 +90,25 @@ async function runConfig(): Promise<void> {
     };
   });
 
-  const selectedProvider = await select({
+  let selectedProvider = await select({
     message: "Global provider:",
     choices: providerChoices,
     default: rawConfig.provider as string | undefined,
   });
+
+  // Warn if selected provider unavailable
+  if (!availability[selectedProvider]?.available) {
+    const reason = availability[selectedProvider]?.reason ?? "unknown reason";
+    console.log(chalk.yellow("⚠"), chalk.yellow(`Provider ${selectedProvider} is unavailable (${reason})`));
+    const proceed = await confirm({
+      message: "Continue with this provider anyway?",
+      default: false,
+    });
+    if (!proceed) {
+      console.log(chalk.yellow("\nConfiguration cancelled."));
+      process.exit(0);
+    }
+  }
 
   // 6. Select global model
   const provider = getProvider(selectedProvider);
@@ -111,18 +144,45 @@ async function runConfig(): Promise<void> {
     console.log(chalk.gray("  Provider:"), chalk.cyan(agentProvider));
     console.log(chalk.gray("  Model:   "), chalk.cyan(agentModel));
 
-    const customize = await confirm({
-      message: `Customize ${agent.name}?`,
-      default: false,
+    const hasOverride = agent.provider !== undefined || agent.model !== undefined;
+    const action = await select({
+      message: `Configure ${agent.name}:`,
+      choices: [
+        { name: "Keep current", value: "keep" },
+        { name: "Customize", value: "customize" },
+        ...(hasOverride ? [{ name: "Clear overrides", value: "clear" }] : []),
+      ],
+      default: "keep",
     });
 
-    if (!customize) continue;
+    if (action === "keep") {
+      continue;
+    } else if (action === "clear") {
+      // Remove provider/model overrides from this agent
+      const { provider: _p, model: _m, ...rest } = agent;
+      updatedAgents[i] = rest as AgentConfig;
+      continue;
+    }
 
+    // action === "customize"
     const agentProviderChoice = await select({
       message: `Provider for ${agent.name}:`,
       choices: providerChoices,
       default: agent.provider ?? selectedProvider,
     });
+
+    // Warn if selected provider unavailable
+    if (!availability[agentProviderChoice]?.available) {
+      const reason = availability[agentProviderChoice]?.reason ?? "unknown reason";
+      console.log(chalk.yellow("⚠"), chalk.yellow(`Provider ${agentProviderChoice} is unavailable (${reason})`));
+      const proceed = await confirm({
+        message: "Continue with this provider anyway?",
+        default: false,
+      });
+      if (!proceed) {
+        continue; // Skip customization for this agent
+      }
+    }
 
     const agentProviderAdapter = getProvider(agentProviderChoice);
     let agentModelChoice: string;
@@ -151,15 +211,22 @@ async function runConfig(): Promise<void> {
   rawConfig.provider = selectedProvider;
   rawConfig.model = selectedModel;
 
-  // If rawConfig had no agents array but we built one, set it
-  if (!rawConfig.agents) {
-    rawConfig.agents = updatedAgents;
-  } else {
-    // Update only provider/model on each agent, preserve everything else
-    const rawAgents = rawConfig.agents as Record<string, unknown>[];
-    for (let i = 0; i < rawAgents.length && i < updatedAgents.length; i++) {
-      rawAgents[i]!.provider = updatedAgents[i]!.provider;
-      rawAgents[i]!.model = updatedAgents[i]!.model;
+  // Match agents by name instead of index to handle length mismatches
+  const rawAgents = rawConfig.agents as Record<string, unknown>[];
+  for (const updatedAgent of updatedAgents) {
+    const rawAgent = rawAgents.find((r) => r.name === updatedAgent.name);
+    if (rawAgent) {
+      // Update or remove provider/model fields
+      if (updatedAgent.provider !== undefined) {
+        rawAgent.provider = updatedAgent.provider;
+      } else {
+        delete rawAgent.provider;
+      }
+      if (updatedAgent.model !== undefined) {
+        rawAgent.model = updatedAgent.model;
+      } else {
+        delete rawAgent.model;
+      }
     }
   }
 
