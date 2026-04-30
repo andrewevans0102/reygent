@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
 import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
-import ora from "ora";
 import { select, input } from "@inquirer/prompts";
 import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
 import { extractJSON } from "../planner.js";
+import { createLiveStatus } from "../live-status.js";
+import type { ActivityEvent } from "../live-status.js";
 import { loadEnvFile } from "../env.js";
 import { isDebug } from "../debug.js";
 import { parseRemote, resolveToken } from "../pr-create.js";
@@ -494,6 +495,7 @@ async function executeWithDevAgent(
   comments: ReviewComment[],
   plan: PlannerOutput,
   autoApprove?: boolean,
+  onActivity?: (event: ActivityEvent) => void,
 ): Promise<void> {
   const agents = getAgents();
   const devAgent = agents.find((a) => a.name === "dev");
@@ -503,7 +505,7 @@ async function executeWithDevAgent(
 
   const prompt = buildDevPrompt(devAgent.systemPrompt, comments, plan);
 
-  const result = await spawnAgent("dev", prompt, { autoApprove });
+  const result = await spawnAgent("dev", prompt, { autoApprove, quiet: true, onActivity });
 
   if (result.exitCode !== 0) {
     throw new TaskError(`review-comments: dev agent exited with code ${result.exitCode}`);
@@ -559,7 +561,7 @@ export async function reviewCommentsCommand(
     let comments: ReviewComment[] = [];
 
     if (remote.platform === "github") {
-      const spinner = ora("Checking for open PR...").start();
+      const spinner = createLiveStatus("checking for open PR...");
       const prNumber = await detectGitHubPR();
 
       if (prNumber === null) {
@@ -571,7 +573,7 @@ export async function reviewCommentsCommand(
       spinner.succeed(chalk.green(`Found PR #${prNumber}`));
 
       console.log();
-      const commentSpinner = ora("Fetching review comments...").start();
+      const commentSpinner = createLiveStatus("fetching review comments...");
       comments = await fetchGitHubComments();
 
       if (comments.length === 0) {
@@ -581,7 +583,7 @@ export async function reviewCommentsCommand(
       commentSpinner.succeed(chalk.green(`Fetched ${comments.length} comment(s)`));
     } else {
       // GitLab
-      const spinner = ora("Checking for open MR...").start();
+      const spinner = createLiveStatus("checking for open MR...");
       let token: string;
       try {
         token = await resolveToken(remote.host);
@@ -606,7 +608,7 @@ export async function reviewCommentsCommand(
       spinner.succeed(chalk.green(`Found MR !${mrIid}`));
 
       console.log();
-      const commentSpinner = ora("Fetching review comments...").start();
+      const commentSpinner = createLiveStatus("fetching review comments...");
       comments = await fetchGitLabComments(remote, token, mrIid, options.insecure);
 
       if (comments.length === 0) {
@@ -621,7 +623,7 @@ export async function reviewCommentsCommand(
     displayCommentSummary(comments);
 
     // 7. Get git diff for context
-    const diffSpinner = ora("Generating diff...").start();
+    const diffSpinner = createLiveStatus("generating diff...");
     const diff = await exec("git", ["diff", `${defaultBranch}...HEAD`]);
     if (!diff.trim()) {
       diffSpinner.warn(chalk.yellow("No diff found against base branch"));
@@ -632,7 +634,7 @@ export async function reviewCommentsCommand(
     // 8. Generate plan
     let plan: PlannerOutput;
     {
-      const planSpinner = ora("Generating plan to address comments...").start();
+      const planSpinner = createLiveStatus("generating plan...");
       plan = await generatePlan(comments, diff);
       planSpinner.succeed(chalk.green("Plan generated"));
     }
@@ -659,7 +661,7 @@ export async function reviewCommentsCommand(
             message: "Enter your feedback:",
           });
           if (feedback.trim()) {
-            const planSpinner = ora("Regenerating plan with feedback...").start();
+            const planSpinner = createLiveStatus("regenerating plan...");
             plan = await generatePlan(comments, diff, feedback);
             planSpinner.succeed(chalk.green("Plan regenerated"));
             displayPlan(plan);
@@ -673,15 +675,15 @@ export async function reviewCommentsCommand(
 
     // 10. Execute
     console.log();
-    const execSpinner = ora("Running dev agent to address comments...").start();
-    execSpinner.stop();
+    const execStatus = createLiveStatus("addressing review comments...");
 
     // User approved the plan (or --auto-approve was set), so dev agent can write freely
-    await executeWithDevAgent(comments, plan, true);
+    await executeWithDevAgent(comments, plan, true, execStatus.onActivity);
+    execStatus.succeed(chalk.green("Dev agent finished"));
 
     // 11. Commit and push changes
     console.log();
-    const pushSpinner = ora("Committing and pushing changes...").start();
+    const pushSpinner = createLiveStatus("committing and pushing...");
     try {
       await exec("git", ["add", "-A"]);
       await exec("git", ["commit", "-m", "fix: address PR review comments"]);
