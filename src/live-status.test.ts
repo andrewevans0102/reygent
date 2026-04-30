@@ -43,6 +43,78 @@ describe("buildAnimationFrame", () => {
     // Should not contain the separator when no activity
     expect(frame).not.toContain("│");
   });
+
+  it("places activity trail on first line, spinner on second (prevents wrap)", () => {
+    const frame = buildAnimationFrame(2, "running", "30s", {
+      agent: "dev",
+      tool: "Read",
+      detail: "src/foo.ts",
+    });
+    const lines = frame.split("\n");
+    expect(lines).toHaveLength(2);
+    // First line: activity trail
+    expect(lines[0]).toContain("dev");
+    expect(lines[0]).toContain("Read");
+    expect(lines[0]).toContain("src/foo.ts");
+    // Second line: spinner track + label + elapsed
+    expect(lines[1]).toContain("🐾");
+    expect(lines[1]).toContain("running");
+    expect(lines[1]).toContain("30s");
+  });
+
+  it("handles long activity trail gracefully (detail already capped at 80 chars)", () => {
+    const frame = buildAnimationFrame(1, "processing", "1m 15s", {
+      agent: "planner",
+      tool: "Bash",
+      detail: "x".repeat(200), // Will be truncated in onActivity, but test buildAnimationFrame
+    });
+    const lines = frame.split("\n");
+    expect(lines).toHaveLength(2);
+    // Activity line should not exceed reasonable length (agent + tool + detail)
+    // Detail itself isn't truncated by buildAnimationFrame, only by onActivity
+    // So this just confirms multiline structure holds even with long detail
+    expect(lines[0]).toContain("planner");
+    expect(lines[0]).toContain("Bash");
+  });
+
+  it("single-line output when no activity (spinner only)", () => {
+    const frame = buildAnimationFrame(3, "waiting", "5s");
+    const lines = frame.split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("🐾");
+    expect(lines[0]).toContain("waiting");
+    expect(lines[0]).toContain("5s");
+  });
+
+  it("truncates activity trail when exceeds terminal width", () => {
+    // Mock narrow terminal
+    const originalColumns = process.stdout.columns;
+    Object.defineProperty(process.stdout, "columns", { value: 40, writable: true });
+
+    const frame = buildAnimationFrame(1, "test", "10s", {
+      agent: "planner",
+      tool: "Bash",
+      detail: "x".repeat(100),
+    });
+
+    // Restore original
+    Object.defineProperty(process.stdout, "columns", {
+      value: originalColumns,
+      writable: true,
+    });
+
+    const lines = frame.split("\n");
+    expect(lines).toHaveLength(2);
+
+    // Strip ANSI from activity line to measure visible length
+    const stripAnsi = (s: string) => s.replace(/\x1b\[\d+m/g, "");
+    const activityVisible = stripAnsi(lines[0]);
+
+    // Should be truncated to fit 40-column terminal (minus 2 for padding = 38)
+    expect(activityVisible.length).toBeLessThanOrEqual(38);
+    // Should end with ellipsis
+    expect(activityVisible).toMatch(/…$/);
+  });
 });
 
 describe("createLiveStatus", () => {
