@@ -24,6 +24,27 @@ export function formatElapsed(ms: number): string {
   return `${hours}h ${String(remainMinutes).padStart(2, "0")}m`;
 }
 
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[\d+m/g, "");
+}
+
+function truncateToWidth(text: string, maxWidth: number): string {
+  const visible = stripAnsi(text);
+  if (visible.length <= maxWidth) return text;
+
+  // Truncate visible portion and append ellipsis
+  const truncated = visible.slice(0, maxWidth - 1) + "…";
+
+  // Re-apply original color to truncated text
+  // Simple heuristic: if original text started with ANSI, wrap truncated in same
+  const ansiMatch = text.match(/^(\x1b\[\d+m)/);
+  if (ansiMatch) {
+    return ansiMatch[1] + truncated + "\x1b[0m";
+  }
+  return truncated;
+}
+
 export function buildAnimationFrame(
   position: number,
   label: string,
@@ -40,7 +61,14 @@ export function buildAnimationFrame(
     const parts = [lastActivity.agent];
     if (lastActivity.tool) parts.push(lastActivity.tool);
     if (lastActivity.detail) parts.push(lastActivity.detail);
-    return `${chalk.cyan(parts.join(" → "))}\n${mainLine}`;
+    const activityLine = chalk.cyan(parts.join(" → "));
+
+    // Truncate activity line if it exceeds terminal width minus padding
+    const terminalWidth = process.stdout.columns || 120;
+    const maxActivityWidth = terminalWidth - 2; // 2 chars padding
+    const truncatedActivity = truncateToWidth(activityLine, maxActivityWidth);
+
+    return `${truncatedActivity}\n${mainLine}`;
   }
 
   return mainLine;
