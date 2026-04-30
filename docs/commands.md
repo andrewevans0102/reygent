@@ -293,6 +293,57 @@ reygent review-comments --insecure
 
 ---
 
+## `reygent config`
+
+Interactively configure the default provider, model, and per-agent overrides for your local `.reygent/config.json`.
+
+```bash
+reygent config
+```
+
+Requires a `.reygent/` directory. Run `reygent init` first if you haven't already.
+
+**What it does:**
+
+1. Shows current provider and model settings
+2. Checks which providers are available on your machine (green checkmark or red cross)
+3. Prompts you to select a global provider (`claude`, `gemini`, `codex`, `openrouter`)
+4. Prompts you to select a global model from that provider's supported models
+5. Walks through each agent and offers three choices per agent:
+   - **Keep current** — no changes
+   - **Customize** — pick a different provider and model for this agent
+   - **Clear overrides** — remove any existing per-agent overrides (only shown if overrides exist)
+6. Writes the updated config to `.reygent/config.json`
+
+**Example:**
+
+```bash
+# Initialize, then configure
+reygent init
+reygent config
+```
+
+**Per-agent overrides** allow mixing providers — for example, use Claude for the dev agent but Gemini for the planner:
+
+```json
+{
+  "provider": "claude",
+  "model": "claude-sonnet-4-5-20250929",
+  "agents": [
+    {
+      "name": "planner",
+      "provider": "gemini",
+      "model": "gemini-2.5-pro",
+      "..."
+    }
+  ]
+}
+```
+
+For providers with no fixed model list (like OpenRouter), you'll be prompted to type a model ID instead of selecting from a list.
+
+---
+
 ## `reygent skills`
 
 Manage skills from the [reygent-skills](https://github.com/andrewevans0102/reygent-skills) registry.
