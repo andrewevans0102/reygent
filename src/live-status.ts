@@ -34,15 +34,16 @@ export function buildAnimationFrame(
     i === position ? chalk.yellowBright("🐾") : chalk.gray("·"),
   ).join(" ");
 
-  let activityStr = "";
+  const mainLine = `${track} ${chalk.blue(label)} ${chalk.gray(elapsed)}`;
+
   if (lastActivity) {
     const parts = [lastActivity.agent];
     if (lastActivity.tool) parts.push(lastActivity.tool);
     if (lastActivity.detail) parts.push(lastActivity.detail);
-    activityStr = ` ${chalk.gray("│")} ${chalk.cyan(parts.join(" → "))}`;
+    return `${chalk.cyan(parts.join(" → "))}\n${mainLine}`;
   }
 
-  return `${track} ${chalk.blue(label)} ${chalk.gray(elapsed)}${activityStr}`;
+  return mainLine;
 }
 
 export interface LiveStatus {
