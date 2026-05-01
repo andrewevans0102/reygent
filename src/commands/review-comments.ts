@@ -25,6 +25,46 @@ interface ReviewComment {
   path?: string;
   line?: number | null;
   createdAt: string;
+  isSecurity?: boolean;
+}
+
+// ── Security comment classification ──
+
+const SECURITY_KEYWORDS = [
+  "xss", "cross-site scripting", "csrf", "cross-site request forgery",
+  "sql injection", "sqli", "command injection", "code injection",
+  "path traversal", "directory traversal",
+  "ssrf", "server-side request forgery",
+  "xxe", "rce", "remote code execution",
+  "deserialization", "idor",
+  "authentication", "authorization", "auth bypass",
+  "privilege escalation", "broken access control",
+  "session fixation", "session hijacking",
+  "jwt", "token expir", "token leak",
+  "hardcoded secret", "hardcoded password", "hardcoded key",
+  "api key", "credential", "plaintext password",
+  "weak hash", "md5", "sha1",
+  "insecure random", "math.random",
+  "sanitiz", "unsanitized", "unescaped",
+  "untrusted input", "tainted",
+  "innerhtml", "dangerouslysetinnerhtml", "eval(",
+  "cors", "content-security-policy", "csp",
+  "security header", "httponly", "secure flag",
+  "vulnerability", "exploit", "attack vector",
+  "owasp", "cve", "cwe",
+  "security risk", "security issue", "security concern",
+  "security review", "security finding",
+  "denial of service", "dos",
+  "race condition",
+  "information disclosure", "data leak", "data exposure",
+  "sensitive data",
+];
+
+function classifyComments(comments: ReviewComment[]): ReviewComment[] {
+  return comments.map((c) => ({
+    ...c,
+    isSecurity: SECURITY_KEYWORDS.some((kw) => c.body.toLowerCase().includes(kw)),
+  }));
 }
 
 // ── Private helpers (self-contained, matches review-work.ts convention) ──
@@ -279,13 +319,24 @@ async function fetchGitLabComments(
 // ── Display ──
 
 function displayCommentSummary(comments: ReviewComment[]): void {
-  console.log(chalk.bold(`  ${comments.length} review comment(s) found:\n`));
+  const securityCount = comments.filter((c) => c.isSecurity).length;
+  const generalCount = comments.length - securityCount;
+
+  console.log(chalk.bold(`  ${comments.length} review comment(s) found`));
+  if (securityCount > 0) {
+    console.log(
+      chalk.yellow(`  ⚠ ${securityCount} security-related`) +
+        chalk.gray(` | ${generalCount} general`),
+    );
+  }
+  console.log();
 
   for (const c of comments) {
     const location = c.path
       ? chalk.cyan(`  ${c.path}${c.line ? `:${c.line}` : ""}`)
       : chalk.gray("  (general)");
-    console.log(`  ${chalk.bold(c.author)} ${location}`);
+    const tag = c.isSecurity ? chalk.bgYellow.black(" SEC ") + " " : "";
+    console.log(`  ${tag}${chalk.bold(c.author)} ${location}`);
 
     // Truncate long comments for summary display
     const preview = c.body.length > 200
@@ -300,17 +351,34 @@ function displayCommentSummary(comments: ReviewComment[]): void {
 
 // ── Plan generation ──
 
+function formatCommentBlock(comments: ReviewComment[]): string {
+  const securityComments = comments.filter((c) => c.isSecurity);
+  const generalComments = comments.filter((c) => !c.isSecurity);
+
+  const formatOne = (c: ReviewComment) => {
+    const loc = c.path ? `File: ${c.path}${c.line ? `:${c.line}` : ""}` : "General";
+    return `- **${c.author}** (${loc}): ${c.body}`;
+  };
+
+  let block = "";
+  if (securityComments.length > 0) {
+    block += `### Security Comments (PRIORITY — must be addressed)\n\n`;
+    block += securityComments.map(formatOne).join("\n");
+    block += "\n\n";
+  }
+  if (generalComments.length > 0) {
+    block += `### General Comments\n\n`;
+    block += generalComments.map(formatOne).join("\n");
+  }
+  return block;
+}
+
 function buildPlanPrompt(
   systemPrompt: string,
   comments: ReviewComment[],
   diff: string,
 ): string {
-  const commentBlock = comments
-    .map((c) => {
-      const loc = c.path ? `File: ${c.path}${c.line ? `:${c.line}` : ""}` : "General";
-      return `- **${c.author}** (${loc}): ${c.body}`;
-    })
-    .join("\n");
+  const hasSecurityComments = comments.some((c) => c.isSecurity);
 
   return `${systemPrompt}
 
@@ -318,7 +386,7 @@ function buildPlanPrompt(
 
 ## Review Comments to Address
 
-${commentBlock}
+${formatCommentBlock(comments)}
 
 ---
 
@@ -332,7 +400,7 @@ ${diff}
 
 ## Instructions
 
-Analyze the review comments above in the context of the current diff. Create a plan to address each comment. Return ONLY valid JSON:
+Analyze the review comments above in the context of the current diff. Create a plan to address each comment.${hasSecurityComments ? " Security-related comments are marked as priority — ensure concrete fix tasks are generated for each one. Apply secure coding practices (input validation, output encoding, least privilege, etc.) when planning fixes." : ""} Return ONLY valid JSON:
 
 \`\`\`json
 { "valid": true, "goals": ["..."], "tasks": ["..."], "constraints": ["..."], "dod": ["..."] }
@@ -450,21 +518,17 @@ function buildDevPrompt(
   systemPrompt: string,
   comments: ReviewComment[],
   plan: PlannerOutput,
+  userInstructions?: string,
 ): string {
-  const commentBlock = comments
-    .map((c) => {
-      const loc = c.path ? `File: ${c.path}${c.line ? `:${c.line}` : ""}` : "General";
-      return `- **${c.author}** (${loc}): ${c.body}`;
-    })
-    .join("\n");
+  const hasSecurityComments = comments.some((c) => c.isSecurity);
 
-  return `${systemPrompt}
+  let prompt = `${systemPrompt}
 
 ---
 
 ## Review Comments to Address
 
-${commentBlock}
+${formatCommentBlock(comments)}
 
 ---
 
@@ -480,15 +544,29 @@ ${plan.tasks.map((t) => `- ${t}`).join("\n")}
 ${plan.constraints.map((c) => `- ${c}`).join("\n")}
 
 **Definition of Done:**
-${plan.dod.map((d) => `- ${d}`).join("\n")}
+${plan.dod.map((d) => `- ${d}`).join("\n")}`;
+
+  if (userInstructions) {
+    prompt += `
 
 ---
 
-Implement the tasks above to address the review comments. When you are finished, output a JSON block with the list of files you created or modified:
+## Additional Instructions from User
+
+${userInstructions}`;
+  }
+
+  prompt += `
+
+---
+
+Implement the tasks above to address the review comments.${hasSecurityComments ? " Pay special attention to security-related comments — apply secure coding practices and ensure fixes do not introduce new vulnerabilities." : ""} When you are finished, output a JSON block with the list of files you created or modified:
 
 \`\`\`json
 { "files": ["src/example.ts"] }
 \`\`\``;
+
+  return prompt;
 }
 
 async function executeWithDevAgent(
@@ -496,6 +574,7 @@ async function executeWithDevAgent(
   plan: PlannerOutput,
   autoApprove?: boolean,
   onActivity?: (event: ActivityEvent) => void,
+  userInstructions?: string,
 ): Promise<void> {
   const agents = getAgents();
   const devAgent = agents.find((a) => a.name === "dev");
@@ -503,7 +582,7 @@ async function executeWithDevAgent(
     throw new TaskError("review-comments: no agent named 'dev' found in config");
   }
 
-  const prompt = buildDevPrompt(devAgent.systemPrompt, comments, plan);
+  const prompt = buildDevPrompt(devAgent.systemPrompt, comments, plan, userInstructions);
 
   const result = await spawnAgent("dev", prompt, { autoApprove, quiet: true, onActivity });
 
@@ -618,7 +697,8 @@ export async function reviewCommentsCommand(
       commentSpinner.succeed(chalk.green(`Fetched ${comments.length} comment(s)`));
     }
 
-    // 6. Display comment summary
+    // 6. Classify and display comment summary
+    comments = classifyComments(comments);
     console.log();
     displayCommentSummary(comments);
 
@@ -641,7 +721,9 @@ export async function reviewCommentsCommand(
 
     displayPlan(plan);
 
-    // 9. Approval loop
+    // 9. Approval loop with additional instructions support
+    let userInstructions: string | undefined;
+
     if (!options.autoApprove) {
       let approved = false;
       while (!approved) {
@@ -650,6 +732,7 @@ export async function reviewCommentsCommand(
           choices: [
             { name: "Approve — execute plan", value: "approve" },
             { name: "Provide feedback — regenerate plan", value: "feedback" },
+            { name: "Add instructions — pass extra guidance to dev agent", value: "instructions" },
             { name: "Reject — exit without changes", value: "reject" },
           ],
         });
@@ -666,6 +749,18 @@ export async function reviewCommentsCommand(
             planSpinner.succeed(chalk.green("Plan regenerated"));
             displayPlan(plan);
           }
+        } else if (action === "instructions") {
+          const extra = await input({
+            message: "Enter additional instructions for the dev agent:",
+          });
+          if (extra.trim()) {
+            userInstructions = userInstructions
+              ? `${userInstructions}\n\n${extra.trim()}`
+              : extra.trim();
+            console.log(chalk.green("  Instructions saved. They will be included when executing."));
+            console.log(chalk.gray(`  Current instructions:\n    ${userInstructions.split("\n").join("\n    ")}`));
+            console.log();
+          }
         } else {
           console.log(chalk.yellow("\n  Rejected. No changes made.\n"));
           return;
@@ -678,7 +773,7 @@ export async function reviewCommentsCommand(
     const execStatus = createLiveStatus("addressing review comments...");
 
     // User approved the plan (or --auto-approve was set), so dev agent can write freely
-    await executeWithDevAgent(comments, plan, true, execStatus.onActivity);
+    await executeWithDevAgent(comments, plan, true, execStatus.onActivity, userInstructions);
     execStatus.succeed(chalk.green("Dev agent finished"));
 
     // 11. Commit and push changes
