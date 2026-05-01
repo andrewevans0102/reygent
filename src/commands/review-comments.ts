@@ -25,22 +25,26 @@ interface ReviewComment {
   path?: string;
   line?: number | null;
   createdAt: string;
-  isSecurity?: boolean;
+}
+
+interface ClassifiedComment extends ReviewComment {
+  isSecurity: boolean;
 }
 
 // ── Security comment classification ──
 
-const SECURITY_KEYWORDS = [
+// Primary keywords: high-confidence security signals — any single match triggers isSecurity
+const PRIMARY_SECURITY_KEYWORDS = [
   "xss", "cross-site scripting", "csrf", "cross-site request forgery",
   "sql injection", "sqli", "command injection", "code injection",
   "path traversal", "directory traversal",
   "ssrf", "server-side request forgery",
   "xxe", "rce", "remote code execution",
   "deserialization", "idor",
-  "authentication", "authorization", "auth bypass",
+  "auth bypass",
   "privilege escalation", "broken access control",
   "session fixation", "session hijacking",
-  "jwt", "token expir", "token leak",
+  "token expir", "token leak",
   "hardcoded secret", "hardcoded password", "hardcoded key",
   "api key", "credential", "plaintext password",
   "weak hash", "md5", "sha1",
@@ -48,22 +52,43 @@ const SECURITY_KEYWORDS = [
   "sanitiz", "unsanitized", "unescaped",
   "untrusted input", "tainted",
   "innerhtml", "dangerouslysetinnerhtml", "eval(",
-  "cors", "content-security-policy", "csp",
+  "content-security-policy", "csp",
   "security header", "httponly", "secure flag",
   "vulnerability", "exploit", "attack vector",
   "owasp", "cve", "cwe",
   "security risk", "security issue", "security concern",
   "security review", "security finding",
-  "denial of service", "dos",
-  "race condition",
+  "denial of service",
   "information disclosure", "data leak", "data exposure",
   "sensitive data",
 ];
 
-function classifyComments(comments: ReviewComment[]): ReviewComment[] {
+// Secondary keywords: broad terms that only flag when 2+ secondaries co-occur
+// or when paired with at least 1 primary keyword
+const SECONDARY_SECURITY_KEYWORDS = [
+  "authentication", "authorization",
+  "jwt", "cors",
+  "dos", "race condition",
+];
+
+function classifyComment(body: string): boolean {
+  const lower = body.toLowerCase();
+
+  const hasPrimary = PRIMARY_SECURITY_KEYWORDS.some((kw) => lower.includes(kw));
+  if (hasPrimary) return true;
+
+  const secondaryMatches = SECONDARY_SECURITY_KEYWORDS.filter((kw) =>
+    lower.includes(kw),
+  );
+
+  // Require 2+ secondary keywords to co-occur
+  return secondaryMatches.length >= 2;
+}
+
+function classifyComments(comments: ReviewComment[]): ClassifiedComment[] {
   return comments.map((c) => ({
     ...c,
-    isSecurity: SECURITY_KEYWORDS.some((kw) => c.body.toLowerCase().includes(kw)),
+    isSecurity: classifyComment(c.body),
   }));
 }
 
@@ -318,7 +343,7 @@ async function fetchGitLabComments(
 
 // ── Display ──
 
-function displayCommentSummary(comments: ReviewComment[]): void {
+function displayCommentSummary(comments: ClassifiedComment[]): void {
   const securityCount = comments.filter((c) => c.isSecurity).length;
   const generalCount = comments.length - securityCount;
 
@@ -351,11 +376,11 @@ function displayCommentSummary(comments: ReviewComment[]): void {
 
 // ── Plan generation ──
 
-function formatCommentBlock(comments: ReviewComment[]): string {
+function formatCommentBlock(comments: ClassifiedComment[]): string {
   const securityComments = comments.filter((c) => c.isSecurity);
   const generalComments = comments.filter((c) => !c.isSecurity);
 
-  const formatOne = (c: ReviewComment) => {
+  const formatOne = (c: ClassifiedComment) => {
     const loc = c.path ? `File: ${c.path}${c.line ? `:${c.line}` : ""}` : "General";
     return `- **${c.author}** (${loc}): ${c.body}`;
   };
@@ -375,10 +400,14 @@ function formatCommentBlock(comments: ReviewComment[]): string {
 
 function buildPlanPrompt(
   systemPrompt: string,
-  comments: ReviewComment[],
+  comments: ClassifiedComment[],
   diff: string,
 ): string {
   const hasSecurityComments = comments.some((c) => c.isSecurity);
+
+  const securityPlanInstruction = hasSecurityComments
+    ? " Security-related comments are marked as priority — ensure concrete fix tasks are generated for each one. Apply secure coding practices (input validation, output encoding, least privilege, etc.) when planning fixes."
+    : "";
 
   return `${systemPrompt}
 
@@ -400,7 +429,7 @@ ${diff}
 
 ## Instructions
 
-Analyze the review comments above in the context of the current diff. Create a plan to address each comment.${hasSecurityComments ? " Security-related comments are marked as priority — ensure concrete fix tasks are generated for each one. Apply secure coding practices (input validation, output encoding, least privilege, etc.) when planning fixes." : ""} Return ONLY valid JSON:
+Analyze the review comments above in the context of the current diff. Create a plan to address each comment.${securityPlanInstruction} Return ONLY valid JSON:
 
 \`\`\`json
 { "valid": true, "goals": ["..."], "tasks": ["..."], "constraints": ["..."], "dod": ["..."] }
@@ -416,7 +445,7 @@ Each array must contain at least one non-empty string. Do not include any text o
 
 function buildPlanPromptWithFeedback(
   systemPrompt: string,
-  comments: ReviewComment[],
+  comments: ClassifiedComment[],
   diff: string,
   feedback: string,
 ): string {
@@ -433,7 +462,7 @@ ${feedback}`;
 }
 
 async function generatePlan(
-  comments: ReviewComment[],
+  comments: ClassifiedComment[],
   diff: string,
   feedback?: string,
 ): Promise<PlannerOutput> {
@@ -516,11 +545,15 @@ function displayPlan(plan: PlannerOutput): void {
 
 function buildDevPrompt(
   systemPrompt: string,
-  comments: ReviewComment[],
+  comments: ClassifiedComment[],
   plan: PlannerOutput,
   userInstructions?: string,
 ): string {
   const hasSecurityComments = comments.some((c) => c.isSecurity);
+
+  const securityDevInstruction = hasSecurityComments
+    ? " Pay special attention to security-related comments — apply secure coding practices and ensure fixes do not introduce new vulnerabilities."
+    : "";
 
   let prompt = `${systemPrompt}
 
@@ -560,7 +593,7 @@ ${userInstructions}`;
 
 ---
 
-Implement the tasks above to address the review comments.${hasSecurityComments ? " Pay special attention to security-related comments — apply secure coding practices and ensure fixes do not introduce new vulnerabilities." : ""} When you are finished, output a JSON block with the list of files you created or modified:
+Implement the tasks above to address the review comments.${securityDevInstruction} When you are finished, output a JSON block with the list of files you created or modified:
 
 \`\`\`json
 { "files": ["src/example.ts"] }
@@ -570,7 +603,7 @@ Implement the tasks above to address the review comments.${hasSecurityComments ?
 }
 
 async function executeWithDevAgent(
-  comments: ReviewComment[],
+  comments: ClassifiedComment[],
   plan: PlannerOutput,
   autoApprove?: boolean,
   onActivity?: (event: ActivityEvent) => void,
@@ -698,9 +731,9 @@ export async function reviewCommentsCommand(
     }
 
     // 6. Classify and display comment summary
-    comments = classifyComments(comments);
+    const classified = classifyComments(comments);
     console.log();
-    displayCommentSummary(comments);
+    displayCommentSummary(classified);
 
     // 7. Get git diff for context
     const diffSpinner = createLiveStatus("generating diff...");
@@ -715,7 +748,7 @@ export async function reviewCommentsCommand(
     let plan: PlannerOutput;
     {
       const planSpinner = createLiveStatus("generating plan...");
-      plan = await generatePlan(comments, diff);
+      plan = await generatePlan(classified, diff);
       planSpinner.succeed(chalk.green("Plan generated"));
     }
 
@@ -745,7 +778,7 @@ export async function reviewCommentsCommand(
           });
           if (feedback.trim()) {
             const planSpinner = createLiveStatus("regenerating plan...");
-            plan = await generatePlan(comments, diff, feedback);
+            plan = await generatePlan(classified, diff, feedback);
             planSpinner.succeed(chalk.green("Plan regenerated"));
             displayPlan(plan);
           }
@@ -758,7 +791,10 @@ export async function reviewCommentsCommand(
               ? `${userInstructions}\n\n${extra.trim()}`
               : extra.trim();
             console.log(chalk.green("  Instructions saved. They will be included when executing."));
-            console.log(chalk.gray(`  Current instructions:\n    ${userInstructions.split("\n").join("\n    ")}`));
+            const displayText = userInstructions.length > 200
+              ? userInstructions.slice(0, 200) + "..."
+              : userInstructions;
+            console.log(chalk.gray(`  Current instructions:\n    ${displayText.split("\n").join("\n    ")}`));
             console.log();
           }
         } else {
@@ -773,7 +809,7 @@ export async function reviewCommentsCommand(
     const execStatus = createLiveStatus("addressing review comments...");
 
     // User approved the plan (or --auto-approve was set), so dev agent can write freely
-    await executeWithDevAgent(comments, plan, true, execStatus.onActivity, userInstructions);
+    await executeWithDevAgent(classified, plan, true, execStatus.onActivity, userInstructions);
     execStatus.succeed(chalk.green("Dev agent finished"));
 
     // 11. Commit and push changes
@@ -824,3 +860,13 @@ export async function reviewCommentsCommand(
     process.exit(2);
   }
 }
+
+// Exported for unit testing
+export {
+  classifyComments,
+  classifyComment,
+  buildDevPrompt,
+  PRIMARY_SECURITY_KEYWORDS,
+  SECONDARY_SECURITY_KEYWORDS,
+};
+export type { ReviewComment, ClassifiedComment };
