@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, lstatSync } from "node:fs";
 import { join, dirname } from "node:path";
 import chalk from "chalk";
 import { select, confirm, input } from "@inquirer/prompts";
@@ -123,9 +123,7 @@ async function runConfig(): Promise<void> {
   } else {
     configPath = resolveGlobalConfigPath();
     const globalDir = dirname(configPath);
-    if (!existsSync(globalDir)) {
-      mkdirSync(globalDir, { recursive: true });
-    }
+    mkdirSync(globalDir, { recursive: true });
   }
 
   // 2. Load raw JSON (preserve unknown fields)
@@ -337,6 +335,16 @@ async function runConfig(): Promise<void> {
 
   // 9. Write config
   try {
+    // Security: check for symlink before writing
+    try {
+      const stats = lstatSync(configPath);
+      if (stats.isSymbolicLink()) {
+        throw new Error(`Security: ${configPath} is a symlink`);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+
     writeFileSync(configPath, JSON.stringify(rawConfig, null, 2) + "\n", "utf-8");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

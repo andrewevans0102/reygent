@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import chalk from "chalk";
+import { z } from "zod";
 import type { AgentConfig } from "./agents.js";
 import { builtinAgents } from "./agents.js";
 import { discoverSkills, skillToAgentConfig } from "./skills.js";
@@ -18,6 +19,26 @@ export interface ReygentConfig {
   provider?: string;
 }
 
+const AgentConfigSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  systemPrompt: z.string(),
+  tools: z.array(z.string()),
+  role: z.string(),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+});
+
+const ReygentConfigSchema = z.object({
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  agents: z.array(AgentConfigSchema).optional(),
+  skills: z.object({
+    path: z.string().optional(),
+    disabled: z.array(z.string()).optional(),
+  }).optional(),
+});
+
 /**
  * Resolve config: local .reygent/config.json → global ~/.reygent/config.json → built-in agents.
  */
@@ -27,7 +48,8 @@ export function loadConfig(): ReygentConfig {
   if (localConfigPath) {
     try {
       const raw = readFileSync(localConfigPath, "utf-8");
-      const config: ReygentConfig = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const config = ReygentConfigSchema.parse(parsed);
       return {
         agents: config.agents ?? builtinAgents,
         skills: config.skills ?? {},
@@ -46,7 +68,8 @@ export function loadConfig(): ReygentConfig {
   if (globalConfigPath) {
     try {
       const raw = readFileSync(globalConfigPath, "utf-8");
-      const config: ReygentConfig = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const config = ReygentConfigSchema.parse(parsed);
       return {
         agents: config.agents ?? builtinAgents,
         skills: config.skills ?? {},
