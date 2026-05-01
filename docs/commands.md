@@ -315,6 +315,42 @@ reygent config
 
 Requires a `.reygent/` directory. Run `reygent init` first if you haven't already.
 
+**Example agent grouping output:**
+
+```
+── Development ──
+
+Dev  developer
+  Implementation agent for writing code
+  Tools: read, write, edit
+  Provider: claude
+  Model:    claude-sonnet-4-5
+? Configure Dev: (Use arrow keys)
+❯ Keep current
+  Customize
+  Clear overrides
+
+── Testing & Review ──
+
+QE  quality-engineer
+  Writes and runs functional tests
+  Tools: read, write, bash
+  Provider: claude
+  Model:    claude-opus-4-6
+? Configure QE: (Use arrow keys)
+❯ Keep current
+  Customize
+  Clear overrides
+
+── Planning ──
+
+Planner  planner
+  Creates implementation plans
+  Tools: read, grep, glob
+  Provider: claude
+  Model:    claude-sonnet-4-5
+```
+
 **Available Claude models:**
 
 | Model ID | Label |

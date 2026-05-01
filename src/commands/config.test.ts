@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, lstatSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, lstatSync, renameSync, unlinkSync } from "node:fs";
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
@@ -7,6 +7,8 @@ vi.mock("node:fs", () => ({
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
   lstatSync: vi.fn(),
+  renameSync: vi.fn(),
+  unlinkSync: vi.fn(),
 }));
 
 const mockSelect = vi.fn();
@@ -105,6 +107,8 @@ const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
 const mockLstatSync = vi.mocked(lstatSync);
+const mockRenameSync = vi.mocked(renameSync);
+const mockUnlinkSync = vi.mocked(unlinkSync);
 
 describe("configCommand", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
@@ -116,12 +120,10 @@ describe("configCommand", () => {
     mockConfirm.mockResolvedValue(true);
     // Default: file exists
     mockExistsSync.mockReturnValue(true);
-    // Default: lstatSync throws ENOENT (file doesn't exist yet, before write)
-    mockLstatSync.mockImplementation(() => {
-      const err = new Error("ENOENT") as NodeJS.ErrnoException;
-      err.code = "ENOENT";
-      throw err;
-    });
+    // Default: lstatSync returns non-symlink stats
+    mockLstatSync.mockReturnValue({
+      isSymbolicLink: () => false,
+    } as ReturnType<typeof lstatSync>);
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit");
@@ -605,5 +607,50 @@ describe("configCommand", () => {
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(output).toContain("local");
     expect(output).toContain("/proj/.reygent/config.json");
+  });
+
+  it("rejects symlink temp file (security)", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+      agents: [],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5");
+
+    // Temp file write succeeds, but lstatSync reports it as symlink
+    mockLstatSync.mockReturnValueOnce({
+      isSymbolicLink: () => true,
+    } as ReturnType<typeof lstatSync>);
+
+    await expect(configCommand()).rejects.toThrow("process.exit");
+    expect(exitSpy).toHaveBeenCalledWith(2);
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("Security: temp file became symlink");
+    expect(mockUnlinkSync).toHaveBeenCalled(); // cleanup
+  });
+
+  it("shows global scope path in summary", async () => {
+    mockSelect.mockResolvedValueOnce("global"); // scope
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("config.json")) return false;
+      return true; // dir exists
+    });
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-opus-4-6");
+    mockSelect.mockResolvedValueOnce("keep");
+    mockSelect.mockResolvedValueOnce("keep");
+
+    await configCommand();
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("global");
+    expect(output).toContain(".reygent/config.json");
   });
 });

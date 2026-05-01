@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, lstatSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, lstatSync, renameSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { randomBytes } from "node:crypto";
 import chalk from "chalk";
 import { select, confirm, input } from "@inquirer/prompts";
 import { findLocalConfigDir, resolveGlobalConfigPath } from "../config.js";
@@ -148,6 +149,12 @@ async function runConfig(): Promise<void> {
       if (isDebug()) console.error(err);
       process.exit(2);
     }
+  } else {
+    // Initialize empty config with sensible defaults
+    rawConfig = {
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+    };
   }
 
   // Initialize agents array before loop to ensure it always exists in output
@@ -333,19 +340,32 @@ async function runConfig(): Promise<void> {
     }
   }
 
-  // 9. Write config
+  // 9. Write config (atomic write to prevent TOCTOU race)
   try {
-    // Security: check for symlink before writing
-    try {
-      const stats = lstatSync(configPath);
-      if (stats.isSymbolicLink()) {
-        throw new Error(`Security: ${configPath} is a symlink`);
-      }
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    }
+    const tempPath = `${configPath}.tmp.${randomBytes(8).toString("hex")}`;
 
-    writeFileSync(configPath, JSON.stringify(rawConfig, null, 2) + "\n", "utf-8");
+    try {
+      // Write to temp file
+      writeFileSync(tempPath, JSON.stringify(rawConfig, null, 2) + "\n", "utf-8");
+
+      // Security: verify temp file is not symlink
+      const tempStats = lstatSync(tempPath);
+      if (tempStats.isSymbolicLink()) {
+        unlinkSync(tempPath);
+        throw new Error(`Security: temp file became symlink`);
+      }
+
+      // Atomic rename
+      renameSync(tempPath, configPath);
+    } catch (err) {
+      // Clean up temp file on error
+      try {
+        unlinkSync(tempPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw err;
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.log(chalk.red.bold("Error:"), `Failed to write config: ${message}`);
