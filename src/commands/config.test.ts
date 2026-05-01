@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, lstatSync, renameSync, unlinkSync } from "node:fs";
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  lstatSync: vi.fn(),
+  renameSync: vi.fn(),
+  unlinkSync: vi.fn(),
 }));
 
 const mockSelect = vi.fn();
@@ -18,6 +22,7 @@ vi.mock("@inquirer/prompts", () => ({
 
 vi.mock("../config.js", () => ({
   findLocalConfigDir: vi.fn(),
+  resolveGlobalConfigPath: vi.fn(() => "/home/user/.reygent/config.json"),
 }));
 
 vi.mock("../agents.js", () => ({
@@ -97,8 +102,13 @@ import { findLocalConfigDir } from "../config.js";
 import { configCommand } from "./config.js";
 
 const mockFindLocalConfigDir = vi.mocked(findLocalConfigDir);
+const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
+const mockMkdirSync = vi.mocked(mkdirSync);
+const mockLstatSync = vi.mocked(lstatSync);
+const mockRenameSync = vi.mocked(renameSync);
+const mockUnlinkSync = vi.mocked(unlinkSync);
 
 describe("configCommand", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
@@ -108,6 +118,12 @@ describe("configCommand", () => {
     vi.resetAllMocks();
     // Default: proceed with unavailable providers (tests override as needed)
     mockConfirm.mockResolvedValue(true);
+    // Default: file exists
+    mockExistsSync.mockReturnValue(true);
+    // Default: lstatSync returns non-symlink stats
+    mockLstatSync.mockReturnValue({
+      isSymbolicLink: () => false,
+    } as ReturnType<typeof lstatSync>);
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit");
@@ -119,7 +135,8 @@ describe("configCommand", () => {
     exitSpy.mockRestore();
   });
 
-  it("errors when no .reygent/ dir found", async () => {
+  it("errors when no .reygent/ dir found (local scope)", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue(null);
 
     await expect(configCommand()).rejects.toThrow("process.exit");
@@ -131,6 +148,7 @@ describe("configCommand", () => {
   });
 
   it("walks prompts and writes correct config", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -140,9 +158,9 @@ describe("configCommand", () => {
       ],
     }));
 
-    // Global provider → claude
+    // Default provider → claude
     mockSelect.mockResolvedValueOnce("claude");
-    // Global model → claude-opus-4-6
+    // Default model → claude-opus-4-6
     mockSelect.mockResolvedValueOnce("claude-opus-4-6");
     // Configure dev? → keep
     mockSelect.mockResolvedValueOnce("keep");
@@ -156,6 +174,7 @@ describe("configCommand", () => {
   });
 
   it("preserves unknown fields in raw config", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -183,6 +202,7 @@ describe("configCommand", () => {
   });
 
   it("uses input prompt for OpenRouter model", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "openrouter",
@@ -202,6 +222,7 @@ describe("configCommand", () => {
   });
 
   it("skipping agent customization preserves existing values", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -224,17 +245,18 @@ describe("configCommand", () => {
   });
 
   it("applies per-agent overrides correctly", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
       model: "claude-sonnet-4-5",
       agents: [
         { name: "dev", description: "Dev", systemPrompt: "sp", tools: ["read"], role: "developer" },
-        { name: "qe", description: "QE", systemPrompt: "sp2", tools: ["read"], role: "qe" },
+        { name: "qe", description: "QE", systemPrompt: "sp2", tools: ["read"], role: "quality-engineer" },
       ],
     }));
 
-    // Global
+    // Default
     mockSelect.mockResolvedValueOnce("claude");
     mockSelect.mockResolvedValueOnce("claude-sonnet-4-5");
     // Agent: dev → customize
@@ -256,6 +278,7 @@ describe("configCommand", () => {
   });
 
   it("exits 2 on write error", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -275,16 +298,9 @@ describe("configCommand", () => {
   });
 
   it("exits 0 on Ctrl+C", async () => {
-    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
-    mockReadFileSync.mockReturnValue(JSON.stringify({
-      provider: "claude",
-      model: "claude-sonnet-4-5",
-      agents: [],
-    }));
-
     const exitError = new Error("prompt cancelled");
     (exitError as Error & { name: string }).name = "ExitPromptError";
-    mockSelect.mockRejectedValueOnce(exitError);
+    mockSelect.mockRejectedValueOnce(exitError); // scope prompt cancelled
 
     await expect(configCommand()).rejects.toThrow("process.exit");
     expect(exitSpy).toHaveBeenCalledWith(0);
@@ -294,6 +310,7 @@ describe("configCommand", () => {
   });
 
   it("uses builtinAgents when rawConfig has no agents array", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -315,6 +332,7 @@ describe("configCommand", () => {
   });
 
   it("warns and confirms when selecting unavailable provider", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -340,6 +358,7 @@ describe("configCommand", () => {
   });
 
   it("cancels when user declines unavailable provider", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -355,6 +374,7 @@ describe("configCommand", () => {
   });
 
   it("handles clearing agent overrides", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -379,6 +399,7 @@ describe("configCommand", () => {
   });
 
   it("handles extra agents in config.json not in builtinAgents", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockReturnValue(JSON.stringify({
       provider: "claude",
@@ -405,6 +426,7 @@ describe("configCommand", () => {
   });
 
   it("distinguishes JSON parse errors from file read errors", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     mockReadFileSync.mockImplementation(() => {
       throw new SyntaxError("Unexpected token } in JSON at position 42");
@@ -418,22 +440,8 @@ describe("configCommand", () => {
     expect(output).toContain("Parse error:");
   });
 
-  it("handles file not found error", async () => {
-    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
-    const err = new Error("ENOENT: no such file or directory");
-    (err as Error & { code: string }).code = "ENOENT";
-    mockReadFileSync.mockImplementation(() => {
-      throw err;
-    });
-
-    await expect(configCommand()).rejects.toThrow("process.exit");
-    expect(exitSpy).toHaveBeenCalledWith(2);
-
-    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
-    expect(output).toContain("File not found");
-  });
-
   it("handles permission denied error", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
     mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
     const err = new Error("EACCES: permission denied");
     (err as Error & { code: string }).code = "EACCES";
@@ -446,5 +454,203 @@ describe("configCommand", () => {
 
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(output).toContain("Permission denied");
+  });
+
+  // --- Global scope tests ---
+
+  it("creates global config file when global scope selected", async () => {
+    mockSelect.mockResolvedValueOnce("global"); // scope
+    // Global dir exists but config file does not
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("config.json")) return false;
+      return true;
+    });
+
+    mockSelect.mockResolvedValueOnce("claude"); // provider
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5"); // model
+    // builtinAgents mock has 2 agents
+    mockSelect.mockResolvedValueOnce("keep");
+    mockSelect.mockResolvedValueOnce("keep");
+
+    await configCommand();
+
+    expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+    const writtenPath = mockWriteFileSync.mock.calls[0]![0];
+    expect(writtenPath).toContain(".reygent/config.json");
+  });
+
+  it("creates ~/.reygent dir if it does not exist (global scope)", async () => {
+    mockSelect.mockResolvedValueOnce("global"); // scope
+    mockExistsSync.mockReturnValue(false); // neither dir nor file exist
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5");
+    mockSelect.mockResolvedValueOnce("keep");
+    mockSelect.mockResolvedValueOnce("keep");
+
+    await configCommand();
+
+    expect(mockMkdirSync).toHaveBeenCalledWith(
+      expect.stringContaining(".reygent"),
+      { recursive: true },
+    );
+  });
+
+  it("starts with empty config when global file does not exist", async () => {
+    mockSelect.mockResolvedValueOnce("global"); // scope
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("config.json")) return false;
+      return true; // dir exists
+    });
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-opus-4-6");
+    mockSelect.mockResolvedValueOnce("keep");
+    mockSelect.mockResolvedValueOnce("keep");
+
+    await configCommand();
+
+    const written = JSON.parse((mockWriteFileSync.mock.calls[0]![1] as string).trim());
+    expect(written.provider).toBe("claude");
+    expect(written.model).toBe("claude-opus-4-6");
+    // Should have builtinAgents since config started empty
+    expect(written.agents).toHaveLength(2);
+  });
+
+  // --- Agent grouping tests ---
+
+  it("shows agent role badges and tools in output", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+      agents: [
+        { name: "dev", description: "Dev agent", systemPrompt: "sp", tools: ["read", "write"], role: "developer" },
+      ],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5");
+    mockSelect.mockResolvedValueOnce("keep");
+
+    await configCommand();
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("developer");
+    expect(output).toContain("Development");
+    expect(output).toContain("read");
+    expect(output).toContain("write");
+  });
+
+  it("groups agents by category", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+      agents: [
+        { name: "dev", description: "Dev", systemPrompt: "sp", tools: ["read"], role: "developer" },
+        { name: "qe", description: "QE", systemPrompt: "sp", tools: ["read"], role: "quality-engineer" },
+      ],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5");
+    mockSelect.mockResolvedValueOnce("keep");
+    mockSelect.mockResolvedValueOnce("keep");
+
+    await configCommand();
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("Development");
+    expect(output).toContain("Testing & Review");
+  });
+
+  it("puts uncategorized agents in Other group", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+      agents: [
+        { name: "custom", description: "Custom", systemPrompt: "sp", tools: ["read"], role: "unknown-role" },
+      ],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5");
+    mockSelect.mockResolvedValueOnce("keep");
+
+    await configCommand();
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("Other");
+  });
+
+  it("shows scope and file path in summary", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+      agents: [],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5");
+
+    await configCommand();
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("local");
+    expect(output).toContain("/proj/.reygent/config.json");
+  });
+
+  it("rejects symlink temp file (security)", async () => {
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5",
+      agents: [],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5");
+
+    // Temp file write succeeds, but lstatSync reports it as symlink
+    mockLstatSync.mockReturnValueOnce({
+      isSymbolicLink: () => true,
+    } as ReturnType<typeof lstatSync>);
+
+    await expect(configCommand()).rejects.toThrow("process.exit");
+    expect(exitSpy).toHaveBeenCalledWith(2);
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("Security: temp file became symlink");
+    expect(mockUnlinkSync).toHaveBeenCalled(); // cleanup
+  });
+
+  it("shows global scope path in summary", async () => {
+    mockSelect.mockResolvedValueOnce("global"); // scope
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("config.json")) return false;
+      return true; // dir exists
+    });
+
+    mockSelect.mockResolvedValueOnce("claude");
+    mockSelect.mockResolvedValueOnce("claude-opus-4-6");
+    mockSelect.mockResolvedValueOnce("keep");
+    mockSelect.mockResolvedValueOnce("keep");
+
+    await configCommand();
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("global");
+    expect(output).toContain(".reygent/config.json");
   });
 });

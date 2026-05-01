@@ -54,11 +54,21 @@ const SUPPORTED_MODELS: ModelEntry[] = [
   { id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5 (recommended)" },
   { id: "claude-opus-4-6", label: "Opus 4.6" },
   { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
+  { id: "claude-sonnet-4-20250514", label: "Sonnet 4" },
+  { id: "claude-3-5-sonnet-20241022", label: "3.5 Sonnet" },
+  { id: "claude-3-5-haiku-20241022", label: "3.5 Haiku" },
+  { id: "claude-3-opus-20240229", label: "3 Opus" },
 ];
 
 const SHORT_ALIASES: Record<string, string> = {
   "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
   "claude-haiku-4-5": "claude-haiku-4-5-20251001",
+  "claude-sonnet-4": "claude-sonnet-4-20250514",
+  "claude-3-5-sonnet": "claude-3-5-sonnet-20241022",
+  "claude-3.5-sonnet": "claude-3-5-sonnet-20241022",
+  "claude-3-5-haiku": "claude-3-5-haiku-20241022",
+  "claude-3.5-haiku": "claude-3-5-haiku-20241022",
+  "claude-3-opus": "claude-3-opus-20240229",
 };
 
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import chalk from "chalk";
+import { z } from "zod";
 import type { AgentConfig } from "./agents.js";
 import { builtinAgents } from "./agents.js";
 import { discoverSkills, skillToAgentConfig } from "./skills.js";
@@ -18,9 +19,38 @@ export interface ReygentConfig {
   provider?: string;
 }
 
+const KNOWN_ROLES = ["developer", "general", "quality-engineer", "security-reviewer", "reviewer", "planner"] as const;
+
+const AgentConfigSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  systemPrompt: z.string(),
+  tools: z.array(z.string()),
+  role: z.string().refine(
+    (role) => {
+      if (!KNOWN_ROLES.includes(role as typeof KNOWN_ROLES[number])) {
+        console.log(chalk.yellow(`Warning: unknown agent role "${role}"`));
+      }
+      return true; // Allow all roles, just warn
+    },
+    { message: "Role validation warning" }
+  ),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+});
+
+const ReygentConfigSchema = z.object({
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  agents: z.array(AgentConfigSchema).optional(),
+  skills: z.object({
+    path: z.string().optional(),
+    disabled: z.array(z.string()).optional(),
+  }).optional(),
+});
+
 /**
- * Resolve config from local .reygent/config.json or fall back to built-in agents.
- * Searches upward from cwd to find .reygent folder.
+ * Resolve config: local .reygent/config.json → global ~/.reygent/config.json → built-in agents.
  */
 export function loadConfig(): ReygentConfig {
   const localConfigPath = findLocalConfig(process.cwd());
@@ -28,7 +58,8 @@ export function loadConfig(): ReygentConfig {
   if (localConfigPath) {
     try {
       const raw = readFileSync(localConfigPath, "utf-8");
-      const config: ReygentConfig = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      const config = ReygentConfigSchema.parse(parsed);
       return {
         agents: config.agents ?? builtinAgents,
         skills: config.skills ?? {},
@@ -42,7 +73,36 @@ export function loadConfig(): ReygentConfig {
     }
   }
 
-  // No local config — use builtins
+  // Try global config
+  const globalConfigPath = findGlobalConfig();
+  if (globalConfigPath) {
+    try {
+      const raw = readFileSync(globalConfigPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      const config = ReygentConfigSchema.parse(parsed);
+      return {
+        agents: config.agents ?? builtinAgents,
+        skills: config.skills ?? {},
+        model: config.model,
+        provider: config.provider,
+      };
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        const issues = err.issues.map((issue) => {
+          const path = issue.path.join(".");
+          return `  ${path}: ${issue.message}`;
+        }).join("\n");
+        throw new Error(
+          `Invalid global config at ${globalConfigPath}:\n${issues}`,
+        );
+      }
+      throw new Error(
+        `Failed to parse global config at ${globalConfigPath}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // No config at all — use builtins
   return {
     agents: builtinAgents,
     skills: {},
@@ -57,6 +117,21 @@ function findLocalConfig(startDir: string): string | null {
   if (!configDir) return null;
   const configPath = join(configDir, "config.json");
   return existsSync(configPath) ? configPath : null;
+}
+
+/**
+ * Return path to ~/.reygent/config.json if it exists, null otherwise.
+ */
+export function findGlobalConfig(): string | null {
+  const configPath = resolveGlobalConfigPath();
+  return existsSync(configPath) ? configPath : null;
+}
+
+/**
+ * Return the canonical path to ~/.reygent/config.json (whether it exists or not).
+ */
+export function resolveGlobalConfigPath(): string {
+  return join(resolveGlobalConfigDir(), "config.json");
 }
 
 /**

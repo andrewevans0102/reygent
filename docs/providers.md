@@ -10,7 +10,7 @@ Reygent supports multiple AI providers. Each provider implements the same `Provi
 |---|---|
 | **Type** | CLI-based (`claude` subprocess) |
 | **Default model** | `claude-sonnet-4-5-20250929` |
-| **Supported models** | Sonnet 4.5, Opus 4.6, Haiku 4.5 |
+| **Supported models** | Sonnet 4.5, Opus 4.6, Haiku 4.5, Sonnet 4, 3.5 Sonnet, 3.5 Haiku, 3 Opus |
 | **Requires** | `claude` CLI installed and authenticated |
 
 Claude is the default and most full-featured provider. It spawns the Claude CLI as a subprocess with `--output-format stream-json`, giving agents access to the full tool ecosystem (Read, Write, Edit, Bash, Glob, Grep).
@@ -21,7 +21,7 @@ reygent run --spec spec.md --model claude-opus-4-6            # use Opus
 reygent run --spec spec.md --model claude-haiku-4-5           # use Haiku
 ```
 
-**Short aliases:** `claude-sonnet-4-5` → `claude-sonnet-4-5-20250929`, `claude-haiku-4-5` → `claude-haiku-4-5-20251001`
+**Short aliases:** `claude-sonnet-4-5` → `claude-sonnet-4-5-20250929`, `claude-haiku-4-5` → `claude-haiku-4-5-20251001`, `claude-sonnet-4` → `claude-sonnet-4-20250514`, `claude-3-5-sonnet` → `claude-3-5-sonnet-20241022`, `claude-3-5-haiku` → `claude-3-5-haiku-20241022`, `claude-3-opus` → `claude-3-opus-20240229`
 
 ### Gemini
 
