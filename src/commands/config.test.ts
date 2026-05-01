@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, lstatSync } from "node:fs";
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
+  lstatSync: vi.fn(),
 }));
 
 const mockSelect = vi.fn();
@@ -103,6 +104,7 @@ const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
+const mockLstatSync = vi.mocked(lstatSync);
 
 describe("configCommand", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
@@ -114,6 +116,12 @@ describe("configCommand", () => {
     mockConfirm.mockResolvedValue(true);
     // Default: file exists
     mockExistsSync.mockReturnValue(true);
+    // Default: lstatSync throws ENOENT (file doesn't exist yet, before write)
+    mockLstatSync.mockImplementation(() => {
+      const err = new Error("ENOENT") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      throw err;
+    });
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit");
