@@ -115,7 +115,15 @@ reygent run --spec spec.md --dry-run
 
 ## 7. Customize Config
 
-Edit `.reygent/config.json` to change agent behavior:
+Use the interactive config command to set your provider, model, and per-agent overrides:
+
+```bash
+reygent config
+```
+
+This walks you through selecting a provider and model, then lets you customize each agent individually. See the [config command reference](./docs/commands.md#reygent-config) for details.
+
+You can also edit `.reygent/config.json` directly:
 
 ```json
 {

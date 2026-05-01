@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { loadConfig, getAgents, findLocalConfigDir, resolveSkillsPath, resolveSkillsDir, resolveGlobalConfigDir, getSkillsAsAgents } from "./config.js";
+import { loadConfig, getAgents, findLocalConfigDir, resolveSkillsPath, resolveSkillsDir, resolveGlobalConfigDir, getSkillsAsAgents, findGlobalConfig, resolveGlobalConfigPath } from "./config.js";
 import { builtinAgents } from "./agents.js";
 import type { SkillManifest } from "./skills.js";
 
@@ -87,6 +87,46 @@ describe("loadConfig", () => {
     loadConfig();
     expect(mockExistsSync).toHaveBeenCalled();
   });
+
+  it("falls back to global config when no local config exists", () => {
+    // No local .reygent dir, but global config.json exists
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      return path.endsWith(".reygent/config.json") && path.includes(require("os").homedir());
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+    }));
+
+    const config = loadConfig();
+    expect(config.provider).toBe("gemini");
+    expect(config.model).toBe("gemini-2.5-pro");
+    expect(config.agents).toEqual(builtinAgents);
+  });
+
+  it("local config takes precedence over global config", () => {
+    // Both local and global exist
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-opus-4-6",
+    }));
+
+    const config = loadConfig();
+    expect(config.provider).toBe("claude");
+  });
+
+  it("throws on invalid global config JSON", () => {
+    // No local .reygent dir, but global config exists
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      return path.endsWith(".reygent/config.json") && path.includes(require("os").homedir());
+    });
+    mockReadFileSync.mockReturnValue("invalid json{");
+
+    expect(() => loadConfig()).toThrow(/failed to parse global config/i);
+  });
 });
 
 describe("findLocalConfigDir", () => {
@@ -129,6 +169,28 @@ describe("resolveGlobalConfigDir", () => {
   it("returns ~/.reygent path", () => {
     const result = resolveGlobalConfigDir();
     expect(result).toMatch(/\.reygent$/);
+  });
+});
+
+describe("resolveGlobalConfigPath", () => {
+  it("returns canonical path regardless of existence", () => {
+    const result = resolveGlobalConfigPath();
+    expect(result).toMatch(/\.reygent\/config\.json$/);
+  });
+});
+
+describe("findGlobalConfig", () => {
+  it("returns path when global config exists", () => {
+    mockExistsSync.mockImplementation((p) =>
+      String(p).endsWith(".reygent/config.json"),
+    );
+    const result = findGlobalConfig();
+    expect(result).toMatch(/\.reygent\/config\.json$/);
+  });
+
+  it("returns null when no global config", () => {
+    mockExistsSync.mockReturnValue(false);
+    expect(findGlobalConfig()).toBeNull();
   });
 });
 

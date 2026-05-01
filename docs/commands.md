@@ -295,25 +295,39 @@ reygent review-comments --insecure
 
 ## `reygent config`
 
-Interactively configure the default provider, model, and per-agent overrides for your local `.reygent/config.json`.
+Interactively configure provider, model, and per-agent overrides.
 
 ```bash
 reygent config
 ```
 
-Requires a `.reygent/` directory. Run `reygent init` first if you haven't already.
-
 **What it does:**
 
 1. Shows current provider and model settings
 2. Checks which providers are available on your machine (green checkmark or red cross)
-3. Prompts you to select a global provider (`claude`, `gemini`, `codex`, `openrouter`)
-4. Prompts you to select a global model from that provider's supported models
-5. Walks through each agent and offers three choices per agent:
-   - **Keep current** — no changes
-   - **Customize** — pick a different provider and model for this agent
-   - **Clear overrides** — remove any existing per-agent overrides (only shown if overrides exist)
+3. Prompts you to select a default provider (`claude`, `gemini`, `codex`, `openrouter`)
+4. Prompts you to select a default model from that provider's supported list
+5. Walks through each agent, grouped by category (**Development**, **Testing & Review**, **Planning**), and shows:
+   - Role badge, description, and available tools
+   - Current provider and model
+   - Three choices: **Keep current**, **Customize** (pick a different provider/model), or **Clear overrides** (remove per-agent overrides)
 6. Writes the updated config to `.reygent/config.json`
+
+Requires a `.reygent/` directory. Run `reygent init` first if you haven't already.
+
+**Available Claude models:**
+
+| Model ID | Label |
+|---|---|
+| `claude-sonnet-4-5-20250929` | Sonnet 4.5 (recommended) |
+| `claude-opus-4-6` | Opus 4.6 |
+| `claude-haiku-4-5-20251001` | Haiku 4.5 |
+| `claude-sonnet-4-20250514` | Sonnet 4 |
+| `claude-3-5-sonnet-20241022` | 3.5 Sonnet |
+| `claude-3-5-haiku-20241022` | 3.5 Haiku |
+| `claude-3-opus-20240229` | 3 Opus |
+
+Short aliases are supported (e.g., `claude-sonnet-4-5` resolves to `claude-sonnet-4-5-20250929`).
 
 **Example:**
 

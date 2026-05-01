@@ -1,13 +1,90 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
 import chalk from "chalk";
 import { select, confirm, input } from "@inquirer/prompts";
-import { findLocalConfigDir } from "../config.js";
+import { findLocalConfigDir, resolveGlobalConfigPath } from "../config.js";
 import type { ReygentConfig } from "../config.js";
 import type { AgentConfig } from "../agents.js";
 import { builtinAgents } from "../agents.js";
 import { PROVIDER_NAMES, getProvider } from "../providers/index.js";
 import { isDebug } from "../debug.js";
+
+/** Agent categories for grouped display */
+const AGENT_CATEGORIES: { label: string; color: (s: string) => string; roles: string[] }[] = [
+  {
+    label: "Development",
+    color: chalk.blue,
+    roles: ["developer", "general"],
+  },
+  {
+    label: "Testing & Review",
+    color: chalk.magenta,
+    roles: ["quality-engineer", "security-reviewer", "reviewer"],
+  },
+  {
+    label: "Planning",
+    color: chalk.yellow,
+    roles: ["planner"],
+  },
+];
+
+interface AgentGroup {
+  label: string;
+  color: (s: string) => string;
+  agentIndices: number[];
+}
+
+function categorizeAgents(agents: AgentConfig[]): AgentGroup[] {
+  const groups: AgentGroup[] = [];
+  const assigned = new Set<number>();
+
+  for (const category of AGENT_CATEGORIES) {
+    const indices: number[] = [];
+    for (let i = 0; i < agents.length; i++) {
+      if (assigned.has(i)) continue;
+      if (category.roles.includes(agents[i]!.role)) {
+        indices.push(i);
+        assigned.add(i);
+      }
+    }
+    if (indices.length > 0) {
+      groups.push({
+        label: category.label,
+        color: category.color,
+        agentIndices: indices,
+      });
+    }
+  }
+
+  // Uncategorized agents go into "Other"
+  const remaining: number[] = [];
+  for (let i = 0; i < agents.length; i++) {
+    if (!assigned.has(i)) remaining.push(i);
+  }
+  if (remaining.length > 0) {
+    groups.push({
+      label: "Other",
+      color: chalk.gray,
+      agentIndices: remaining,
+    });
+  }
+
+  return groups;
+}
+
+/** Map role to a colored badge string */
+function roleBadge(role: string): string {
+  const badges: Record<string, (s: string) => string> = {
+    "developer": chalk.bgBlue.white,
+    "general": chalk.bgBlue.white,
+    "quality-engineer": chalk.bgMagenta.white,
+    "security-reviewer": chalk.bgRed.white,
+    "reviewer": chalk.bgMagenta.white,
+    "planner": chalk.bgYellow.black,
+  };
+  const colorFn = badges[role] ?? chalk.bgGray.white;
+  return colorFn(` ${role} `);
+}
 
 export async function configCommand(): Promise<void> {
   try {
@@ -23,41 +100,56 @@ export async function configCommand(): Promise<void> {
 }
 
 async function runConfig(): Promise<void> {
-  // 1. Find .reygent/ dir
-  const configDir = findLocalConfigDir(process.cwd());
-  if (!configDir) {
-    console.log(chalk.red.bold("Error:"), "No .reygent/ directory found.");
-    console.log(chalk.gray("  Run"), chalk.cyan("reygent init"), chalk.gray("first."));
-    console.log("");
-    process.exit(1);
+  // 1. Scope selection
+  const scope = await select({
+    message: "Configuration scope:",
+    choices: [
+      { name: `Local  ${chalk.gray("— .reygent/config.json (this project)")}`, value: "local" as const },
+      { name: `Global ${chalk.gray("— ~/.reygent/config.json (all projects)")}`, value: "global" as const },
+    ],
+  });
+
+  let configPath: string;
+
+  if (scope === "local") {
+    const configDir = findLocalConfigDir(process.cwd());
+    if (!configDir) {
+      console.log(chalk.red.bold("Error:"), "No .reygent/ directory found.");
+      console.log(chalk.gray("  Run"), chalk.cyan("reygent init"), chalk.gray("first."));
+      console.log("");
+      process.exit(1);
+    }
+    configPath = join(configDir, "config.json");
+  } else {
+    configPath = resolveGlobalConfigPath();
+    const globalDir = dirname(configPath);
+    if (!existsSync(globalDir)) {
+      mkdirSync(globalDir, { recursive: true });
+    }
   }
 
-  const configPath = join(configDir, "config.json");
-
   // 2. Load raw JSON (preserve unknown fields)
-  let rawConfig: Record<string, unknown>;
-  try {
-    const content = readFileSync(configPath, "utf-8");
-    rawConfig = JSON.parse(content);
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      console.log(chalk.red.bold("Error:"), `Invalid JSON in ${configPath}`);
-      console.log(chalk.gray("  Parse error:"), err.message);
-    } else if (err && typeof err === "object" && "code" in err) {
-      const code = (err as { code?: string }).code;
-      if (code === "ENOENT") {
-        console.log(chalk.red.bold("Error:"), `File not found: ${configPath}`);
-      } else if (code === "EACCES") {
-        console.log(chalk.red.bold("Error:"), `Permission denied: ${configPath}`);
-      } else {
-        console.log(chalk.red.bold("Error:"), `Failed to read ${configPath}`);
-        if (isDebug()) console.error(err);
+  let rawConfig: Record<string, unknown> = {};
+  const fileExists = existsSync(configPath);
+
+  if (fileExists) {
+    try {
+      const content = readFileSync(configPath, "utf-8");
+      rawConfig = JSON.parse(content);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        console.log(chalk.red.bold("Error:"), `Invalid JSON in ${configPath}`);
+        console.log(chalk.gray("  Parse error:"), err.message);
+        process.exit(2);
       }
-    } else {
+      if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "EACCES") {
+        console.log(chalk.red.bold("Error:"), `Permission denied: ${configPath}`);
+        process.exit(2);
+      }
       console.log(chalk.red.bold("Error:"), `Failed to read ${configPath}`);
       if (isDebug()) console.error(err);
+      process.exit(2);
     }
-    process.exit(2);
   }
 
   // Initialize agents array before loop to ensure it always exists in output
@@ -75,11 +167,12 @@ async function runConfig(): Promise<void> {
   const currentProvider = (rawConfig.provider as string | undefined) ?? "(not set)";
   const currentModel = (rawConfig.model as string | undefined) ?? "(not set)";
   console.log(chalk.bold("Current config:"));
+  console.log(chalk.gray("  Scope:   "), chalk.cyan(scope));
   console.log(chalk.gray("  Provider:"), chalk.cyan(currentProvider));
   console.log(chalk.gray("  Model:   "), chalk.cyan(currentModel));
   console.log("");
 
-  // 5. Select global provider
+  // 5. Select default provider
   const providerChoices = PROVIDER_NAMES.map((name) => {
     const status = availability[name];
     const badge = status?.available ? chalk.green("✓") : chalk.red("✗");
@@ -91,7 +184,7 @@ async function runConfig(): Promise<void> {
   });
 
   let selectedProvider = await select({
-    message: "Global provider:",
+    message: "Default provider:",
     choices: providerChoices,
     default: rawConfig.provider as string | undefined,
   });
@@ -110,7 +203,7 @@ async function runConfig(): Promise<void> {
     }
   }
 
-  // 6. Select global model
+  // 6. Select default model
   const provider = getProvider(selectedProvider);
   let selectedModel: string;
 
@@ -126,85 +219,97 @@ async function runConfig(): Promise<void> {
       value: m.id,
     }));
     selectedModel = await select({
-      message: "Global model:",
+      message: "Default model:",
       choices: modelChoices,
       default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
     });
   }
 
-  // 7. Per-agent overrides
+  // 7. Per-agent overrides — grouped by category
   const updatedAgents = [...agents];
-  for (let i = 0; i < updatedAgents.length; i++) {
-    const agent = updatedAgents[i]!;
-    const agentProvider = agent.provider ?? selectedProvider;
-    const agentModel = agent.model ?? selectedModel;
+  const categorized = categorizeAgents(agents);
 
+  for (const group of categorized) {
     console.log("");
-    console.log(chalk.bold(`Agent: ${agent.name}`), chalk.gray(`— ${agent.description}`));
-    console.log(chalk.gray("  Provider:"), chalk.cyan(agentProvider));
-    console.log(chalk.gray("  Model:   "), chalk.cyan(agentModel));
+    console.log(group.color(chalk.bold(`── ${group.label} ──`)));
 
-    const hasOverride = agent.provider !== undefined || agent.model !== undefined;
-    const action = await select({
-      message: `Configure ${agent.name}:`,
-      choices: [
-        { name: "Keep current", value: "keep" },
-        { name: "Customize", value: "customize" },
-        ...(hasOverride ? [{ name: "Clear overrides", value: "clear" }] : []),
-      ],
-      default: "keep",
-    });
+    for (const agentIndex of group.agentIndices) {
+      const agent = updatedAgents[agentIndex]!;
+      const agentProvider = agent.provider ?? selectedProvider;
+      const agentModel = agent.model ?? selectedModel;
 
-    if (action === "keep") {
-      continue;
-    } else if (action === "clear") {
-      // Remove provider/model overrides from this agent
-      const { provider: _p, model: _m, ...rest } = agent;
-      updatedAgents[i] = rest as AgentConfig;
-      continue;
-    }
+      console.log("");
+      console.log(chalk.bold(agent.name), roleBadge(agent.role));
+      console.log(chalk.gray(`  ${agent.description}`));
+      console.log(
+        chalk.gray("  Tools:"),
+        agent.tools.map((t) => chalk.cyan(t)).join(chalk.gray(", ")),
+      );
+      console.log(chalk.gray("  Provider:"), chalk.cyan(agentProvider));
+      console.log(chalk.gray("  Model:   "), chalk.cyan(agentModel));
 
-    // action === "customize"
-    const agentProviderChoice = await select({
-      message: `Provider for ${agent.name}:`,
-      choices: providerChoices,
-      default: agent.provider ?? selectedProvider,
-    });
-
-    // Warn if selected provider unavailable
-    if (!availability[agentProviderChoice]?.available) {
-      const reason = availability[agentProviderChoice]?.reason ?? "unknown reason";
-      console.log(chalk.yellow("⚠"), chalk.yellow(`Provider ${agentProviderChoice} is unavailable (${reason})`));
-      const proceed = await confirm({
-        message: "Continue with this provider anyway?",
-        default: false,
+      const hasOverride = agent.provider !== undefined || agent.model !== undefined;
+      const action = await select({
+        message: `Configure ${agent.name}:`,
+        choices: [
+          { name: "Keep current", value: "keep" },
+          { name: "Customize", value: "customize" },
+          ...(hasOverride ? [{ name: "Clear overrides", value: "clear" }] : []),
+        ],
+        default: "keep",
       });
-      if (!proceed) {
-        continue; // Skip customization for this agent
+
+      if (action === "keep") {
+        continue;
+      } else if (action === "clear") {
+        // Remove provider/model overrides from this agent
+        const { provider: _p, model: _m, ...rest } = agent;
+        updatedAgents[agentIndex] = rest as AgentConfig;
+        continue;
       }
-    }
 
-    const agentProviderAdapter = getProvider(agentProviderChoice);
-    let agentModelChoice: string;
-
-    if (agentProviderAdapter.supportedModels.length === 0) {
-      agentModelChoice = await input({
-        message: `Model ID for ${agent.name}:`,
-        default: agent.model ?? agentProviderAdapter.defaultModel,
+      // action === "customize"
+      const agentProviderChoice = await select({
+        message: `Provider for ${agent.name}:`,
+        choices: providerChoices,
+        default: agent.provider ?? selectedProvider,
       });
-    } else {
-      const agentModelChoices = agentProviderAdapter.supportedModels.map((m) => ({
-        name: `${m.id} — ${m.label}`,
-        value: m.id,
-      }));
-      agentModelChoice = await select({
-        message: `Model for ${agent.name}:`,
-        choices: agentModelChoices,
-        default: agent.model ?? agentProviderAdapter.defaultModel,
-      });
-    }
 
-    updatedAgents[i] = { ...agent, provider: agentProviderChoice, model: agentModelChoice };
+      // Warn if selected provider unavailable
+      if (!availability[agentProviderChoice]?.available) {
+        const reason = availability[agentProviderChoice]?.reason ?? "unknown reason";
+        console.log(chalk.yellow("⚠"), chalk.yellow(`Provider ${agentProviderChoice} is unavailable (${reason})`));
+        const proceed = await confirm({
+          message: "Continue with this provider anyway?",
+          default: false,
+        });
+        if (!proceed) {
+          continue; // Skip customization for this agent
+        }
+      }
+
+      const agentProviderAdapter = getProvider(agentProviderChoice);
+      let agentModelChoice: string;
+
+      if (agentProviderAdapter.supportedModels.length === 0) {
+        agentModelChoice = await input({
+          message: `Model ID for ${agent.name}:`,
+          default: agent.model ?? agentProviderAdapter.defaultModel,
+        });
+      } else {
+        const agentModelChoices = agentProviderAdapter.supportedModels.map((m) => ({
+          name: `${m.id} — ${m.label}`,
+          value: m.id,
+        }));
+        agentModelChoice = await select({
+          message: `Model for ${agent.name}:`,
+          choices: agentModelChoices,
+          default: agent.model ?? agentProviderAdapter.defaultModel,
+        });
+      }
+
+      updatedAgents[agentIndex] = { ...agent, provider: agentProviderChoice, model: agentModelChoice };
+    }
   }
 
   // 8. Merge into raw config (only touch provider, model, and agent provider/model)
@@ -243,6 +348,8 @@ async function runConfig(): Promise<void> {
   // 10. Summary
   console.log("");
   console.log(chalk.green.bold("✓"), chalk.bold("Config updated"));
+  console.log(chalk.gray("  Scope:   "), chalk.cyan(scope));
+  console.log(chalk.gray("  File:    "), chalk.gray(configPath));
   console.log(chalk.gray("  Provider:"), chalk.cyan(selectedProvider));
   console.log(chalk.gray("  Model:   "), chalk.cyan(selectedModel));
 

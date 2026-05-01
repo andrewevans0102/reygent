@@ -19,8 +19,7 @@ export interface ReygentConfig {
 }
 
 /**
- * Resolve config from local .reygent/config.json or fall back to built-in agents.
- * Searches upward from cwd to find .reygent folder.
+ * Resolve config: local .reygent/config.json → global ~/.reygent/config.json → built-in agents.
  */
 export function loadConfig(): ReygentConfig {
   const localConfigPath = findLocalConfig(process.cwd());
@@ -42,7 +41,26 @@ export function loadConfig(): ReygentConfig {
     }
   }
 
-  // No local config — use builtins
+  // Try global config
+  const globalConfigPath = findGlobalConfig();
+  if (globalConfigPath) {
+    try {
+      const raw = readFileSync(globalConfigPath, "utf-8");
+      const config: ReygentConfig = JSON.parse(raw);
+      return {
+        agents: config.agents ?? builtinAgents,
+        skills: config.skills ?? {},
+        model: config.model,
+        provider: config.provider,
+      };
+    } catch (err) {
+      throw new Error(
+        `Failed to parse global config at ${globalConfigPath}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // No config at all — use builtins
   return {
     agents: builtinAgents,
     skills: {},
@@ -57,6 +75,21 @@ function findLocalConfig(startDir: string): string | null {
   if (!configDir) return null;
   const configPath = join(configDir, "config.json");
   return existsSync(configPath) ? configPath : null;
+}
+
+/**
+ * Return path to ~/.reygent/config.json if it exists, null otherwise.
+ */
+export function findGlobalConfig(): string | null {
+  const configPath = resolveGlobalConfigPath();
+  return existsSync(configPath) ? configPath : null;
+}
+
+/**
+ * Return the canonical path to ~/.reygent/config.json (whether it exists or not).
+ */
+export function resolveGlobalConfigPath(): string {
+  return join(resolveGlobalConfigDir(), "config.json");
 }
 
 /**

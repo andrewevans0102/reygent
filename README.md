@@ -64,6 +64,7 @@ reygent run --spec spec.md                                 # run the full workfl
 | [`reygent run`](./docs/commands.md#reygent-run) | Run the full 7-stage workflow |
 | [`reygent review-work`](./docs/commands.md#reygent-review-work) | Review current branch and post to PR/MR |
 | [`reygent review-comments`](./docs/commands.md#reygent-review-comments) | Fetch PR comments and address with dev agent |
+| [`reygent config`](./docs/commands.md#reygent-config) | Configure provider, model, and per-agent overrides |
 | [`reygent skills`](./docs/commands.md#reygent-skills) | Manage skills from the registry |
 
 See the **[Commands Reference](./docs/commands.md)** for full options and examples.
