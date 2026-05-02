@@ -26,7 +26,12 @@ interface StreamResultMessage {
   num_turns?: number;
   input_tokens?: number;
   output_tokens?: number;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 }
 
 type StreamEvent = StreamAssistantMessage | StreamResultMessage | { type: string };
@@ -178,8 +183,12 @@ export const claudeAdapter: ProviderAdapter = {
           const msg = event as StreamResultMessage;
           resultText = msg.result;
 
-          const inputTokens = msg.input_tokens ?? msg.usage?.input_tokens;
-          const outputTokens = msg.output_tokens ?? msg.usage?.output_tokens;
+          const usageData = msg.usage;
+          const baseInput = usageData?.input_tokens ?? 0;
+          const cacheCreation = usageData?.cache_creation_input_tokens ?? 0;
+          const cacheRead = usageData?.cache_read_input_tokens ?? 0;
+          const inputTokens = baseInput + cacheCreation + cacheRead || undefined;
+          const outputTokens = usageData?.output_tokens;
           const hasUsage =
             msg.total_cost_usd !== undefined ||
             msg.duration_ms !== undefined ||

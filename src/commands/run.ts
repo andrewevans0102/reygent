@@ -671,7 +671,6 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(reviewOutput),
         });
 
-        console.log(chalk.cyan("\nWhat would you like to do next?"));
         continue;
       }
 
