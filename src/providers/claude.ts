@@ -17,7 +17,7 @@ interface StreamAssistantMessage {
   };
 }
 
-interface StreamResultMessage {
+export interface StreamResultMessage {
   type: "result";
   subtype: string;
   result: string;
@@ -77,6 +77,25 @@ const SHORT_ALIASES: Record<string, string> = {
 };
 
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
+
+/** Extract token counts from a Claude CLI stream result message. */
+export function extractTokenUsage(msg: StreamResultMessage): {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+} {
+  const usageData = msg.usage;
+  const hasInput = usageData?.input_tokens !== undefined ||
+    usageData?.cache_creation_input_tokens !== undefined ||
+    usageData?.cache_read_input_tokens !== undefined ||
+    msg.input_tokens !== undefined;
+  const baseInput = usageData?.input_tokens ?? msg.input_tokens ?? 0;
+  const cacheCreation = usageData?.cache_creation_input_tokens ?? 0;
+  const cacheRead = usageData?.cache_read_input_tokens ?? 0;
+  const inputTokens = hasInput ? baseInput + cacheCreation + cacheRead : undefined;
+  // outputTokens: no cache fields apply to output, so undefined means "no data"
+  const outputTokens = usageData?.output_tokens ?? msg.output_tokens;
+  return { inputTokens, outputTokens };
+}
 
 // Safe argv limit for interactive --append-system-prompt
 const MAX_PROMPT_BYTES = 200_000;
@@ -183,12 +202,7 @@ export const claudeAdapter: ProviderAdapter = {
           const msg = event as StreamResultMessage;
           resultText = msg.result;
 
-          const usageData = msg.usage;
-          const baseInput = usageData?.input_tokens ?? 0;
-          const cacheCreation = usageData?.cache_creation_input_tokens ?? 0;
-          const cacheRead = usageData?.cache_read_input_tokens ?? 0;
-          const inputTokens = baseInput + cacheCreation + cacheRead || undefined;
-          const outputTokens = usageData?.output_tokens;
+          const { inputTokens, outputTokens } = extractTokenUsage(msg);
           const hasUsage =
             msg.total_cost_usd !== undefined ||
             msg.duration_ms !== undefined ||
