@@ -96,4 +96,68 @@ describe("extractTokenUsage", () => {
     expect(inputTokens).toBe(300);
     expect(outputTokens).toBeUndefined();
   });
+
+  it("returns cachedTokens from cache_read_input_tokens", () => {
+    const msg = makeResultMsg({
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_input_tokens: 200,
+      },
+    });
+    const { cachedTokens } = extractTokenUsage(msg);
+    expect(cachedTokens).toBe(200);
+  });
+
+  it("returns cacheWriteTokens from cache_creation_input_tokens", () => {
+    const msg = makeResultMsg({
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_creation_input_tokens: 150,
+      },
+    });
+    const { cacheWriteTokens } = extractTokenUsage(msg);
+    expect(cacheWriteTokens).toBe(150);
+  });
+
+  it("returns both cachedTokens and cacheWriteTokens when present", () => {
+    const msg = makeResultMsg({
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_creation_input_tokens: 150,
+        cache_read_input_tokens: 200,
+      },
+    });
+    const { cachedTokens, cacheWriteTokens } = extractTokenUsage(msg);
+    expect(cachedTokens).toBe(200);
+    expect(cacheWriteTokens).toBe(150);
+  });
+
+  it("returns undefined cachedTokens when no cache_read_input_tokens", () => {
+    const msg = makeResultMsg({
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+      },
+    });
+    const { cachedTokens, cacheWriteTokens } = extractTokenUsage(msg);
+    expect(cachedTokens).toBeUndefined();
+    expect(cacheWriteTokens).toBeUndefined();
+  });
+
+  it("returns 0 cachedTokens when cache_read_input_tokens is 0", () => {
+    const msg = makeResultMsg({
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+    const { cachedTokens, cacheWriteTokens } = extractTokenUsage(msg);
+    expect(cachedTokens).toBe(0);
+    expect(cacheWriteTokens).toBe(0);
+  });
 });

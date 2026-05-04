@@ -82,6 +82,8 @@ const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 export function extractTokenUsage(msg: StreamResultMessage): {
   inputTokens: number | undefined;
   outputTokens: number | undefined;
+  cachedTokens: number | undefined;
+  cacheWriteTokens: number | undefined;
 } {
   const usageData = msg.usage;
   const hasInput = usageData?.input_tokens !== undefined ||
@@ -94,7 +96,15 @@ export function extractTokenUsage(msg: StreamResultMessage): {
   const inputTokens = hasInput ? baseInput + cacheCreation + cacheRead : undefined;
   // outputTokens: no cache fields apply to output, so undefined means "no data"
   const outputTokens = usageData?.output_tokens ?? msg.output_tokens;
-  return { inputTokens, outputTokens };
+
+  const cachedTokens = usageData?.cache_read_input_tokens !== undefined
+    ? usageData.cache_read_input_tokens
+    : undefined;
+  const cacheWriteTokens = usageData?.cache_creation_input_tokens !== undefined
+    ? usageData.cache_creation_input_tokens
+    : undefined;
+
+  return { inputTokens, outputTokens, cachedTokens, cacheWriteTokens };
 }
 
 // Safe argv limit for interactive --append-system-prompt
@@ -202,7 +212,7 @@ export const claudeAdapter: ProviderAdapter = {
           const msg = event as StreamResultMessage;
           resultText = msg.result;
 
-          const { inputTokens, outputTokens } = extractTokenUsage(msg);
+          const { inputTokens, outputTokens, cachedTokens, cacheWriteTokens } = extractTokenUsage(msg);
           const hasUsage =
             msg.total_cost_usd !== undefined ||
             msg.duration_ms !== undefined ||
@@ -217,6 +227,9 @@ export const claudeAdapter: ProviderAdapter = {
               ...(msg.num_turns !== undefined ? { numTurns: msg.num_turns } : {}),
               ...(inputTokens !== undefined ? { inputTokens } : {}),
               ...(outputTokens !== undefined ? { outputTokens } : {}),
+              ...(cachedTokens !== undefined ? { cachedTokens } : {}),
+              ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+              provider: "claude",
             };
           }
         }
