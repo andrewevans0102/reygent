@@ -1,5 +1,7 @@
 import chalk from "chalk";
 
+export type ProviderName = "claude" | "codex" | "openrouter" | "gemini";
+
 export interface UsageInfo {
   costUsd?: number;
   durationMs?: number;
@@ -8,7 +10,8 @@ export interface UsageInfo {
   outputTokens?: number;
   cachedTokens?: number;
   cacheWriteTokens?: number;
-  provider?: string;
+  cacheDiscount?: number;
+  provider?: ProviderName;
 }
 
 export interface AgentUsageEntry {
@@ -70,13 +73,13 @@ function formatTokenCount(n: number): string {
 
 /**
  * Per-provider cached token discount rates.
- * Savings = cachedTokens * standardInputRate * (1 - discountMultiplier)
- * Claude: cached tokens billed at ~10% → discount = 0.90
- * Codex (OpenAI): cached tokens billed at 25% → discount = 0.75
+ * Savings = cachedTokens * costPerMillion * discountMultiplier
+ * Claude: cached tokens billed at ~10% → discount = 0.90 (save 90%)
+ * Codex (OpenAI): cached tokens billed at 25% → discount = 0.75 (save 75%)
  * OpenRouter: passthrough, use conservative estimate
  * Gemini: varies, use conservative estimate
  */
-const CACHE_DISCOUNT_RATES: Record<string, number> = {
+const CACHE_DISCOUNT_RATES: Record<ProviderName, number> = {
   claude: 0.90,
   codex: 0.75,
   openrouter: 0.50,
@@ -84,7 +87,7 @@ const CACHE_DISCOUNT_RATES: Record<string, number> = {
 };
 
 // Rough per-1M-token input cost by provider (USD) for savings estimation
-const INPUT_COST_PER_MILLION: Record<string, number> = {
+const INPUT_COST_PER_MILLION: Record<ProviderName, number> = {
   claude: 3.00,
   codex: 2.50,
   openrouter: 3.00,
@@ -93,6 +96,10 @@ const INPUT_COST_PER_MILLION: Record<string, number> = {
 
 /** Estimate dollar savings from cached tokens for a single entry. */
 export function calculateCacheSavings(usage: UsageInfo): number {
+  // OpenRouter reports cacheDiscount as a dollar amount — use directly when cachedTokens is absent
+  if (usage.cacheDiscount && usage.cacheDiscount > 0 && (usage.cachedTokens ?? 0) === 0) {
+    return usage.cacheDiscount;
+  }
   const cached = usage.cachedTokens ?? 0;
   if (cached === 0) return 0;
   const provider = usage.provider ?? "claude";
@@ -102,7 +109,7 @@ export function calculateCacheSavings(usage: UsageInfo): number {
 }
 
 /** Providers where caching is reliable enough to warn when absent. */
-const CACHE_WARN_PROVIDERS = new Set(["claude", "codex"]);
+const CACHE_WARN_PROVIDERS = new Set<ProviderName>(["claude", "codex"]);
 
 /**
  * Print warnings if caching appears inactive for providers that support it.
@@ -153,7 +160,7 @@ export function printUsageSummary(tracker: UsageTracker): void {
       : "";
     console.log(chalk.cyan("│") + `  Tokens:      ${formatTokenCount(totalInput)} in / ${formatTokenCount(totalOutput)} out${cachedSuffix}`);
   }
-  if (totalSavings > 0) {
+  if (totalSavings > 0 && Math.round(totalSavings * 100) >= 1) {
     console.log(chalk.cyan("│") + `  Cache saves: ${chalk.green(formatCost(totalSavings))}`);
   }
   console.log(chalk.cyan("│"));
@@ -192,12 +199,13 @@ export function printVerboseUsage(tracker: UsageTracker): void {
     );
 
     // Show cache metadata in verbose mode
-    const hasCacheData = (usage.cachedTokens ?? 0) > 0 || (usage.cacheWriteTokens ?? 0) > 0;
+    const hasCacheData = (usage.cachedTokens ?? 0) > 0 || (usage.cacheWriteTokens ?? 0) > 0 || (usage.cacheDiscount ?? 0) > 0;
     if (hasCacheData) {
       const savings = calculateCacheSavings(usage);
       const parts: string[] = [];
-      if (usage.cachedTokens) parts.push(`cached: ${formatTokenCount(usage.cachedTokens)}`);
-      if (usage.cacheWriteTokens) parts.push(`cache_write: ${formatTokenCount(usage.cacheWriteTokens)}`);
+      if (usage.cachedTokens !== undefined && usage.cachedTokens >= 0) parts.push(`cached: ${formatTokenCount(usage.cachedTokens)}`);
+      if (usage.cacheWriteTokens !== undefined && usage.cacheWriteTokens >= 0) parts.push(`cache_write: ${formatTokenCount(usage.cacheWriteTokens)}`);
+      if (usage.cacheDiscount !== undefined && usage.cacheDiscount > 0) parts.push(`cache_discount: ${formatCost(usage.cacheDiscount)}`);
       if (savings > 0) parts.push(`saved: ${formatCost(savings)}`);
       if (usage.provider) parts.push(`provider: ${usage.provider}`);
       console.log(

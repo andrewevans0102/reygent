@@ -123,6 +123,7 @@ export const codexAdapter: ProviderAdapter = {
             inputTokens,
             outputTokens,
             cachedTokens,
+            // Note: cacheWriteTokens not extracted — OpenAI doesn't currently expose this field
             provider: "codex",
           },
         });

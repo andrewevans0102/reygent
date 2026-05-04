@@ -117,7 +117,8 @@ export const openrouterAdapter: ProviderAdapter = {
           inputTokens: usage?.prompt_tokens,
           outputTokens: usage?.completion_tokens,
           costUsd,
-          cachedTokens: cachedTokens ?? (cacheDiscount && cacheDiscount > 0 ? usage?.prompt_tokens : undefined),
+          cachedTokens,
+          cacheDiscount: cacheDiscount && cacheDiscount > 0 ? cacheDiscount : undefined,
           provider: "openrouter",
         },
       };
