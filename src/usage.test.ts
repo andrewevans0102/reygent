@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { UsageTracker, formatDuration, printUsageSummary } from "./usage.js";
+import { UsageTracker, formatDuration, printUsageSummary, calculateCacheSavings, printCacheWarnings } from "./usage.js";
 
 describe("UsageTracker", () => {
   it("starts with zero cost", () => {
@@ -67,6 +67,23 @@ describe("UsageTracker", () => {
       expect(dev.inputTokens).toBe(0);
       expect(dev.outputTokens).toBe(0);
     });
+
+    it("aggregates cachedTokens and cacheWriteTokens", () => {
+      const tracker = new UsageTracker();
+      tracker.record("dev", "implement", { cachedTokens: 1000, cacheWriteTokens: 500 });
+      tracker.record("dev", "gate", { cachedTokens: 2000, cacheWriteTokens: 0 });
+      const dev = tracker.getByAgent().get("dev")!;
+      expect(dev.cachedTokens).toBe(3000);
+      expect(dev.cacheWriteTokens).toBe(500);
+    });
+
+    it("handles missing cache fields as 0 in aggregation", () => {
+      const tracker = new UsageTracker();
+      tracker.record("dev", "implement", { costUsd: 0.01 });
+      const dev = tracker.getByAgent().get("dev")!;
+      expect(dev.cachedTokens).toBe(0);
+      expect(dev.cacheWriteTokens).toBe(0);
+    });
   });
 
   it("getEntries returns a copy", () => {
@@ -122,5 +139,168 @@ describe("printUsageSummary", () => {
     expect(output).toContain("Usage Summary");
     expect(output).toContain("$0.05");
     expect(output).toContain("dev");
+  });
+
+  it("shows cached token count in summary when present", () => {
+    const spy = vi.spyOn(console, "log");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", {
+      costUsd: 0.05,
+      durationMs: 5000,
+      inputTokens: 3800,
+      outputTokens: 900,
+      cachedTokens: 3100,
+      provider: "claude",
+    });
+    printUsageSummary(tracker);
+    const output = spy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("cached");
+  });
+
+  it("shows cache savings when present", () => {
+    const spy = vi.spyOn(console, "log");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", {
+      costUsd: 0.05,
+      inputTokens: 100000,
+      outputTokens: 900,
+      cachedTokens: 50000,
+      provider: "claude",
+    });
+    printUsageSummary(tracker);
+    const output = spy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("Cache saves");
+  });
+});
+
+describe("calculateCacheSavings", () => {
+  it("returns 0 when no cached tokens", () => {
+    expect(calculateCacheSavings({ inputTokens: 1000, provider: "claude" })).toBe(0);
+  });
+
+  it("returns 0 when cachedTokens is 0", () => {
+    expect(calculateCacheSavings({ cachedTokens: 0, provider: "claude" })).toBe(0);
+  });
+
+  it("calculates savings for claude provider", () => {
+    // 1M cached tokens * $3/M * 0.90 discount = $2.70
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "claude" });
+    expect(savings).toBeCloseTo(2.70);
+  });
+
+  it("calculates savings for codex provider", () => {
+    // 1M cached tokens * $2.50/M * 0.75 discount = $1.875
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "codex" });
+    expect(savings).toBeCloseTo(1.875);
+  });
+
+  it("calculates savings for openrouter provider", () => {
+    // 1M cached tokens * $3/M * 0.50 discount = $1.50
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "openrouter" });
+    expect(savings).toBeCloseTo(1.50);
+  });
+
+  it("calculates savings for gemini provider", () => {
+    // 1M cached tokens * $1.25/M * 0.50 discount = $0.625
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "gemini" });
+    expect(savings).toBeCloseTo(0.625);
+  });
+
+  it("uses claude defaults when provider is undefined", () => {
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000 });
+    expect(savings).toBeCloseTo(2.70);
+  });
+
+  it("handles small token counts", () => {
+    // 1000 tokens * $3/M * 0.90 = $0.0027
+    const savings = calculateCacheSavings({ cachedTokens: 1000, provider: "claude" });
+    expect(savings).toBeCloseTo(0.0027);
+  });
+});
+
+describe("printCacheWarnings", () => {
+  it("warns when claude provider has input tokens but no cached tokens", () => {
+    const spy = vi.spyOn(console, "error");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", {
+      inputTokens: 5000,
+      cachedTokens: 0,
+      provider: "claude",
+    });
+    printCacheWarnings(tracker);
+    expect(spy).toHaveBeenCalled();
+    const output = spy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("caching appears inactive");
+    expect(output).toContain("claude");
+  });
+
+  it("warns when codex provider has input tokens but no cached tokens", () => {
+    const spy = vi.spyOn(console, "error");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", {
+      inputTokens: 5000,
+      cachedTokens: 0,
+      provider: "codex",
+    });
+    printCacheWarnings(tracker);
+    expect(spy).toHaveBeenCalled();
+    const output = spy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("caching appears inactive");
+  });
+
+  it("does not warn when cachedTokens > 0", () => {
+    const spy = vi.spyOn(console, "error");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", {
+      inputTokens: 5000,
+      cachedTokens: 3000,
+      provider: "claude",
+    });
+    printCacheWarnings(tracker);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not warn for gemini provider", () => {
+    const spy = vi.spyOn(console, "error");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", {
+      inputTokens: 5000,
+      cachedTokens: 0,
+      provider: "gemini",
+    });
+    printCacheWarnings(tracker);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not warn for openrouter provider", () => {
+    const spy = vi.spyOn(console, "error");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", {
+      inputTokens: 5000,
+      cachedTokens: 0,
+      provider: "openrouter",
+    });
+    printCacheWarnings(tracker);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not warn when no provider set", () => {
+    const spy = vi.spyOn(console, "error");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", {
+      inputTokens: 5000,
+    });
+    printCacheWarnings(tracker);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("only warns once per agent", () => {
+    const spy = vi.spyOn(console, "error");
+    const tracker = new UsageTracker();
+    tracker.record("dev", "implement", { inputTokens: 5000, cachedTokens: 0, provider: "claude" });
+    tracker.record("dev", "gate", { inputTokens: 3000, cachedTokens: 0, provider: "claude" });
+    printCacheWarnings(tracker);
+    // Should only warn once for "dev"
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

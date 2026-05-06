@@ -93,17 +93,24 @@ export const codexAdapter: ProviderAdapter = {
         let resultText = stdout;
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
+        let cachedTokens: number | undefined;
         try {
           const parsed = JSON.parse(stdout) as {
             response?: string;
             text?: string;
-            usage?: { prompt_tokens?: number; completion_tokens?: number };
+            usage?: {
+              prompt_tokens?: number;
+              completion_tokens?: number;
+              prompt_tokens_details?: { cached_tokens?: number };
+            };
             input_tokens?: number;
             output_tokens?: number;
+            cached_tokens?: number;
           };
           resultText = parsed.response ?? parsed.text ?? stdout;
           inputTokens = parsed.usage?.prompt_tokens ?? parsed.input_tokens;
           outputTokens = parsed.usage?.completion_tokens ?? parsed.output_tokens;
+          cachedTokens = parsed.usage?.prompt_tokens_details?.cached_tokens ?? parsed.cached_tokens;
         } catch {
           // Raw text output — use as-is
         }
@@ -115,6 +122,9 @@ export const codexAdapter: ProviderAdapter = {
             durationMs,
             inputTokens,
             outputTokens,
+            cachedTokens,
+            // Note: cacheWriteTokens not extracted — OpenAI doesn't currently expose this field
+            provider: "codex",
           },
         });
       });

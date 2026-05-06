@@ -92,17 +92,23 @@ export const geminiAdapter: ProviderAdapter = {
         let resultText = stdout;
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
+        let cachedTokens: number | undefined;
         try {
           const parsed = JSON.parse(stdout) as {
             response?: string;
             text?: string;
-            usage_metadata?: { prompt_token_count?: number; candidates_token_count?: number };
+            usage_metadata?: {
+              prompt_token_count?: number;
+              candidates_token_count?: number;
+              cached_content_token_count?: number;
+            };
             input_tokens?: number;
             output_tokens?: number;
           };
           resultText = parsed.response ?? parsed.text ?? stdout;
           inputTokens = parsed.usage_metadata?.prompt_token_count ?? parsed.input_tokens;
           outputTokens = parsed.usage_metadata?.candidates_token_count ?? parsed.output_tokens;
+          cachedTokens = parsed.usage_metadata?.cached_content_token_count;
         } catch {
           // Raw text output — use as-is
         }
@@ -114,6 +120,8 @@ export const geminiAdapter: ProviderAdapter = {
             durationMs,
             inputTokens,
             outputTokens,
+            cachedTokens,
+            provider: "gemini",
           },
         });
       });

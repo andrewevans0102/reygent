@@ -90,7 +90,13 @@ export const openrouterAdapter: ProviderAdapter = {
 
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_cost?: number };
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_cost?: number;
+          cache_discount?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
+        };
         total_cost?: number;
       };
 
@@ -98,6 +104,10 @@ export const openrouterAdapter: ProviderAdapter = {
       const usage = data.usage;
       const durationMs = Date.now() - startTime;
       const costUsd = usage?.total_cost ?? data.total_cost;
+
+      // OpenRouter reports cache activity via cache_discount or prompt_tokens_details
+      const cachedTokens = usage?.prompt_tokens_details?.cached_tokens;
+      const cacheDiscount = usage?.cache_discount;
 
       return {
         stdout: content,
@@ -107,6 +117,9 @@ export const openrouterAdapter: ProviderAdapter = {
           inputTokens: usage?.prompt_tokens,
           outputTokens: usage?.completion_tokens,
           costUsd,
+          cachedTokens,
+          cacheDiscount: cacheDiscount && cacheDiscount > 0 ? cacheDiscount : undefined,
+          provider: "openrouter",
         },
       };
     } catch (err) {
