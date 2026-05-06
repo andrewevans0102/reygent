@@ -16,6 +16,7 @@ import { registerSkillsCommand } from "./commands/skills.js";
 import { reviewWorkCommand } from "./commands/review-work.js";
 import { reviewCommentsCommand } from "./commands/review-comments.js";
 import { configCommand } from "./commands/config.js";
+import { isValidType, VALID_BRANCH_TYPES } from "./branch-type.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -67,6 +68,7 @@ program
   .command("run")
   .description("Run the reygent workflow from spec to reviewed PR")
   .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL (prompts if omitted in interactive mode)")
+  .option("--type <type>", "Branch type (feat, fix, chore, refactor, docs, test, style, perf) — skips interactive prompt")
   .option("--dry-run", "Preview workflow stages without executing", false)
   .option("--security-threshold <level>", "Minimum severity to fail security review (CRITICAL, HIGH, MEDIUM, LOW)", "HIGH")
   .option("--auto-approve", "Auto-approve all file edits and actions without prompting", false)
@@ -74,6 +76,13 @@ program
   .option("--skip-clarification", "Skip planner clarification and make assumptions", false)
   .option("--max-retries <count>", "Max retry attempts when gate tests fail", "2")
   .option("--verbose", "Show detailed per-agent token and cost breakdown", false)
+  .hook("preAction", (thisCommand) => {
+    const opts = thisCommand.opts();
+    if (opts.type && !isValidType(opts.type)) {
+      console.error(chalk.red(`Error: Invalid --type "${opts.type}". Must be one of: ${VALID_BRANCH_TYPES.join(", ")} (or feature/bugfix aliases)`));
+      process.exit(1);
+    }
+  })
   .action(runCommand);
 
 program

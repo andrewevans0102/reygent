@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRemote, deriveBranchName, buildCommitMessage, buildPRBody } from "./pr-create.js";
+import { parseRemote, deriveBranchName, buildCommitMessage, buildPRBody, mapIssueTypeToBranchType } from "./pr-create.js";
 import type { TaskContext, PlannerOutput, SecurityReviewOutput, PRReviewOutput } from "./task.js";
 import type { SpecPayload } from "./spec.js";
 
@@ -81,19 +81,19 @@ describe("parseRemote", () => {
 });
 
 describe("deriveBranchName", () => {
-  it("uses issueKey for jira source", () => {
+  it("uses issueKey for jira source with feat type", () => {
     const spec: SpecPayload = { source: "jira", issueKey: "PROJ-123", title: "Test", content: "" };
-    expect(deriveBranchName(spec)).toBe("reygent/PROJ-123");
+    expect(deriveBranchName(spec, "feat")).toBe("feat/PROJ-123");
   });
 
-  it("uses issueId for linear source", () => {
+  it("uses issueId for linear source with fix type", () => {
     const spec: SpecPayload = { source: "linear", issueId: "DT-267", title: "Test", content: "" };
-    expect(deriveBranchName(spec)).toBe("reygent/DT-267");
+    expect(deriveBranchName(spec, "fix")).toBe("fix/DT-267");
   });
 
-  it("slugifies title for markdown source", () => {
+  it("slugifies title for markdown source with chore type", () => {
     const spec: SpecPayload = { source: "markdown", title: "Add User Auth Feature!", content: "" };
-    expect(deriveBranchName(spec)).toBe("reygent/add-user-auth-feature");
+    expect(deriveBranchName(spec, "chore")).toBe("chore/add-user-auth-feature");
   });
 
   it("truncates long markdown slugs to 60 chars", () => {
@@ -102,10 +102,50 @@ describe("deriveBranchName", () => {
       title: "A".repeat(100),
       content: "",
     };
-    const branch = deriveBranchName(spec);
-    // "reygent/" prefix + slug
-    const slug = branch.replace("reygent/", "");
+    const branch = deriveBranchName(spec, "feat");
+    // "feat/" prefix + slug
+    const slug = branch.replace("feat/", "");
     expect(slug.length).toBeLessThanOrEqual(60);
+  });
+});
+
+describe("mapIssueTypeToBranchType", () => {
+  it("maps bug to fix", () => {
+    expect(mapIssueTypeToBranchType("Bug")).toBe("fix");
+    expect(mapIssueTypeToBranchType("bugfix")).toBe("fix");
+  });
+
+  it("is case insensitive for issue type mapping", () => {
+    expect(mapIssueTypeToBranchType("BUG")).toBe("fix");
+    expect(mapIssueTypeToBranchType("bug")).toBe("fix");
+    expect(mapIssueTypeToBranchType("Bug")).toBe("fix");
+    expect(mapIssueTypeToBranchType("FEATURE")).toBe("feat");
+    expect(mapIssueTypeToBranchType("feature")).toBe("feat");
+    expect(mapIssueTypeToBranchType("Feature")).toBe("feat");
+  });
+
+  it("maps feature to feat", () => {
+    expect(mapIssueTypeToBranchType("Feature")).toBe("feat");
+    expect(mapIssueTypeToBranchType("Story")).toBe("feat");
+    expect(mapIssueTypeToBranchType("Enhancement")).toBe("feat");
+  });
+
+  it("maps task to chore", () => {
+    expect(mapIssueTypeToBranchType("Task")).toBe("chore");
+    expect(mapIssueTypeToBranchType("Chore")).toBe("chore");
+  });
+
+  it("maps refactor to refactor", () => {
+    expect(mapIssueTypeToBranchType("Refactor")).toBe("refactor");
+  });
+
+  it("maps docs to docs", () => {
+    expect(mapIssueTypeToBranchType("Documentation")).toBe("docs");
+  });
+
+  it("returns null for unknown type", () => {
+    expect(mapIssueTypeToBranchType("Unknown")).toBeNull();
+    expect(mapIssueTypeToBranchType(undefined)).toBeNull();
   });
 });
 

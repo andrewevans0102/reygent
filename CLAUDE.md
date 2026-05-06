@@ -26,6 +26,86 @@
 - **Fallback:** If no local config found, use built-in agents
 - All agent-consuming code uses `getAgents()` from `src/config.ts`
 
+## Branch Naming
+
+Branch names use **conventional commit prefixes** to categorize work types. Format: `<type>/<identifier>` where `<identifier>` is the issue key (Jira/Linear) or slugified title (markdown).
+
+### Valid Branch Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `feat` | New features | `feat/PROJ-123`, `feat/add-user-auth` |
+| `fix` | Bug fixes | `fix/DT-456`, `fix/login-error` |
+| `chore` | Maintenance tasks | `chore/PROJ-789`, `chore/update-deps` |
+| `refactor` | Code refactoring | `refactor/DT-999`, `refactor/auth-module` |
+| `docs` | Documentation | `docs/PROJ-111`, `docs/update-readme` |
+| `test` | Test additions/fixes | `test/DT-222`, `test/add-unit-tests` |
+| `style` | Code style changes | `style/PROJ-333`, `style/format-files` |
+| `perf` | Performance improvements | `perf/DT-444`, `perf/optimize-queries` |
+
+**Aliases:** `feature` → `feat`, `bugfix` → `fix`
+
+### Type Detection
+
+Branch types auto-detect from issue metadata when possible:
+
+#### Jira Issue Type Mapping
+
+Jira issue types detected using **partial match** (e.g., "Bug Fix" matches "bug" keyword):
+
+| Jira Issue Type Pattern | Branch Type | Example |
+|------------------------|-------------|---------|
+| bug, fix | `fix` | PROJ-456 (Bug) → `fix/PROJ-456` |
+| story, feature, enhancement | `feat` | PROJ-123 (Story) → `feat/PROJ-123` |
+| task, chore | `chore` | PROJ-789 (Task) → `chore/PROJ-789` |
+| refactor, technical debt | `refactor` | PROJ-999 (Technical Debt) → `refactor/PROJ-999` |
+| doc | `docs` | PROJ-111 (Documentation) → `docs/PROJ-111` |
+| test | `test` | PROJ-222 (Test) → `test/PROJ-222` |
+| style | `style` | PROJ-333 (Style) → `style/PROJ-333` |
+| perf, performance | `perf` | PROJ-444 (Performance) → `perf/PROJ-444` |
+| *(other)* | prompt user | Epic → prompt for type |
+
+#### Linear Label Mapping
+
+Linear labels detected using **partial match** (e.g., "bugfix" label matches "bug" keyword):
+
+| Label Pattern | Branch Type | Priority | Example |
+|---------------|-------------|----------|---------|
+| bug, bugfix | `fix` | 1 (highest) | ["bug", "urgent"] → `fix/DT-123` |
+| feature | `feat` | 2 | ["feature", "ui"] → `feat/DT-456` |
+| chore, maintenance | `chore` | 3 | ["maintenance"] → `chore/DT-789` |
+| refactor, tech-debt | `refactor` | 3 | ["tech-debt"] → `refactor/DT-999` |
+| doc, documentation | `docs` | 3 | ["documentation"] → `docs/DT-111` |
+
+**Priority:** If multiple type labels present, bug takes precedence over feature.
+
+### Type Selection Priority
+
+1. **CLI flag** (`--type feat`) — highest priority, skips all detection
+2. **Auto-detection** — from Jira issue type or Linear labels
+3. **Interactive prompt** — when no flag and no detection available
+
+### Implementation
+
+- **Production logic:** `src/branch-type.ts` exports all detection, validation, and branch name functions
+  - `detectTypeFromJiraIssueType()` - Jira issue type → branch type (partial match)
+  - `detectTypeFromLinearLabels()` - Linear labels → branch type (partial match with priority)
+  - `normalizeType()` - Validate and normalize type strings
+  - `deriveBranchNameWithType()` - Generate branch name from spec + type
+  - `promptForType()` - Interactive type selection
+- **CLI validation:** `src/cli.ts` validates `--type` flag at parse time using `isValidType()`
+- **Branch creation:** `src/commands/run.ts` uses detection functions and prompting logic
+- **Type constant:** `VALID_BRANCH_TYPES` in `src/branch-type.ts` is single source of truth
+- **Legacy exports:** `src/pr-create.ts` still exports deprecated versions for backward compatibility
+
+### Rules
+
+- Type detection uses **partial match** for both Jira and Linear (e.g., "Bug Fix" matches "bug", "Feature Request" matches "feature")
+- Type detection is **case-insensitive** (BUG, bug, Bug all map to `fix`)
+- Issue identifiers **preserve case** (PROJ-123, DT-456 stay uppercase)
+- Markdown titles **slugify to lowercase** with dashes, max 60 chars
+- Invalid types throw clear error messages listing valid options
+
 ## Terminal output style
 
 This project uses **chalk**, **ora**, and **cli-progress** for terminal output. Always use these libraries instead of plain `console.log` for anything user-facing.

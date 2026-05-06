@@ -324,19 +324,48 @@ async function createGitLabMR(opts: {
   return { prUrl: data.web_url, prNumber: data.iid };
 }
 
-export function deriveBranchName(spec: SpecPayload): string {
+/**
+ * @deprecated Import BranchType from branch-type.ts instead
+ */
+export type BranchType = "feat" | "fix" | "chore" | "refactor" | "docs" | "test" | "style" | "perf";
+
+/**
+ * @deprecated Use detectTypeFromJiraIssueType or detectTypeFromLinearLabels from branch-type.ts instead
+ */
+export function mapIssueTypeToBranchType(issueType?: string): BranchType | null {
+  if (!issueType) return null;
+
+  const normalized = issueType.toLowerCase();
+
+  // Map common issue type names to conventional prefixes
+  if (normalized.includes("bug") || normalized.includes("fix")) return "fix";
+  if (normalized.includes("feature") || normalized.includes("story") || normalized.includes("enhancement")) return "feat";
+  if (normalized.includes("chore") || normalized.includes("task")) return "chore";
+  if (normalized.includes("refactor")) return "refactor";
+  if (normalized.includes("doc")) return "docs";
+  if (normalized.includes("test")) return "test";
+  if (normalized.includes("style")) return "style";
+  if (normalized.includes("perf") || normalized.includes("performance")) return "perf";
+
+  return null;
+}
+
+/**
+ * @deprecated Use deriveBranchNameWithType from branch-type.ts instead
+ */
+export function deriveBranchName(spec: SpecPayload, branchType: BranchType): string {
   switch (spec.source) {
     case "jira":
-      return `reygent/${spec.issueKey}`;
+      return `${branchType}/${spec.issueKey}`;
     case "linear":
-      return `reygent/${spec.issueId}`;
+      return `${branchType}/${spec.issueId}`;
     case "markdown": {
       const slug = spec.title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "")
         .slice(0, 60);
-      return `reygent/${slug}`;
+      return `${branchType}/${slug}`;
     }
   }
 }
@@ -468,7 +497,7 @@ export function buildPRBody(context: TaskContext): string {
 
 export async function runPRCreate(
   context: TaskContext,
-  opts?: { insecure?: boolean },
+  opts?: { insecure?: boolean; branchType?: BranchType },
 ): Promise<PRCreateOutput> {
   loadEnvFile();
 
@@ -480,7 +509,11 @@ export async function runPRCreate(
   const remoteForToken = parseRemote(remoteUrlForToken);
   const token = await resolveToken(remoteForToken.host);
 
-  const branch = deriveBranchName(context.spec);
+  if (!opts?.branchType) {
+    throw new TaskError("pr-create: branchType is required");
+  }
+
+  const branch = deriveBranchName(context.spec, opts.branchType);
   const commitMessage = buildCommitMessage(context);
   const prBody = buildPRBody(context);
   const prTitle = context.spec.title;
