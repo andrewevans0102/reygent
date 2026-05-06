@@ -1,6 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 
+// Mock declarations appear before vi.mock calls in source, but vitest
+// hoists vi.mock to the top of the file so the mocks are defined first.
+const mockSelect = vi.fn();
+vi.mock("@inquirer/prompts", () => ({
+  select: (...args: unknown[]) => mockSelect(...args),
+}));
+
+const inquirerCoreMock = vi.hoisted(() => {
+  class MockExitPromptError extends Error {
+    override name = "ExitPromptError";
+  }
+  return { MockExitPromptError };
+});
+vi.mock("@inquirer/core", () => ({
+  ExitPromptError: inquirerCoreMock.MockExitPromptError,
+}));
+
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
@@ -105,19 +122,59 @@ describe("initCommand", () => {
     );
   });
 
-  it("skips when .reygent/config.json already exists", async () => {
-    // Both .reygent dir and config.json exist
+  it("cancel choice makes no changes when config exists", async () => {
     mockExistsSync.mockReturnValue(true);
+    mockSelect.mockResolvedValue("cancel");
 
     await initCommand({ dryRun: false });
 
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(output).toContain("already exists");
-    expect(output).toContain("Existing config found. Skipping initialization.");
+    expect(output).toContain("No changes made.");
 
-    // Should not write any files
     expect(mockMkdirSync).not.toHaveBeenCalled();
     expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
+  it("reset choice overwrites config with defaults", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSelect.mockResolvedValue("reset");
+
+    await initCommand({ dryRun: false });
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("Resetting config to defaults...");
+
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining("config.json"),
+      expect.any(String),
+      "utf-8",
+    );
+
+    // All paths already exist on reset — no dirs should be created
+    expect(mockMkdirSync).not.toHaveBeenCalled();
+  });
+
+  it("edit choice directs user to reygent config", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSelect.mockResolvedValue("edit");
+
+    await initCommand({ dryRun: false });
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("reygent config");
+
+    expect(mockMkdirSync).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+C exits cleanly with code 0", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSelect.mockRejectedValue(new inquirerCoreMock.MockExitPromptError("User force closed the prompt"));
+
+    await expect(initCommand({ dryRun: false })).rejects.toThrow("process.exit");
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
   it("creates config.json when .reygent exists but no config.json", async () => {

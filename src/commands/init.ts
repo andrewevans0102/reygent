@@ -1,5 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ExitPromptError } from "@inquirer/core";
+import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import ora from "ora";
 import { builtinAgents } from "../agents.js";
@@ -32,44 +34,73 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
     return;
   }
 
-  if (existsSync(targetDir)) {
-    console.log(chalk.yellow.bold("Warning:"), `.reygent folder already exists`);
-    console.log(chalk.gray(`  Path: ${targetDir}\n`));
-
-    if (existsSync(configPath)) {
-      console.log(chalk.cyan("Existing config found. Skipping initialization.\n"));
-      return;
-    }
-
-    console.log(chalk.cyan("No config.json found. Creating default config...\n"));
-  }
-
-  const spinner = ora("Creating .reygent folder").start();
-
   try {
-    // Create folders
-    if (!existsSync(targetDir)) {
-      mkdirSync(targetDir, { recursive: true });
+    if (existsSync(targetDir)) {
+      console.log(chalk.yellow.bold("Warning:"), `.reygent folder already exists`);
+      console.log(chalk.gray(`  Path: ${targetDir}\n`));
+
+      if (existsSync(configPath)) {
+        const action = await select({
+          message: "Existing config found. What would you like to do?",
+          choices: [
+            { name: "Reset to defaults", value: "reset" },
+            { name: "Edit config (reygent config)", value: "edit" },
+            { name: "Cancel", value: "cancel" },
+          ],
+        });
+
+        if (action === "cancel") {
+          console.log(chalk.gray("No changes made.\n"));
+          return;
+        }
+
+        if (action === "edit") {
+          console.log(chalk.cyan("Run"), chalk.bold("reygent config"), chalk.cyan("to edit your configuration.\n"));
+          return;
+        }
+
+        // action === "reset" — fall through to creation logic
+        console.log(chalk.cyan("Resetting config to defaults...\n"));
+      } else {
+        console.log(chalk.cyan("No config.json found. Creating default config...\n"));
+      }
     }
-    if (!existsSync(skillsDir)) {
-      mkdirSync(skillsDir, { recursive: true });
+
+    const spinnerText = existsSync(targetDir) ? "Writing config" : "Creating .reygent folder";
+    const spinner = ora(spinnerText).start();
+
+    try {
+      // Create folders
+      if (!existsSync(targetDir)) {
+        mkdirSync(targetDir, { recursive: true });
+      }
+      if (!existsSync(skillsDir)) {
+        mkdirSync(skillsDir, { recursive: true });
+      }
+
+      writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2) + "\n", "utf-8");
+
+      spinner.succeed(chalk.green("Initialized .reygent folder"));
+
+      console.log("");
+      console.log(chalk.bold("Next steps:"));
+      console.log(chalk.gray("  • Edit"), chalk.cyan(".reygent/config.json"), chalk.gray("to customize agents"));
+      console.log(chalk.gray("  • Add custom agents to the"), chalk.cyan("agents"), chalk.gray("array"));
+      console.log(chalk.gray("  • Add skills to"), chalk.cyan(".reygent/skills/"), chalk.gray("(each in its own folder with SKILL.md)"));
+      console.log(chalk.gray("  • Run"), chalk.cyan("reygent agent <name>"), chalk.gray("to use your local config"));
+      console.log("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      spinner.fail(chalk.red(`Failed: ${message}`));
+      if (isDebug()) console.error(err instanceof Error ? err.stack : err);
+      process.exit(2);
     }
-
-    writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2) + "\n", "utf-8");
-
-    spinner.succeed(chalk.green("Initialized .reygent folder"));
-
-    console.log("");
-    console.log(chalk.bold("Next steps:"));
-    console.log(chalk.gray("  • Edit"), chalk.cyan(".reygent/config.json"), chalk.gray("to customize agents"));
-    console.log(chalk.gray("  • Add custom agents to the"), chalk.cyan("agents"), chalk.gray("array"));
-    console.log(chalk.gray("  • Add skills to"), chalk.cyan(".reygent/skills/"), chalk.gray("(each in its own folder with SKILL.md)"));
-    console.log(chalk.gray("  • Run"), chalk.cyan("reygent agent <name>"), chalk.gray("to use your local config"));
-    console.log("");
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    spinner.fail(chalk.red(`Failed: ${message}`));
-    if (isDebug()) console.error(err instanceof Error ? err.stack : err);
-    process.exit(2);
+    // Ctrl+C from inquirer
+    if (err instanceof ExitPromptError) {
+      console.log(chalk.yellow("\nInitialization cancelled."));
+      process.exit(0);
+    }
+    throw err;
   }
 }
