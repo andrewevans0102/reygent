@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { promptForType, normalizeType, VALID_BRANCH_TYPES, type BranchType } from "./branch-type.js";
 
 /**
  * Tests for interactive type selection prompt
@@ -15,7 +16,7 @@ describe("type selection prompt", () => {
   describe("prompt choices", () => {
     it("offers all conventional types as choices", async () => {
       const promptFn = vi.fn().mockResolvedValue("feat");
-      await promptForType(promptFn, null);
+      await testPromptForType(promptFn, null);
 
       expect(promptFn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -35,7 +36,7 @@ describe("type selection prompt", () => {
 
     it("displays message asking for type", async () => {
       const promptFn = vi.fn().mockResolvedValue("feat");
-      await promptForType(promptFn, null);
+      await testPromptForType(promptFn, null);
 
       expect(promptFn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -48,7 +49,7 @@ describe("type selection prompt", () => {
   describe("default value", () => {
     it("sets no default when no type detected", async () => {
       const promptFn = vi.fn().mockResolvedValue("feat");
-      await promptForType(promptFn, null);
+      await testPromptForType(promptFn, null);
 
       expect(promptFn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -59,7 +60,7 @@ describe("type selection prompt", () => {
 
     it("sets feat as default when Story detected", async () => {
       const promptFn = vi.fn().mockResolvedValue("feat");
-      await promptForType(promptFn, "feat");
+      await testPromptForType(promptFn, "feat");
 
       expect(promptFn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -70,7 +71,7 @@ describe("type selection prompt", () => {
 
     it("sets fix as default when Bug detected", async () => {
       const promptFn = vi.fn().mockResolvedValue("fix");
-      await promptForType(promptFn, "fix");
+      await testPromptForType(promptFn, "fix");
 
       expect(promptFn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -81,7 +82,7 @@ describe("type selection prompt", () => {
 
     it("sets chore as default when Task detected", async () => {
       const promptFn = vi.fn().mockResolvedValue("chore");
-      await promptForType(promptFn, "chore");
+      await testPromptForType(promptFn, "chore");
 
       expect(promptFn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -94,49 +95,49 @@ describe("type selection prompt", () => {
   describe("user selection", () => {
     it("returns normalized type from feature selection", async () => {
       const promptFn = vi.fn().mockResolvedValue("feature");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("feat");
     });
 
     it("returns normalized type from bugfix selection", async () => {
       const promptFn = vi.fn().mockResolvedValue("bugfix");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("fix");
     });
 
     it("returns chore from selection", async () => {
       const promptFn = vi.fn().mockResolvedValue("chore");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("chore");
     });
 
     it("returns refactor from selection", async () => {
       const promptFn = vi.fn().mockResolvedValue("refactor");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("refactor");
     });
 
     it("returns docs from selection", async () => {
       const promptFn = vi.fn().mockResolvedValue("docs");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("docs");
     });
 
     it("returns test from selection", async () => {
       const promptFn = vi.fn().mockResolvedValue("test");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("test");
     });
 
     it("returns style from selection", async () => {
       const promptFn = vi.fn().mockResolvedValue("style");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("style");
     });
 
     it("returns perf from selection", async () => {
       const promptFn = vi.fn().mockResolvedValue("perf");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("perf");
     });
   });
@@ -166,7 +167,7 @@ describe("type selection prompt", () => {
 
     it("accepts whitespace-padded valid type", async () => {
       const promptFn = vi.fn().mockResolvedValue("  feat  ");
-      const result = await promptForType(promptFn, null);
+      const result = await testPromptForType(promptFn, null);
       expect(result).toBe("feat");
     });
   });
@@ -175,7 +176,7 @@ describe("type selection prompt", () => {
 describe("prompt integration scenarios", () => {
   it("uses default when user presses enter", async () => {
     const promptFn = vi.fn().mockResolvedValue("feat");
-    await promptForType(promptFn, "feat");
+    await testPromptForType(promptFn, "feat");
 
     expect(promptFn).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -186,13 +187,13 @@ describe("prompt integration scenarios", () => {
 
   it("overrides default when user makes different selection", async () => {
     const promptFn = vi.fn().mockResolvedValue("fix");
-    const result = await promptForType(promptFn, "feat");
+    const result = await testPromptForType(promptFn, "feat");
     expect(result).toBe("fix");
   });
 
   it("prompt not called when skip option set", async () => {
     const promptFn = vi.fn();
-    const result = await promptForType(promptFn, "feat", { skipPrompt: true });
+    const result = await testPromptForType(promptFn, "feat", { skipPrompt: true });
     expect(promptFn).not.toHaveBeenCalled();
     expect(result).toBe("feat");
   });
@@ -205,44 +206,17 @@ describe("prompt integration scenarios", () => {
   });
 });
 
-// Stub implementations
-async function promptForType(
+// Test wrapper to adapt promptForType signature to test mock interface
+async function testPromptForType(
   promptFn: (config: { message: string; choices: string[]; default?: string }) => Promise<string | null | undefined>,
-  detectedType: string | null,
+  detectedType: BranchType | null,
   opts: { skipPrompt?: boolean } = {},
-): Promise<string> {
-  if (opts.skipPrompt) {
-    if (!detectedType) {
-      throw new Error("Branch type is required");
-    }
-    return detectedType;
-  }
-
-  const choices = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
-  const config: { message: string; choices: string[]; default: string | undefined } = {
-    message: "Select branch type:",
-    choices,
-    default: detectedType ?? undefined,
+): Promise<BranchType> {
+  // Adapt mock interface to real interface
+  const adaptedFn = async (config: { message: string; choices: { name: string; value: string }[]; default?: string }) => {
+    // Extract values for mock
+    const simpleChoices = config.choices.map(c => c.value);
+    return promptFn({ message: config.message, choices: simpleChoices, default: config.default });
   };
-
-  const response = await promptFn(config);
-
-  if (response === null) {
-    throw new Error("Branch creation cancelled");
-  }
-
-  if (response === undefined || !response.trim()) {
-    throw new Error("Branch type is required");
-  }
-
-  return normalizeType(response.trim());
-}
-
-function normalizeType(type: string): string {
-  const lower = type.toLowerCase();
-  if (lower === "feature") return "feat";
-  if (lower === "bugfix") return "fix";
-  const valid = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
-  if (valid.includes(lower)) return lower;
-  throw new Error(`Invalid branch type: ${type}`);
+  return promptForType(adaptedFn, detectedType, opts);
 }

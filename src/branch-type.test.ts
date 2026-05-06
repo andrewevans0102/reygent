@@ -1,4 +1,14 @@
 import { describe, it, expect } from "vitest";
+import {
+  normalizeType,
+  isValidType,
+  detectTypeFromJiraIssueType,
+  detectTypeFromLinearLabels,
+  deriveBranchNameWithType,
+  deriveBranchFromSpec,
+  VALID_BRANCH_TYPES,
+  type BranchType,
+} from "./branch-type.js";
 
 /**
  * Tests for conventional branch prefix logic
@@ -87,58 +97,67 @@ describe("branch type selection", () => {
 describe("branch name with type prefix", () => {
   describe("jira source", () => {
     it("creates feat/ prefix for feature", () => {
-      const branch = deriveBranchNameWithType("jira", "PROJ-123", "feat");
+      const spec = makeJiraSpec("PROJ-123", "Test");
+      const branch = deriveBranchNameWithType(spec, "feat");
       expect(branch).toBe("feat/PROJ-123");
     });
 
     it("creates fix/ prefix for bugfix", () => {
-      const branch = deriveBranchNameWithType("jira", "PROJ-456", "fix");
+      const spec = makeJiraSpec("PROJ-456", "Test");
+      const branch = deriveBranchNameWithType(spec, "fix");
       expect(branch).toBe("fix/PROJ-456");
     });
 
     it("creates chore/ prefix for chore", () => {
-      const branch = deriveBranchNameWithType("jira", "PROJ-789", "chore");
+      const spec = makeJiraSpec("PROJ-789", "Test");
+      const branch = deriveBranchNameWithType(spec, "chore");
       expect(branch).toBe("chore/PROJ-789");
     });
   });
 
   describe("linear source", () => {
     it("creates feat/ prefix for feature", () => {
-      const branch = deriveBranchNameWithType("linear", "DT-267", "feat");
+      const spec = makeLinearSpec("DT-267", "Test");
+      const branch = deriveBranchNameWithType(spec, "feat");
       expect(branch).toBe("feat/DT-267");
     });
 
     it("creates fix/ prefix for bugfix", () => {
-      const branch = deriveBranchNameWithType("linear", "DT-268", "fix");
+      const spec = makeLinearSpec("DT-268", "Test");
+      const branch = deriveBranchNameWithType(spec, "fix");
       expect(branch).toBe("fix/DT-268");
     });
 
     it("creates refactor/ prefix for refactor", () => {
-      const branch = deriveBranchNameWithType("linear", "DT-269", "refactor");
+      const spec = makeLinearSpec("DT-269", "Test");
+      const branch = deriveBranchNameWithType(spec, "refactor");
       expect(branch).toBe("refactor/DT-269");
     });
   });
 
   describe("markdown source", () => {
     it("creates feat/ prefix with slugified title", () => {
-      const branch = deriveBranchNameWithType("markdown", "Add User Auth", "feat");
+      const spec = makeMarkdownSpec("Add User Auth");
+      const branch = deriveBranchNameWithType(spec, "feat");
       expect(branch).toBe("feat/add-user-auth");
     });
 
     it("creates fix/ prefix with slugified title", () => {
-      const branch = deriveBranchNameWithType("markdown", "Fix Login Bug!", "fix");
+      const spec = makeMarkdownSpec("Fix Login Bug!");
+      const branch = deriveBranchNameWithType(spec, "fix");
       expect(branch).toBe("fix/fix-login-bug");
     });
 
     it("truncates long markdown slugs to 60 chars after prefix", () => {
-      const longTitle = "A".repeat(100);
-      const branch = deriveBranchNameWithType("markdown", longTitle, "feat");
+      const spec = makeMarkdownSpec("A".repeat(100));
+      const branch = deriveBranchNameWithType(spec, "feat");
       const slug = branch.replace("feat/", "");
       expect(slug.length).toBeLessThanOrEqual(60);
     });
 
     it("creates docs/ prefix for documentation", () => {
-      const branch = deriveBranchNameWithType("markdown", "Update README", "docs");
+      const spec = makeMarkdownSpec("Update README");
+      const branch = deriveBranchNameWithType(spec, "docs");
       expect(branch).toBe("docs/update-readme");
     });
   });
@@ -249,130 +268,38 @@ describe("type validation", () => {
 
 describe("integration with spec payloads", () => {
   it("derives branch with detected jira type", () => {
-    const spec = {
-      source: "jira" as const,
-      issueKey: "PROJ-123",
-      title: "Add feature",
-      content: "",
-      issueType: "Story",
-    };
+    const spec = makeJiraSpec("PROJ-123", "Add feature", "Story");
     const branch = deriveBranchFromSpec(spec);
     expect(branch).toBe("feat/PROJ-123");
   });
 
   it("derives branch with detected linear type", () => {
-    const spec = {
-      source: "linear" as const,
-      issueId: "DT-456",
-      title: "Fix bug",
-      content: "",
-      labels: ["bug", "urgent"],
-    };
+    const spec = makeLinearSpec("DT-456", "Fix bug", ["bug", "urgent"]);
     const branch = deriveBranchFromSpec(spec);
     expect(branch).toBe("fix/DT-456");
   });
 
   it("throws when spec has no type and no CLI override", () => {
-    const spec = {
-      source: "markdown" as const,
-      title: "Do something",
-      content: "",
-    };
+    const spec = makeMarkdownSpec("Do something");
     expect(() => deriveBranchFromSpec(spec)).toThrow(/type.*required/i);
   });
 
   it("uses CLI flag to override detected type", () => {
-    const spec = {
-      source: "jira" as const,
-      issueKey: "PROJ-789",
-      title: "Task",
-      content: "",
-      issueType: "Story",
-    };
+    const spec = makeJiraSpec("PROJ-789", "Task", "Story");
     const branch = deriveBranchFromSpec(spec, "fix");
     expect(branch).toBe("fix/PROJ-789");
   });
 });
 
-// Stub implementations to satisfy tests - implementation will provide real versions
-function normalizeType(type: string): string {
-  const lower = type.toLowerCase();
-  if (lower === "feature") return "feat";
-  if (lower === "bugfix") return "fix";
-  const valid = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
-  if (valid.includes(lower)) return lower;
-  throw new Error(`Invalid branch type: ${type}`);
+// Helper to wrap spec in correct type for tests
+function makeJiraSpec(issueKey: string, title: string, issueType?: string) {
+  return { source: "jira" as const, issueKey, title, content: "", issueType };
 }
 
-function deriveBranchNameWithType(
-  source: "jira" | "linear" | "markdown",
-  identifier: string,
-  type: string,
-): string {
-  const prefix = normalizeType(type);
-  if (source === "markdown") {
-    const slug = identifier
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 60);
-    return `${prefix}/${slug}`;
-  }
-  return `${prefix}/${identifier}`;
+function makeLinearSpec(issueId: string, title: string, labels?: string[]) {
+  return { source: "linear" as const, issueId, title, content: "", labels };
 }
 
-function detectTypeFromJiraIssueType(issueType: string): string | null {
-  const lower = issueType.toLowerCase();
-  if (lower === "story") return "feat";
-  if (lower === "bug") return "fix";
-  if (lower === "task") return "chore";
-  if (lower === "technical debt") return "refactor";
-  return null;
-}
-
-function detectTypeFromLinearLabels(labels: string[]): string | null {
-  const lower = labels.map(l => l.toLowerCase());
-  // Priority order: bug > feature > others
-  if (lower.some(l => l.includes("bug"))) return "fix";
-  if (lower.some(l => l.includes("feature"))) return "feat";
-  if (lower.some(l => l.includes("chore") || l.includes("maintenance"))) return "chore";
-  if (lower.some(l => l.includes("refactor") || l.includes("tech-debt"))) return "refactor";
-  if (lower.some(l => l.includes("doc"))) return "docs";
-  return null;
-}
-
-function isValidType(type: string): boolean {
-  try {
-    normalizeType(type);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function deriveBranchFromSpec(
-  spec: { source: string; issueKey?: string; issueId?: string; title: string; issueType?: string; labels?: string[] },
-  typeOverride?: string,
-): string {
-  let type = typeOverride;
-
-  if (!type) {
-    if (spec.source === "jira" && spec.issueType) {
-      type = detectTypeFromJiraIssueType(spec.issueType) ?? undefined;
-    } else if (spec.source === "linear" && spec.labels) {
-      type = detectTypeFromLinearLabels(spec.labels) ?? undefined;
-    }
-  }
-
-  if (!type) {
-    throw new Error("Branch type is required");
-  }
-
-  if (spec.source === "jira" && spec.issueKey) {
-    return deriveBranchNameWithType("jira", spec.issueKey, type);
-  }
-  if (spec.source === "linear" && spec.issueId) {
-    return deriveBranchNameWithType("linear", spec.issueId, type);
-  }
-  return deriveBranchNameWithType("markdown", spec.title, type);
+function makeMarkdownSpec(title: string) {
+  return { source: "markdown" as const, title, content: "" };
 }

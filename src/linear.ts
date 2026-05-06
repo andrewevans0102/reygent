@@ -145,14 +145,18 @@ export async function readLinearSpec(
 
     const content = parts.filter(p => p.trim()).join("\n\n");
 
-    // Extract issue type from labels (bug, feature, etc)
+    // Extract issue type from labels (bug, feature, etc) using partial match
     const labels = issue.labels?.nodes || [];
-    const typeLabel = labels.find(l =>
-      ["bug", "feature", "enhancement", "fix", "chore", "refactor", "docs", "test", "style", "perf"].includes(l.name.toLowerCase())
-    );
+    const labelNames = labels.map(l => l.name);
+    const typeLabel = labels.find(l => {
+      const lower = l.name.toLowerCase();
+      return ["bug", "feature", "enhancement", "fix", "chore", "refactor", "doc", "test", "style", "perf"].some(
+        keyword => lower.includes(keyword)
+      );
+    });
     const issueType = typeLabel?.name;
 
-    return { source: "linear", issueId, title, content, issueType };
+    return { source: "linear", issueId, title, content, issueType, labels: labelNames };
   } catch (err) {
     if (err instanceof SpecError) throw err;
     const message = err instanceof Error ? err.message : String(err);

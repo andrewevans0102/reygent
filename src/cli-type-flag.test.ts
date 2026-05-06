@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { normalizeType, type BranchType } from "./branch-type.js";
 
 /**
  * Tests for --type CLI flag parsing and validation
@@ -10,6 +11,11 @@ import { describe, it, expect } from "vitest";
  * - Long-form aliases (feature/bugfix)
  * - Error messages
  */
+
+// Adapter for tests - production code is normalizeType
+function parseTypeFlag(flag: string): BranchType {
+  return normalizeType(flag);
+}
 
 describe("--type CLI flag", () => {
   describe("valid type values", () => {
@@ -166,28 +172,8 @@ describe("type flag integration", () => {
   });
 });
 
-// Stub implementations
-function parseTypeFlag(flag: string): string {
-  const trimmed = flag.trim().toLowerCase();
-
-  if (!trimmed) {
-    throw new Error("Invalid branch type: (empty). Valid types: feat, fix, chore, refactor, docs, test, style, perf");
-  }
-
-  // Long-form aliases
-  if (trimmed === "feature") return "feat";
-  if (trimmed === "bugfix") return "fix";
-
-  // Valid types
-  const valid = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
-  if (valid.includes(trimmed)) return trimmed;
-
-  throw new Error(
-    `Invalid branch type: ${flag}. Valid types: feat, fix, chore, refactor, docs, test, style, perf, feature, bugfix`
-  );
-}
-
-function resolveType(opts: { typeFlag: string | null; detectedType: string | null }): string | null {
+// Integration helper for testing resolution priority
+function resolveType(opts: { typeFlag: string | null; detectedType: BranchType | null }): BranchType | null {
   if (opts.typeFlag) {
     return parseTypeFlag(opts.typeFlag);
   }

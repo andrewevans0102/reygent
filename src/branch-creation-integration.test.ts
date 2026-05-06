@@ -1,4 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
+import {
+  normalizeType,
+  detectTypeFromJiraIssueType,
+  detectTypeFromLinearLabels,
+  deriveBranchNameWithType,
+  type BranchType,
+} from "./branch-type.js";
+import type { SpecPayload } from "./spec.js";
 
 /**
  * Integration tests for branch creation with type selection
@@ -239,17 +247,9 @@ describe("backward compatibility", () => {
   });
 });
 
-// Stub implementation for tests
+// Integration test implementation using production code
 async function createBranchWithPrompt(
-  spec: {
-    source: string;
-    title: string;
-    content: string;
-    issueKey?: string;
-    issueId?: string;
-    issueType?: string;
-    labels?: string[];
-  },
+  spec: SpecPayload,
   opts: {
     prompt?: (config: { message: string; choices: string[]; default?: string }) => Promise<string | null>;
     typeFlag?: string;
@@ -262,10 +262,10 @@ async function createBranchWithPrompt(
   }
 
   // Step 2: Try auto-detection
-  let detectedType: string | null = null;
+  let detectedType: BranchType | null = null;
   if (spec.source === "jira" && spec.issueType) {
     detectedType = detectTypeFromJiraIssueType(spec.issueType);
-  } else if (spec.source === "linear" && spec.labels) {
+  } else if (spec.source === "linear" && "labels" in spec && spec.labels) {
     detectedType = detectTypeFromLinearLabels(spec.labels);
   }
 
@@ -295,51 +295,4 @@ async function createBranchWithPrompt(
 
   const normalized = normalizeType(response);
   return deriveBranchNameWithType(spec, normalized);
-}
-
-function normalizeType(type: string): string {
-  const lower = type.toLowerCase().trim();
-  // Handle long-form aliases
-  if (lower === "feature") return "feat";
-  if (lower === "bugfix") return "fix";
-  const valid = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
-  if (valid.includes(lower)) return lower;
-  throw new Error(`Invalid branch type: ${type}`);
-}
-
-function detectTypeFromJiraIssueType(issueType: string): string | null {
-  const lower = issueType.toLowerCase();
-  if (lower === "story") return "feat";
-  if (lower === "bug") return "fix";
-  if (lower === "task") return "chore";
-  if (lower === "technical debt") return "refactor";
-  return null;
-}
-
-function detectTypeFromLinearLabels(labels: string[]): string | null {
-  const lower = labels.map(l => l.toLowerCase());
-  if (lower.some(l => l.includes("bug"))) return "fix";
-  if (lower.some(l => l.includes("feature"))) return "feat";
-  if (lower.some(l => l.includes("chore") || l.includes("maintenance"))) return "chore";
-  if (lower.some(l => l.includes("refactor") || l.includes("tech-debt"))) return "refactor";
-  if (lower.some(l => l.includes("doc"))) return "docs";
-  return null;
-}
-
-function deriveBranchNameWithType(
-  spec: { source: string; title: string; issueKey?: string; issueId?: string },
-  type: string,
-): string {
-  if (spec.source === "jira" && spec.issueKey) {
-    return `${type}/${spec.issueKey}`;
-  }
-  if (spec.source === "linear" && spec.issueId) {
-    return `${type}/${spec.issueId}`;
-  }
-  const slug = spec.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
-  return `${type}/${slug}`;
 }

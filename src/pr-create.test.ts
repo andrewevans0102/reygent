@@ -115,6 +115,15 @@ describe("mapIssueTypeToBranchType", () => {
     expect(mapIssueTypeToBranchType("bugfix")).toBe("fix");
   });
 
+  it("is case insensitive for issue type mapping", () => {
+    expect(mapIssueTypeToBranchType("BUG")).toBe("fix");
+    expect(mapIssueTypeToBranchType("bug")).toBe("fix");
+    expect(mapIssueTypeToBranchType("Bug")).toBe("fix");
+    expect(mapIssueTypeToBranchType("FEATURE")).toBe("feat");
+    expect(mapIssueTypeToBranchType("feature")).toBe("feat");
+    expect(mapIssueTypeToBranchType("Feature")).toBe("feat");
+  });
+
   it("maps feature to feat", () => {
     expect(mapIssueTypeToBranchType("Feature")).toBe("feat");
     expect(mapIssueTypeToBranchType("Story")).toBe("feat");

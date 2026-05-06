@@ -11,7 +11,7 @@ import type { FailureContext } from "../implement.js";
 import { createLiveStatus } from "../live-status.js";
 import { runPlanner } from "../planner.js";
 import { runPRCreate, mapIssueTypeToBranchType } from "../pr-create.js";
-import type { BranchType } from "../pr-create.js";
+import { normalizeType, detectTypeFromJiraIssueType, detectTypeFromLinearLabels, VALID_BRANCH_TYPES, type BranchType } from "../branch-type.js";
 import { runPRReview, formatPRReviewTerminal, postPRReviewComment } from "../pr-review.js";
 import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
@@ -637,32 +637,27 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
         // Check if --type flag was provided
         if (options.type) {
-          const validTypes: BranchType[] = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
-          if (!validTypes.includes(options.type as BranchType)) {
-            throw new TaskError(`Invalid --type "${options.type}". Must be one of: ${validTypes.join(", ")}`);
-          }
-          branchType = options.type as BranchType;
+          // Validation already done in CLI hook, just normalize
+          branchType = normalizeType(options.type);
         } else {
           // Try auto-detection from issue type
-          const autoDetected = mapIssueTypeToBranchType(context.spec.issueType);
+          let autoDetected: BranchType | null = null;
+
+          if (context.spec.source === "jira" && context.spec.issueType) {
+            autoDetected = detectTypeFromJiraIssueType(context.spec.issueType);
+          } else if (context.spec.source === "linear" && "labels" in context.spec && context.spec.labels) {
+            autoDetected = detectTypeFromLinearLabels(context.spec.labels);
+          }
 
           if (autoDetected) {
             // Issue type detected - use it without prompting
             branchType = autoDetected;
           } else {
             // No auto-detection - prompt user
+            const choices = VALID_BRANCH_TYPES.map(t => ({ name: t, value: t }));
             branchType = await select({
               message: "Select branch type:",
-              choices: [
-                { name: "feat", value: "feat" },
-                { name: "fix", value: "fix" },
-                { name: "chore", value: "chore" },
-                { name: "refactor", value: "refactor" },
-                { name: "docs", value: "docs" },
-                { name: "test", value: "test" },
-                { name: "style", value: "style" },
-                { name: "perf", value: "perf" },
-              ],
+              choices,
             }) as BranchType;
           }
         }

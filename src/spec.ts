@@ -9,7 +9,6 @@ export interface MarkdownSpecPayload {
   source: "markdown";
   content: string;
   title: string;
-  issueType?: string;
 }
 
 export interface JiraSpecPayload {
@@ -26,6 +25,7 @@ export interface LinearSpecPayload {
   content: string;
   title: string;
   issueType?: string;
+  labels?: string[];
 }
 
 export type SpecPayload = MarkdownSpecPayload | JiraSpecPayload | LinearSpecPayload;
