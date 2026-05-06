@@ -195,8 +195,8 @@ export function printUsageSummary(tracker: UsageTracker): void {
 
     const cols = process.stdout.columns || 80;
     const agentLine = `${agent.padEnd(16)} → ${formatCost(stats.cost).padStart(7)}  (${callLabel})${tokenSuffix}${savingsSuffix}${hitRateSuffix}`;
-    // prefix is "│    " = 5 chars
-    console.log(chalk.cyan("│") + `    ${wrapText(agentLine, 5, cols)}`);
+    const linePrefix = chalk.cyan("│") + "    ";
+    console.log(linePrefix + wrapText(agentLine, 5, cols, linePrefix));
   }
 
   console.log(chalk.cyan("└─"));
