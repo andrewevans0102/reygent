@@ -186,15 +186,15 @@ describe("buildPRBody", () => {
     expect(body).toContain("`src/foo.ts`");
   });
 
-  it("includes security review findings", () => {
+  it("excludes security review findings from PR body", () => {
     const body = buildPRBody(makeContext({
       securityReview: {
         severity: "HIGH",
         findings: [{ severity: "HIGH", description: "SQL injection" }],
       },
     }));
-    expect(body).toContain("## Security Review");
-    expect(body).toContain("SQL injection");
+    expect(body).not.toContain("## Security Review");
+    expect(body).not.toContain("SQL injection");
   });
 
   it("includes pr review when provided", () => {

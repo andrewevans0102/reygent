@@ -31,8 +31,8 @@ export class UsageTracker {
     return this.entries.reduce((sum, e) => sum + (e.usage.costUsd ?? 0), 0);
   }
 
-  getByAgent(): Map<string, { cost: number; inputTokens: number; outputTokens: number; cachedTokens: number; cacheWriteTokens: number; calls: number }> {
-    const map = new Map<string, { cost: number; inputTokens: number; outputTokens: number; cachedTokens: number; cacheWriteTokens: number; calls: number }>();
+  getByAgent(): Map<string, { cost: number; inputTokens: number; outputTokens: number; cachedTokens: number; cacheWriteTokens: number; calls: number; provider?: ProviderName }> {
+    const map = new Map<string, { cost: number; inputTokens: number; outputTokens: number; cachedTokens: number; cacheWriteTokens: number; calls: number; provider?: ProviderName }>();
     for (const entry of this.entries) {
       const existing = map.get(entry.agent) ?? { cost: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, calls: 0 };
       existing.cost += entry.usage.costUsd ?? 0;
@@ -41,6 +41,7 @@ export class UsageTracker {
       existing.cachedTokens += entry.usage.cachedTokens ?? 0;
       existing.cacheWriteTokens += entry.usage.cacheWriteTokens ?? 0;
       existing.calls += 1;
+      if (entry.usage.provider) existing.provider = entry.usage.provider;
       map.set(entry.agent, existing);
     }
     return map;
@@ -61,6 +62,7 @@ export function formatDuration(ms: number): string {
 }
 
 function formatCost(usd: number): string {
+  if (usd > 0 && usd < 0.01) return `$${usd.toFixed(4)}`;
   return `$${usd.toFixed(2)}`;
 }
 
@@ -168,10 +170,32 @@ export function printUsageSummary(tracker: UsageTracker): void {
 
   for (const [agent, stats] of byAgent) {
     const callLabel = stats.calls === 1 ? "1 call" : `${stats.calls} calls`;
-    const cachedLabel = stats.cachedTokens > 0
-      ? `  ${chalk.green(formatTokenCount(stats.cachedTokens) + " cached")}`
-      : "";
-    console.log(chalk.cyan("│") + `    ${agent.padEnd(20)} ${formatCost(stats.cost).padStart(7)}  (${callLabel})${cachedLabel}`);
+    const tokenParts: string[] = [];
+    if (stats.inputTokens > 0 || stats.outputTokens > 0) {
+      tokenParts.push(`${formatTokenCount(stats.inputTokens)} in`);
+      tokenParts.push(`${formatTokenCount(stats.outputTokens)} out`);
+      if (stats.cachedTokens > 0) {
+        tokenParts.push(`${formatTokenCount(stats.cachedTokens)} cached`);
+      }
+    }
+    const tokenSuffix = tokenParts.length > 0 ? `  ${tokenParts.join(" / ")}` : "";
+
+    // Per-agent savings
+    const agentSavings = stats.cachedTokens > 0 && stats.provider
+      ? calculateCacheSavings({ cachedTokens: stats.cachedTokens, provider: stats.provider })
+      : 0;
+    const savingsSuffix = agentSavings > 0 ? `  ${chalk.green("(" + formatCost(agentSavings) + " saved)")}` : "";
+
+    // Cache hit rate
+    const hitRate = stats.inputTokens > 0 && stats.cachedTokens > 0
+      ? Math.round((stats.cachedTokens / stats.inputTokens) * 100)
+      : 0;
+    const hitRateSuffix = hitRate > 0 ? `  ${chalk.green(hitRate + "% hit")}` : "";
+
+    console.log(
+      chalk.cyan("│") +
+      `    ${agent.padEnd(16)} → ${formatCost(stats.cost).padStart(7)}  (${callLabel})${tokenSuffix}${savingsSuffix}${hitRateSuffix}`,
+    );
   }
 
   console.log(chalk.cyan("└─"));

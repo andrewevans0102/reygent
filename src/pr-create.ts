@@ -421,25 +421,6 @@ export function buildPRBody(context: TaskContext): string {
     }
   }
 
-  if (security) {
-    sections.push("## Security Review");
-    sections.push("");
-    if (security.findings.length === 0) {
-      sections.push("No findings.");
-    } else {
-      sections.push(
-        `${security.findings.length} finding(s) — highest severity: **${security.severity}**`,
-      );
-      sections.push("");
-      for (const f of security.findings) {
-        const loc = f.location
-          ? ` (\`${f.location.file}${f.location.line ? `:${f.location.line}` : ""}\`)`
-          : "";
-        sections.push(`- **${f.severity}**: ${f.description}${loc}`);
-      }
-    }
-    sections.push("");
-  }
 
   const prReview = context.prReview;
   if (prReview) {
