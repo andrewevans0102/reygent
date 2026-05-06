@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { select } from "@inquirer/prompts";
 import { ExitPromptError } from "@inquirer/core";
 import { isDebug } from "../debug.js";
+import { wrapText } from "../format.js";
 import { createLiveStatus } from "../live-status.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { runPlanner } from "../planner.js";
@@ -133,14 +134,15 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
 
     status.succeed(chalk.green("Plan created"));
 
+    const cols = process.stdout.columns || 80;
     console.log(chalk.cyan("\nGoals:"));
-    for (const g of plan.goals) console.log(`  ${chalk.gray("-")} ${g}`);
+    for (const g of plan.goals) console.log(`  ${chalk.gray("-")} ${wrapText(g, 4, cols)}`);
     console.log(chalk.cyan("\nTasks:"));
-    for (const t of plan.tasks) console.log(`  ${chalk.gray("-")} ${t}`);
+    for (const t of plan.tasks) console.log(`  ${chalk.gray("-")} ${wrapText(t, 4, cols)}`);
     console.log(chalk.cyan("\nConstraints:"));
-    for (const c of plan.constraints) console.log(`  ${chalk.gray("-")} ${c}`);
+    for (const c of plan.constraints) console.log(`  ${chalk.gray("-")} ${wrapText(c, 4, cols)}`);
     console.log(chalk.cyan("\nDefinition of Done:"));
-    for (const d of plan.dod) console.log(`  ${chalk.gray("-")} ${d}`);
+    for (const d of plan.dod) console.log(`  ${chalk.gray("-")} ${wrapText(d, 4, cols)}`);
   } catch (err) {
     if (err instanceof ExitPromptError) {
       process.exit(0);

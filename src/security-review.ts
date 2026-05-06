@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { getAgents } from "./config.js";
+import { wrapText } from "./format.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { extractJSON } from "./planner.js";
 import type {
@@ -189,7 +190,10 @@ export function formatFindings(
           )
         : "";
 
-      return `${marker}${severityLabel} ${f.description}${loc}`;
+      const cols = process.stdout.columns || 80;
+      // marker (3) + severity label visible width (~8) + space = ~12 indent
+      const indent = 12;
+      return `${marker}${severityLabel} ${wrapText(f.description, indent, cols)}${loc}`;
     })
     .join("\n");
 }
