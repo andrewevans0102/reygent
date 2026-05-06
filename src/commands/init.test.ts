@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 
+const mockSelect = vi.fn();
+vi.mock("@inquirer/prompts", () => ({
+  select: (...args: unknown[]) => mockSelect(...args),
+}));
+
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
@@ -105,19 +110,58 @@ describe("initCommand", () => {
     );
   });
 
-  it("skips when .reygent/config.json already exists", async () => {
-    // Both .reygent dir and config.json exist
+  it("cancel choice makes no changes when config exists", async () => {
     mockExistsSync.mockReturnValue(true);
+    mockSelect.mockResolvedValue("cancel");
 
     await initCommand({ dryRun: false });
 
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(output).toContain("already exists");
-    expect(output).toContain("Existing config found. Skipping initialization.");
+    expect(output).toContain("No changes made.");
 
-    // Should not write any files
     expect(mockMkdirSync).not.toHaveBeenCalled();
     expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
+  it("reset choice overwrites config with defaults", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSelect.mockResolvedValue("reset");
+
+    await initCommand({ dryRun: false });
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("Resetting config to defaults...");
+
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining("config.json"),
+      expect.any(String),
+      "utf-8",
+    );
+  });
+
+  it("edit choice directs user to reygent config", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSelect.mockResolvedValue("edit");
+
+    await initCommand({ dryRun: false });
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("reygent config");
+
+    expect(mockMkdirSync).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+C exits cleanly with code 0", async () => {
+    mockExistsSync.mockReturnValue(true);
+    const exitPromptError = new Error("User force closed the prompt");
+    exitPromptError.name = "ExitPromptError";
+    mockSelect.mockRejectedValue(exitPromptError);
+
+    await expect(initCommand({ dryRun: false })).rejects.toThrow("process.exit");
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
   it("creates config.json when .reygent exists but no config.json", async () => {
