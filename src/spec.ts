@@ -27,6 +27,8 @@ export interface LinearSpecPayload {
 
 export type SpecPayload = MarkdownSpecPayload | JiraSpecPayload | LinearSpecPayload;
 
+export type SpecProvider = "jira" | "linear" | "local";
+
 export class SpecError extends Error {
   constructor(message: string) {
     super(message);
@@ -76,7 +78,25 @@ export function readSpec(filePath: string): MarkdownSpecPayload {
 
 const ISSUE_KEY_PATTERN = /^[A-Z]+-\d+$/;
 
-export async function loadSpec(source: string): Promise<SpecPayload> {
+export async function loadSpec(source: string, provider?: SpecProvider): Promise<SpecPayload> {
+  // When provider is explicitly set, route directly
+  if (provider === "local") {
+    return readSpec(source);
+  }
+  if (provider === "linear") {
+    loadEnvFile();
+    if (isLinearUrl(source)) {
+      const issueId = extractLinearId(source);
+      return readLinearSpec(issueId);
+    }
+    return readLinearSpec(source);
+  }
+  if (provider === "jira") {
+    loadEnvFile();
+    return readJiraSpec(source);
+  }
+
+  // Legacy auto-detection when no provider specified (used by other commands)
   if (isLinearUrl(source)) {
     loadEnvFile();
     const issueId = extractLinearId(source);
