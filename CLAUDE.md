@@ -51,17 +51,23 @@ Branch types auto-detect from issue metadata when possible:
 
 #### Jira Issue Type Mapping
 
-| Jira Issue Type | Branch Type | Example |
-|-----------------|-------------|---------|
-| Story | `feat` | PROJ-123 (Story) → `feat/PROJ-123` |
-| Bug | `fix` | PROJ-456 (Bug) → `fix/PROJ-456` |
-| Task | `chore` | PROJ-789 (Task) → `chore/PROJ-789` |
-| Technical Debt | `refactor` | PROJ-999 (Technical Debt) → `refactor/PROJ-999` |
+Jira issue types detected using **partial match** (e.g., "Bug Fix" matches "bug" keyword):
+
+| Jira Issue Type Pattern | Branch Type | Example |
+|------------------------|-------------|---------|
+| bug, fix | `fix` | PROJ-456 (Bug) → `fix/PROJ-456` |
+| story, feature, enhancement | `feat` | PROJ-123 (Story) → `feat/PROJ-123` |
+| task, chore | `chore` | PROJ-789 (Task) → `chore/PROJ-789` |
+| refactor, technical debt | `refactor` | PROJ-999 (Technical Debt) → `refactor/PROJ-999` |
+| doc | `docs` | PROJ-111 (Documentation) → `docs/PROJ-111` |
+| test | `test` | PROJ-222 (Test) → `test/PROJ-222` |
+| style | `style` | PROJ-333 (Style) → `style/PROJ-333` |
+| perf, performance | `perf` | PROJ-444 (Performance) → `perf/PROJ-444` |
 | *(other)* | prompt user | Epic → prompt for type |
 
 #### Linear Label Mapping
 
-Labels detected using **partial match** (e.g., "bugfix" label matches "bug" keyword):
+Linear labels detected using **partial match** (e.g., "bugfix" label matches "bug" keyword):
 
 | Label Pattern | Branch Type | Priority | Example |
 |---------------|-------------|----------|---------|
@@ -81,13 +87,20 @@ Labels detected using **partial match** (e.g., "bugfix" label matches "bug" keyw
 
 ### Implementation
 
-- **Production logic:** `src/branch-type.ts` exports detection and validation functions
-- **CLI validation:** `src/cli.ts` validates `--type` flag at parse time
-- **Branch creation:** `src/pr-create.ts` uses `deriveBranchName()` with type parameter
-- **Type constant:** Import `VALID_BRANCH_TYPES` from `src/branch-type.ts` for validation
+- **Production logic:** `src/branch-type.ts` exports all detection, validation, and branch name functions
+  - `detectTypeFromJiraIssueType()` - Jira issue type → branch type (partial match)
+  - `detectTypeFromLinearLabels()` - Linear labels → branch type (partial match with priority)
+  - `normalizeType()` - Validate and normalize type strings
+  - `deriveBranchNameWithType()` - Generate branch name from spec + type
+  - `promptForType()` - Interactive type selection
+- **CLI validation:** `src/cli.ts` validates `--type` flag at parse time using `isValidType()`
+- **Branch creation:** `src/commands/run.ts` uses detection functions and prompting logic
+- **Type constant:** `VALID_BRANCH_TYPES` in `src/branch-type.ts` is single source of truth
+- **Legacy exports:** `src/pr-create.ts` still exports deprecated versions for backward compatibility
 
 ### Rules
 
+- Type detection uses **partial match** for both Jira and Linear (e.g., "Bug Fix" matches "bug", "Feature Request" matches "feature")
 - Type detection is **case-insensitive** (BUG, bug, Bug all map to `fix`)
 - Issue identifiers **preserve case** (PROJ-123, DT-456 stay uppercase)
 - Markdown titles **slugify to lowercase** with dashes, max 60 chars

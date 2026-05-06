@@ -224,14 +224,13 @@ describe("type mapping consistency", () => {
     expect(jiraDetected).toBe(prCreateMapped);
   });
 
-  it("mapIssueTypeToBranchType is more lenient than detectTypeFromJiraIssueType", () => {
-    // mapIssueTypeToBranchType uses includes() for partial matching
+  it("both functions use partial matching for type detection", () => {
+    // Both use includes() for partial matching
     const prCreateMapped = mapIssueTypeToBranchType("Feature Request");
     expect(prCreateMapped).toBe("feat");
 
-    // detectTypeFromJiraIssueType uses exact matching for Jira field values
     const jiraDetected = detectTypeFromJiraIssueType("Feature Request");
-    expect(jiraDetected).toBeNull(); // Not an exact Jira type
+    expect(jiraDetected).toBe("feat"); // Partial match on "feature"
   });
 });
 

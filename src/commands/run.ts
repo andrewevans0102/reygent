@@ -10,7 +10,7 @@ import { runImplement } from "../implement.js";
 import type { FailureContext } from "../implement.js";
 import { createLiveStatus } from "../live-status.js";
 import { runPlanner } from "../planner.js";
-import { runPRCreate, mapIssueTypeToBranchType } from "../pr-create.js";
+import { runPRCreate } from "../pr-create.js";
 import { normalizeType, detectTypeFromJiraIssueType, detectTypeFromLinearLabels, VALID_BRANCH_TYPES, type BranchType } from "../branch-type.js";
 import { runPRReview, formatPRReviewTerminal, postPRReviewComment } from "../pr-review.js";
 import { runSecurityReview, formatFindings } from "../security-review.js";
@@ -654,10 +654,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
             branchType = autoDetected;
           } else {
             // No auto-detection - prompt user
-            const choices = VALID_BRANCH_TYPES.map(t => ({ name: t, value: t }));
             branchType = await select({
               message: "Select branch type:",
-              choices,
+              choices: VALID_BRANCH_TYPES.map(t => ({ name: t, value: t })),
             }) as BranchType;
           }
         }

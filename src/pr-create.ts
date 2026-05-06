@@ -324,8 +324,14 @@ async function createGitLabMR(opts: {
   return { prUrl: data.web_url, prNumber: data.iid };
 }
 
+/**
+ * @deprecated Import BranchType from branch-type.ts instead
+ */
 export type BranchType = "feat" | "fix" | "chore" | "refactor" | "docs" | "test" | "style" | "perf";
 
+/**
+ * @deprecated Use detectTypeFromJiraIssueType or detectTypeFromLinearLabels from branch-type.ts instead
+ */
 export function mapIssueTypeToBranchType(issueType?: string): BranchType | null {
   if (!issueType) return null;
 
@@ -344,6 +350,9 @@ export function mapIssueTypeToBranchType(issueType?: string): BranchType | null 
   return null;
 }
 
+/**
+ * @deprecated Use deriveBranchNameWithType from branch-type.ts instead
+ */
 export function deriveBranchName(spec: SpecPayload, branchType: BranchType): string {
   switch (spec.source) {
     case "jira":

@@ -60,15 +60,20 @@ export function isValidType(type: string): boolean {
 
 /**
  * Detect branch type from Jira issue type field
+ * Uses partial matching (e.g., "Bug Fix" matches "bug")
  * Returns null if type cannot be mapped
  */
 export function detectTypeFromJiraIssueType(issueType: string): BranchType | null {
   const lower = issueType.toLowerCase();
 
-  if (lower === "story") return "feat";
-  if (lower === "bug") return "fix";
-  if (lower === "task") return "chore";
-  if (lower === "technical debt") return "refactor";
+  if (lower.includes("bug") || lower.includes("fix")) return "fix";
+  if (lower.includes("story") || lower.includes("feature") || lower.includes("enhancement")) return "feat";
+  if (lower.includes("task") || lower.includes("chore")) return "chore";
+  if (lower.includes("refactor") || lower.includes("technical debt")) return "refactor";
+  if (lower.includes("doc")) return "docs";
+  if (lower.includes("test")) return "test";
+  if (lower.includes("style")) return "style";
+  if (lower.includes("perf") || lower.includes("performance")) return "perf";
 
   return null;
 }
