@@ -53,7 +53,7 @@ program
   .description("Load a spec from a markdown file, Jira issue, or Linear issue")
   .argument("<source>", "Path to a markdown file, issue key (e.g. PROJ-123), or Linear URL")
   .option("--clarify", "Run planner with clarification loop to evaluate spec", false)
-  .option("--provider <name>", "Issue provider (jira, linear, local) — skips interactive prompt")
+  .option("--source <name>", "Issue source provider (jira, linear, local) — skips interactive prompt")
   .action(specCommand);
 
 program

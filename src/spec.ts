@@ -76,7 +76,7 @@ export function readSpec(filePath: string): MarkdownSpecPayload {
   return { source: "markdown", content, title };
 }
 
-const ISSUE_KEY_PATTERN = /^[A-Z]+-\d+$/;
+export const ISSUE_KEY_PATTERN = /^[A-Z]+-\d+$/;
 
 export async function loadSpec(source: string, provider?: SpecProvider): Promise<SpecPayload> {
   // When provider is explicitly set, route directly

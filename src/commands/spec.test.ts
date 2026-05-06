@@ -23,6 +23,7 @@ vi.mock("../spec.js", () => ({
   SpecError: class SpecError extends Error {
     override name = "SpecError";
   },
+  ISSUE_KEY_PATTERN: /^[A-Z]+-\d+$/,
 }));
 
 vi.mock("../debug.js", () => ({ isDebug: vi.fn(() => false) }));
@@ -142,31 +143,31 @@ describe("specCommand — provider prompt", () => {
     });
   });
 
-  // ── --provider flag skips prompt ──────────────────────────────────
+  // ── --source flag skips prompt ────────────────────────────────────
 
-  describe("--provider flag skips prompt", () => {
-    it("skips prompt when --provider linear is provided", async () => {
+  describe("--source flag skips prompt", () => {
+    it("skips prompt when --source linear is provided", async () => {
       mockLoadSpec.mockResolvedValue(linearPayload);
 
-      await specCommand("ENG-123", { provider: "linear" });
+      await specCommand("ENG-123", { source: "linear" });
 
       expect(mockSelect).not.toHaveBeenCalled();
       expect(mockLoadSpec).toHaveBeenCalledWith("ENG-123", "linear");
     });
 
-    it("skips prompt when --provider jira is provided", async () => {
+    it("skips prompt when --source jira is provided", async () => {
       mockLoadSpec.mockResolvedValue(jiraPayload);
 
-      await specCommand("ENG-123", { provider: "jira" });
+      await specCommand("ENG-123", { source: "jira" });
 
       expect(mockSelect).not.toHaveBeenCalled();
       expect(mockLoadSpec).toHaveBeenCalledWith("ENG-123", "jira");
     });
 
-    it("skips prompt when --provider local is provided", async () => {
+    it("skips prompt when --source local is provided", async () => {
       mockLoadSpec.mockResolvedValue(markdownPayload);
 
-      await specCommand("ENG-123", { provider: "local" });
+      await specCommand("ENG-123", { source: "local" });
 
       expect(mockSelect).not.toHaveBeenCalled();
       expect(mockLoadSpec).toHaveBeenCalledWith("ENG-123", "local");
@@ -220,12 +221,12 @@ describe("specCommand — provider prompt", () => {
     });
   });
 
-  // ── Invalid --provider value produces clear error ─────────────────
+  // ── Invalid --source value produces clear error ───────────────────
 
-  describe("invalid --provider value", () => {
-    it("produces a clear error for invalid provider value", async () => {
+  describe("invalid --source value", () => {
+    it("produces a clear error for invalid source provider value", async () => {
       await expect(
-        specCommand("ENG-123", { provider: "github" }),
+        specCommand("ENG-123", { source: "github" }),
       ).rejects.toThrow("process.exit");
 
       const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
@@ -235,7 +236,7 @@ describe("specCommand — provider prompt", () => {
 
     it("lists valid providers in error message", async () => {
       await expect(
-        specCommand("ENG-123", { provider: "gitlab" }),
+        specCommand("ENG-123", { source: "gitlab" }),
       ).rejects.toThrow("process.exit");
 
       const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
@@ -245,10 +246,10 @@ describe("specCommand — provider prompt", () => {
     });
   });
 
-  // ── Non-TTY without --provider errors gracefully ──────────────────
+  // ── Non-TTY without --source errors gracefully ────────────────────
 
   describe("non-TTY environment handling", () => {
-    it("errors when stdin is not a TTY and no --provider flag given for issue key", async () => {
+    it("errors when stdin is not a TTY and no --source flag given for issue key", async () => {
       Object.defineProperty(process.stdin, "isTTY", { value: false, writable: true, configurable: true });
 
       await expect(
@@ -256,14 +257,14 @@ describe("specCommand — provider prompt", () => {
       ).rejects.toThrow("process.exit");
 
       const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
-      expect(output).toMatch(/--provider/i);
+      expect(output).toMatch(/--source/i);
     });
 
-    it("works in non-TTY when --provider flag is given", async () => {
+    it("works in non-TTY when --source flag is given", async () => {
       Object.defineProperty(process.stdin, "isTTY", { value: false, writable: true, configurable: true });
       mockLoadSpec.mockResolvedValue(linearPayload);
 
-      await specCommand("ENG-123", { provider: "linear" });
+      await specCommand("ENG-123", { source: "linear" });
 
       expect(mockSelect).not.toHaveBeenCalled();
       const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
@@ -295,7 +296,7 @@ describe("specCommand — provider prompt", () => {
       expect(parsed.source).toBe("markdown");
     });
 
-    it("still supports --clarify flag alongside --provider", async () => {
+    it("still supports --clarify flag alongside --source", async () => {
       const { runPlanner } = await import("../planner.js");
       const mockRunPlanner = vi.mocked(runPlanner);
       mockRunPlanner.mockResolvedValue({
@@ -310,7 +311,7 @@ describe("specCommand — provider prompt", () => {
 
       mockLoadSpec.mockResolvedValue(linearPayload);
 
-      await specCommand("ENG-123", { clarify: true, provider: "linear" });
+      await specCommand("ENG-123", { clarify: true, source: "linear" });
 
       expect(mockSelect).not.toHaveBeenCalled();
       expect(mockLoadSpec).toHaveBeenCalledWith("ENG-123", "linear");
@@ -396,6 +397,37 @@ describe("specCommand — provider prompt", () => {
       await specCommand("./my-spec", {});
 
       expect(mockSelect).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Error propagation with explicit source ────────────────────────
+
+  describe("error propagation with explicit source", () => {
+    it("propagates SpecError when loadSpec fails with explicit source provider", async () => {
+      const { SpecError } = await import("../spec.js");
+      mockLoadSpec.mockRejectedValue(new SpecError("File not found: /path/to/spec.md"));
+
+      await expect(
+        specCommand("ENG-123", { source: "local" }),
+      ).rejects.toThrow("process.exit");
+
+      expect(mockLoadSpec).toHaveBeenCalledWith("ENG-123", "local");
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(output).toContain("File not found");
+    });
+
+    it("propagates SpecError when loadSpec fails for Linear with explicit source", async () => {
+      const { SpecError } = await import("../spec.js");
+      mockLoadSpec.mockRejectedValue(new SpecError("Linear API error"));
+
+      await expect(
+        specCommand("ENG-123", { source: "linear" }),
+      ).rejects.toThrow("process.exit");
+
+      expect(mockLoadSpec).toHaveBeenCalledWith("ENG-123", "linear");
+      expect(exitSpy).toHaveBeenCalledWith(1);
     });
   });
 });

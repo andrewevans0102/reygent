@@ -5,7 +5,7 @@ import { ExitPromptError } from "@inquirer/core";
 import { isDebug } from "../debug.js";
 import { wrapText } from "../format.js";
 import { createLiveStatus } from "../live-status.js";
-import { loadSpec, SpecError } from "../spec.js";
+import { loadSpec, SpecError, ISSUE_KEY_PATTERN } from "../spec.js";
 import { runPlanner } from "../planner.js";
 import { TaskError } from "../task.js";
 import type { PlannerOutput } from "../task.js";
@@ -15,10 +15,8 @@ const VALID_PROVIDERS: SpecProvider[] = ["jira", "linear", "local"];
 
 interface SpecCommandOptions {
   clarify?: boolean;
-  provider?: string;
+  source?: string;
 }
-
-const ISSUE_KEY_PATTERN = /^[A-Z]+-\d+$/;
 
 /**
  * Infer provider when unambiguous, or return undefined to trigger prompt.
@@ -36,19 +34,44 @@ function inferProvider(source: string): SpecProvider | undefined {
 
 export async function specCommand(source: string, options: SpecCommandOptions): Promise<void> {
   try {
-    // Validate --provider flag if given
-    if (options.provider !== undefined) {
-      if (!VALID_PROVIDERS.includes(options.provider as SpecProvider)) {
+    // Validate --source flag if given
+    if (options.source !== undefined) {
+      if (!VALID_PROVIDERS.includes(options.source as SpecProvider)) {
         console.log(
           chalk.red.bold("Error:"),
-          `Invalid provider "${options.provider}". Must be one of: ${VALID_PROVIDERS.join(", ")}`,
+          `Invalid source provider "${options.source}". Must be one of: ${VALID_PROVIDERS.join(", ")}`,
         );
         process.exit(1);
       }
     }
 
     // Resolve provider: flag > inference > prompt
-    let provider: SpecProvider | undefined = options.provider as SpecProvider | undefined;
+    let provider: SpecProvider | undefined = options.source as SpecProvider | undefined;
+
+    // Validate source format matches explicit provider if given
+    if (provider) {
+      const hasMdExt = /\.(md|markdown)$/i.test(source);
+      const isLinearUrl = /^https:\/\/linear\.app\//.test(source);
+      const isIssueKey = ISSUE_KEY_PATTERN.test(source);
+
+      // Only warn for clear mismatches
+      if (provider === "local" && isLinearUrl) {
+        console.log(
+          chalk.yellow("Warning:"),
+          `Source "${source}" is a Linear URL, but --source=local treats it as a file path.`,
+        );
+      } else if (provider === "linear" && hasMdExt) {
+        console.log(
+          chalk.yellow("Warning:"),
+          `Source "${source}" ends in .md/.markdown, but --source=linear treats it as a Linear issue ID.`,
+        );
+      } else if (provider === "jira" && hasMdExt) {
+        console.log(
+          chalk.yellow("Warning:"),
+          `Source "${source}" ends in .md/.markdown, but --source=jira treats it as a Jira issue key.`,
+        );
+      }
+    }
 
     if (!provider) {
       provider = inferProvider(source);
@@ -59,7 +82,7 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
       if (!process.stdin.isTTY) {
         console.log(
           chalk.red.bold("Error:"),
-          `Cannot determine provider for "${source}" in non-interactive mode. Use --provider <jira|linear|local>.`,
+          `Cannot determine provider for "${source}" in non-interactive mode. Use --source <jira|linear|local>.`,
         );
         process.exit(1);
       }
