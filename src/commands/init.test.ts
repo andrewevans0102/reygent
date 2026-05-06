@@ -1,9 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 
+// Mock declarations appear before vi.mock calls in source, but vitest
+// hoists vi.mock to the top of the file so the mocks are defined first.
 const mockSelect = vi.fn();
 vi.mock("@inquirer/prompts", () => ({
   select: (...args: unknown[]) => mockSelect(...args),
+}));
+
+const inquirerCoreMock = vi.hoisted(() => {
+  class MockExitPromptError extends Error {
+    override name = "ExitPromptError";
+  }
+  return { MockExitPromptError };
+});
+vi.mock("@inquirer/core", () => ({
+  ExitPromptError: inquirerCoreMock.MockExitPromptError,
 }));
 
 vi.mock("node:fs", () => ({
@@ -138,6 +150,9 @@ describe("initCommand", () => {
       expect.any(String),
       "utf-8",
     );
+
+    // All paths already exist on reset — no dirs should be created
+    expect(mockMkdirSync).not.toHaveBeenCalled();
   });
 
   it("edit choice directs user to reygent config", async () => {
@@ -155,9 +170,7 @@ describe("initCommand", () => {
 
   it("Ctrl+C exits cleanly with code 0", async () => {
     mockExistsSync.mockReturnValue(true);
-    const exitPromptError = new Error("User force closed the prompt");
-    exitPromptError.name = "ExitPromptError";
-    mockSelect.mockRejectedValue(exitPromptError);
+    mockSelect.mockRejectedValue(new inquirerCoreMock.MockExitPromptError("User force closed the prompt"));
 
     await expect(initCommand({ dryRun: false })).rejects.toThrow("process.exit");
 

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ExitPromptError } from "@inquirer/core";
 import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import ora from "ora";
@@ -42,9 +43,9 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
         const action = await select({
           message: "Existing config found. What would you like to do?",
           choices: [
-            { name: "Reset to defaults", value: "reset" as const },
-            { name: "Edit config (reygent config)", value: "edit" as const },
-            { name: "Cancel", value: "cancel" as const },
+            { name: "Reset to defaults", value: "reset" },
+            { name: "Edit config (reygent config)", value: "edit" },
+            { name: "Cancel", value: "cancel" },
           ],
         });
 
@@ -65,7 +66,8 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
       }
     }
 
-    const spinner = ora("Creating .reygent folder").start();
+    const spinnerText = existsSync(targetDir) ? "Writing config" : "Creating .reygent folder";
+    const spinner = ora(spinnerText).start();
 
     try {
       // Create folders
@@ -95,7 +97,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
     }
   } catch (err) {
     // Ctrl+C from inquirer
-    if (err && typeof err === "object" && "name" in err && (err as { name: string }).name === "ExitPromptError") {
+    if (err instanceof ExitPromptError) {
       console.log(chalk.yellow("\nInitialization cancelled."));
       process.exit(0);
     }
