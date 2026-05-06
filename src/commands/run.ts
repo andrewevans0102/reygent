@@ -10,7 +10,8 @@ import { runImplement } from "../implement.js";
 import type { FailureContext } from "../implement.js";
 import { createLiveStatus } from "../live-status.js";
 import { runPlanner } from "../planner.js";
-import { runPRCreate } from "../pr-create.js";
+import { runPRCreate, mapIssueTypeToBranchType } from "../pr-create.js";
+import type { BranchType } from "../pr-create.js";
 import { runPRReview, formatPRReviewTerminal, postPRReviewComment } from "../pr-review.js";
 import { runSecurityReview, formatFindings } from "../security-review.js";
 import { loadSpec, SpecError } from "../spec.js";
@@ -33,6 +34,7 @@ function withActivity(
 
 interface RunOptions {
   spec?: string;
+  type?: string;
   dryRun: boolean;
   securityThreshold: string;
   autoApprove: boolean;
@@ -630,8 +632,43 @@ export async function runCommand(options: RunOptions): Promise<void> {
           throw new TaskError("pr-create: implement stage must run first");
         }
 
+        // Determine branch type
+        let branchType: BranchType;
+
+        // Check if --type flag was provided
+        if (options.type) {
+          const validTypes: BranchType[] = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
+          if (!validTypes.includes(options.type as BranchType)) {
+            throw new TaskError(`Invalid --type "${options.type}". Must be one of: ${validTypes.join(", ")}`);
+          }
+          branchType = options.type as BranchType;
+        } else {
+          // Try auto-detection from issue type
+          const autoDetected = mapIssueTypeToBranchType(context.spec.issueType);
+
+          if (autoDetected) {
+            // Issue type detected - use it without prompting
+            branchType = autoDetected;
+          } else {
+            // No auto-detection - prompt user
+            branchType = await select({
+              message: "Select branch type:",
+              choices: [
+                { name: "feat", value: "feat" },
+                { name: "fix", value: "fix" },
+                { name: "chore", value: "chore" },
+                { name: "refactor", value: "refactor" },
+                { name: "docs", value: "docs" },
+                { name: "test", value: "test" },
+                { name: "style", value: "style" },
+                { name: "perf", value: "perf" },
+              ],
+            }) as BranchType;
+          }
+        }
+
         const spinner = ora(chalk.blue("creating pull request...")).start();
-        const prResult = await runPRCreate(context, { insecure: options.insecure });
+        const prResult = await runPRCreate(context, { insecure: options.insecure, branchType });
         context.prCreate = prResult;
         spinner.succeed(chalk.green("PR created"));
 

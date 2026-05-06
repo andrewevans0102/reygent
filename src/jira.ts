@@ -9,6 +9,7 @@ export function isJiraKey(input: string): boolean {
 interface JiraIssueFields {
   summary: string;
   description?: string | { content: unknown[] };
+  issuetype?: { name: string };
   [key: string]: unknown;
 }
 
@@ -102,8 +103,9 @@ export async function readJiraSpec(issueKey: string): Promise<JiraSpecPayload> {
     }
 
     const content = parts.filter(p => p.trim()).join("\n\n");
+    const issueType = data.fields.issuetype?.name;
 
-    return { source: "jira", issueKey, title, content };
+    return { source: "jira", issueKey, title, content, issueType };
   } catch (err) {
     if (err instanceof SpecError) throw err;
     const message = err instanceof Error ? err.message : String(err);

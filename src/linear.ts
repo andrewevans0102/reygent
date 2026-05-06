@@ -20,6 +20,11 @@ interface LinearIssue {
   identifier: string;
   title: string;
   description?: string;
+  labels?: {
+    nodes: Array<{
+      name: string;
+    }>;
+  };
   children?: {
     nodes: Array<{
       id: string;
@@ -70,6 +75,11 @@ export async function readLinearSpec(
           identifier
           title
           description
+          labels {
+            nodes {
+              name
+            }
+          }
           children {
             nodes {
               id
@@ -135,7 +145,14 @@ export async function readLinearSpec(
 
     const content = parts.filter(p => p.trim()).join("\n\n");
 
-    return { source: "linear", issueId, title, content };
+    // Extract issue type from labels (bug, feature, etc)
+    const labels = issue.labels?.nodes || [];
+    const typeLabel = labels.find(l =>
+      ["bug", "feature", "enhancement", "fix", "chore", "refactor", "docs", "test", "style", "perf"].includes(l.name.toLowerCase())
+    );
+    const issueType = typeLabel?.name;
+
+    return { source: "linear", issueId, title, content, issueType };
   } catch (err) {
     if (err instanceof SpecError) throw err;
     const message = err instanceof Error ? err.message : String(err);

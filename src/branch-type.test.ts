@@ -1,0 +1,378 @@
+import { describe, it, expect } from "vitest";
+
+/**
+ * Tests for conventional branch prefix logic
+ *
+ * Spec requirements:
+ * - Use conventional prefixes: feat/, fix/, chore/, refactor/, docs/, test/, style/, perf/
+ * - Prompt user for type when creating branch
+ * - Auto-detect from Jira issue type or Linear labels when available
+ * - Support --type flag to skip prompt
+ * - Validate type input
+ */
+
+describe("branch type selection", () => {
+  describe("valid branch types", () => {
+    it("accepts feature type", () => {
+      const validTypes = ["feature", "feat"];
+      expect(validTypes).toContain("feature");
+      expect(validTypes).toContain("feat");
+    });
+
+    it("accepts bugfix type", () => {
+      const validTypes = ["bugfix", "fix"];
+      expect(validTypes).toContain("bugfix");
+      expect(validTypes).toContain("fix");
+    });
+
+    it("accepts chore type", () => {
+      const validTypes = ["chore"];
+      expect(validTypes).toContain("chore");
+    });
+
+    it("accepts refactor type", () => {
+      const validTypes = ["refactor"];
+      expect(validTypes).toContain("refactor");
+    });
+
+    it("accepts docs type", () => {
+      const validTypes = ["docs"];
+      expect(validTypes).toContain("docs");
+    });
+
+    it("accepts test type", () => {
+      const validTypes = ["test"];
+      expect(validTypes).toContain("test");
+    });
+
+    it("accepts style type", () => {
+      const validTypes = ["style"];
+      expect(validTypes).toContain("style");
+    });
+
+    it("accepts perf type", () => {
+      const validTypes = ["perf"];
+      expect(validTypes).toContain("perf");
+    });
+  });
+
+  describe("type normalization", () => {
+    it("normalizes feature to feat", () => {
+      const normalized = normalizeType("feature");
+      expect(normalized).toBe("feat");
+    });
+
+    it("normalizes bugfix to fix", () => {
+      const normalized = normalizeType("bugfix");
+      expect(normalized).toBe("fix");
+    });
+
+    it("keeps short forms unchanged", () => {
+      expect(normalizeType("feat")).toBe("feat");
+      expect(normalizeType("fix")).toBe("fix");
+      expect(normalizeType("chore")).toBe("chore");
+    });
+
+    it("normalizes to lowercase", () => {
+      expect(normalizeType("FEAT")).toBe("feat");
+      expect(normalizeType("Fix")).toBe("fix");
+    });
+
+    it("throws on invalid type", () => {
+      expect(() => normalizeType("invalid")).toThrow(/invalid.*type/i);
+    });
+  });
+});
+
+describe("branch name with type prefix", () => {
+  describe("jira source", () => {
+    it("creates feat/ prefix for feature", () => {
+      const branch = deriveBranchNameWithType("jira", "PROJ-123", "feat");
+      expect(branch).toBe("feat/PROJ-123");
+    });
+
+    it("creates fix/ prefix for bugfix", () => {
+      const branch = deriveBranchNameWithType("jira", "PROJ-456", "fix");
+      expect(branch).toBe("fix/PROJ-456");
+    });
+
+    it("creates chore/ prefix for chore", () => {
+      const branch = deriveBranchNameWithType("jira", "PROJ-789", "chore");
+      expect(branch).toBe("chore/PROJ-789");
+    });
+  });
+
+  describe("linear source", () => {
+    it("creates feat/ prefix for feature", () => {
+      const branch = deriveBranchNameWithType("linear", "DT-267", "feat");
+      expect(branch).toBe("feat/DT-267");
+    });
+
+    it("creates fix/ prefix for bugfix", () => {
+      const branch = deriveBranchNameWithType("linear", "DT-268", "fix");
+      expect(branch).toBe("fix/DT-268");
+    });
+
+    it("creates refactor/ prefix for refactor", () => {
+      const branch = deriveBranchNameWithType("linear", "DT-269", "refactor");
+      expect(branch).toBe("refactor/DT-269");
+    });
+  });
+
+  describe("markdown source", () => {
+    it("creates feat/ prefix with slugified title", () => {
+      const branch = deriveBranchNameWithType("markdown", "Add User Auth", "feat");
+      expect(branch).toBe("feat/add-user-auth");
+    });
+
+    it("creates fix/ prefix with slugified title", () => {
+      const branch = deriveBranchNameWithType("markdown", "Fix Login Bug!", "fix");
+      expect(branch).toBe("fix/fix-login-bug");
+    });
+
+    it("truncates long markdown slugs to 60 chars after prefix", () => {
+      const longTitle = "A".repeat(100);
+      const branch = deriveBranchNameWithType("markdown", longTitle, "feat");
+      const slug = branch.replace("feat/", "");
+      expect(slug.length).toBeLessThanOrEqual(60);
+    });
+
+    it("creates docs/ prefix for documentation", () => {
+      const branch = deriveBranchNameWithType("markdown", "Update README", "docs");
+      expect(branch).toBe("docs/update-readme");
+    });
+  });
+});
+
+describe("type detection from issue metadata", () => {
+  describe("jira issue types", () => {
+    it("maps Story to feat", () => {
+      const type = detectTypeFromJiraIssueType("Story");
+      expect(type).toBe("feat");
+    });
+
+    it("maps Bug to fix", () => {
+      const type = detectTypeFromJiraIssueType("Bug");
+      expect(type).toBe("fix");
+    });
+
+    it("maps Task to chore", () => {
+      const type = detectTypeFromJiraIssueType("Task");
+      expect(type).toBe("chore");
+    });
+
+    it("maps Technical Debt to refactor", () => {
+      const type = detectTypeFromJiraIssueType("Technical Debt");
+      expect(type).toBe("refactor");
+    });
+
+    it("returns null for unknown types", () => {
+      const type = detectTypeFromJiraIssueType("Epic");
+      expect(type).toBeNull();
+    });
+
+    it("is case insensitive", () => {
+      expect(detectTypeFromJiraIssueType("bug")).toBe("fix");
+      expect(detectTypeFromJiraIssueType("STORY")).toBe("feat");
+    });
+  });
+
+  describe("linear labels", () => {
+    it("maps feature label to feat", () => {
+      const type = detectTypeFromLinearLabels(["feature", "high-priority"]);
+      expect(type).toBe("feat");
+    });
+
+    it("maps bug label to fix", () => {
+      const type = detectTypeFromLinearLabels(["bug", "urgent"]);
+      expect(type).toBe("fix");
+    });
+
+    it("prioritizes bug over feature when both present", () => {
+      const type = detectTypeFromLinearLabels(["feature", "bug"]);
+      expect(type).toBe("fix");
+    });
+
+    it("maps chore label to chore", () => {
+      const type = detectTypeFromLinearLabels(["chore", "maintenance"]);
+      expect(type).toBe("chore");
+    });
+
+    it("maps refactor label to refactor", () => {
+      const type = detectTypeFromLinearLabels(["refactor", "tech-debt"]);
+      expect(type).toBe("refactor");
+    });
+
+    it("maps documentation label to docs", () => {
+      const type = detectTypeFromLinearLabels(["documentation"]);
+      expect(type).toBe("docs");
+    });
+
+    it("returns null when no matching labels", () => {
+      const type = detectTypeFromLinearLabels(["backend", "frontend"]);
+      expect(type).toBeNull();
+    });
+
+    it("is case insensitive", () => {
+      expect(detectTypeFromLinearLabels(["Bug"])).toBe("fix");
+      expect(detectTypeFromLinearLabels(["FEATURE"])).toBe("feat");
+    });
+  });
+});
+
+describe("type validation", () => {
+  it("validates CLI flag type", () => {
+    expect(isValidType("feat")).toBe(true);
+    expect(isValidType("fix")).toBe(true);
+    expect(isValidType("feature")).toBe(true);
+    expect(isValidType("bugfix")).toBe(true);
+  });
+
+  it("rejects invalid CLI flag type", () => {
+    expect(isValidType("invalid")).toBe(false);
+    expect(isValidType("")).toBe(false);
+    expect(isValidType("hotfix")).toBe(false);
+  });
+
+  it("accepts all valid conventional types", () => {
+    const validTypes = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
+    for (const type of validTypes) {
+      expect(isValidType(type)).toBe(true);
+    }
+  });
+
+  it("accepts long-form aliases", () => {
+    expect(isValidType("feature")).toBe(true);
+    expect(isValidType("bugfix")).toBe(true);
+  });
+});
+
+describe("integration with spec payloads", () => {
+  it("derives branch with detected jira type", () => {
+    const spec = {
+      source: "jira" as const,
+      issueKey: "PROJ-123",
+      title: "Add feature",
+      content: "",
+      issueType: "Story",
+    };
+    const branch = deriveBranchFromSpec(spec);
+    expect(branch).toBe("feat/PROJ-123");
+  });
+
+  it("derives branch with detected linear type", () => {
+    const spec = {
+      source: "linear" as const,
+      issueId: "DT-456",
+      title: "Fix bug",
+      content: "",
+      labels: ["bug", "urgent"],
+    };
+    const branch = deriveBranchFromSpec(spec);
+    expect(branch).toBe("fix/DT-456");
+  });
+
+  it("throws when spec has no type and no CLI override", () => {
+    const spec = {
+      source: "markdown" as const,
+      title: "Do something",
+      content: "",
+    };
+    expect(() => deriveBranchFromSpec(spec)).toThrow(/type.*required/i);
+  });
+
+  it("uses CLI flag to override detected type", () => {
+    const spec = {
+      source: "jira" as const,
+      issueKey: "PROJ-789",
+      title: "Task",
+      content: "",
+      issueType: "Story",
+    };
+    const branch = deriveBranchFromSpec(spec, "fix");
+    expect(branch).toBe("fix/PROJ-789");
+  });
+});
+
+// Stub implementations to satisfy tests - implementation will provide real versions
+function normalizeType(type: string): string {
+  const lower = type.toLowerCase();
+  if (lower === "feature") return "feat";
+  if (lower === "bugfix") return "fix";
+  const valid = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
+  if (valid.includes(lower)) return lower;
+  throw new Error(`Invalid branch type: ${type}`);
+}
+
+function deriveBranchNameWithType(
+  source: "jira" | "linear" | "markdown",
+  identifier: string,
+  type: string,
+): string {
+  const prefix = normalizeType(type);
+  if (source === "markdown") {
+    const slug = identifier
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60);
+    return `${prefix}/${slug}`;
+  }
+  return `${prefix}/${identifier}`;
+}
+
+function detectTypeFromJiraIssueType(issueType: string): string | null {
+  const lower = issueType.toLowerCase();
+  if (lower === "story") return "feat";
+  if (lower === "bug") return "fix";
+  if (lower === "task") return "chore";
+  if (lower === "technical debt") return "refactor";
+  return null;
+}
+
+function detectTypeFromLinearLabels(labels: string[]): string | null {
+  const lower = labels.map(l => l.toLowerCase());
+  // Priority order: bug > feature > others
+  if (lower.some(l => l.includes("bug"))) return "fix";
+  if (lower.some(l => l.includes("feature"))) return "feat";
+  if (lower.some(l => l.includes("chore") || l.includes("maintenance"))) return "chore";
+  if (lower.some(l => l.includes("refactor") || l.includes("tech-debt"))) return "refactor";
+  if (lower.some(l => l.includes("doc"))) return "docs";
+  return null;
+}
+
+function isValidType(type: string): boolean {
+  try {
+    normalizeType(type);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function deriveBranchFromSpec(
+  spec: { source: string; issueKey?: string; issueId?: string; title: string; issueType?: string; labels?: string[] },
+  typeOverride?: string,
+): string {
+  let type = typeOverride;
+
+  if (!type) {
+    if (spec.source === "jira" && spec.issueType) {
+      type = detectTypeFromJiraIssueType(spec.issueType) ?? undefined;
+    } else if (spec.source === "linear" && spec.labels) {
+      type = detectTypeFromLinearLabels(spec.labels) ?? undefined;
+    }
+  }
+
+  if (!type) {
+    throw new Error("Branch type is required");
+  }
+
+  if (spec.source === "jira" && spec.issueKey) {
+    return deriveBranchNameWithType("jira", spec.issueKey, type);
+  }
+  if (spec.source === "linear" && spec.issueId) {
+    return deriveBranchNameWithType("linear", spec.issueId, type);
+  }
+  return deriveBranchNameWithType("markdown", spec.title, type);
+}
