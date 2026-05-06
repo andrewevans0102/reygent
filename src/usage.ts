@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { wrapText } from "./format.js";
 
 export type ProviderName = "claude" | "codex" | "openrouter" | "gemini";
 
@@ -192,10 +193,10 @@ export function printUsageSummary(tracker: UsageTracker): void {
       : 0;
     const hitRateSuffix = hitRate > 0 ? `  ${chalk.green(hitRate + "% hit")}` : "";
 
-    console.log(
-      chalk.cyan("│") +
-      `    ${agent.padEnd(16)} → ${formatCost(stats.cost).padStart(7)}  (${callLabel})${tokenSuffix}${savingsSuffix}${hitRateSuffix}`,
-    );
+    const cols = process.stdout.columns || 80;
+    const agentLine = `${agent.padEnd(16)} → ${formatCost(stats.cost).padStart(7)}  (${callLabel})${tokenSuffix}${savingsSuffix}${hitRateSuffix}`;
+    // prefix is "│    " = 5 chars
+    console.log(chalk.cyan("│") + `    ${wrapText(agentLine, 5, cols)}`);
   }
 
   console.log(chalk.cyan("└─"));

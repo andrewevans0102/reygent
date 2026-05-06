@@ -3,6 +3,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { select, input } from "@inquirer/prompts";
 import { isDebug } from "../debug.js";
+import { wrapText } from "../format.js";
 import { loadEnvFile } from "../env.js";
 import { runUnitTestGate, runFunctionalTestGate } from "../gate.js";
 import { runImplement } from "../implement.js";
@@ -397,14 +398,15 @@ export async function runCommand(options: RunOptions): Promise<void> {
         status.succeed(chalk.green("Plan created"));
         context.plan = plan;
 
+        const cols = process.stdout.columns || 80;
         console.log(chalk.cyan("\nGoals:"));
-        for (const g of plan.goals) console.log(`  ${chalk.gray("-")} ${g}`);
+        for (const g of plan.goals) console.log(`  ${chalk.gray("-")} ${wrapText(g, 4, cols)}`);
         console.log(chalk.cyan("\nTasks:"));
-        for (const t of plan.tasks) console.log(`  ${chalk.gray("-")} ${t}`);
+        for (const t of plan.tasks) console.log(`  ${chalk.gray("-")} ${wrapText(t, 4, cols)}`);
         console.log(chalk.cyan("\nConstraints:"));
-        for (const c of plan.constraints) console.log(`  ${chalk.gray("-")} ${c}`);
+        for (const c of plan.constraints) console.log(`  ${chalk.gray("-")} ${wrapText(c, 4, cols)}`);
         console.log(chalk.cyan("\nDefinition of Done:"));
-        for (const d of plan.dod) console.log(`  ${chalk.gray("-")} ${d}`);
+        for (const d of plan.dod) console.log(`  ${chalk.gray("-")} ${wrapText(d, 4, cols)}`);
         console.log();
 
         context.results.push({

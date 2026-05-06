@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
 import { select, input } from "@inquirer/prompts";
+import { wrapText } from "../format.js";
 import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
 import { extractJSON } from "../planner.js";
@@ -364,11 +365,12 @@ function displayCommentSummary(comments: ClassifiedComment[]): void {
     console.log(`  ${tag}${chalk.bold(c.author)} ${location}`);
 
     // Truncate long comments for summary display
+    const cols = process.stdout.columns || 80;
     const preview = c.body.length > 200
       ? c.body.slice(0, 200) + "..."
       : c.body;
     for (const line of preview.split("\n")) {
-      console.log(chalk.gray(`    ${line}`));
+      console.log(chalk.gray(`    ${wrapText(line, 4, cols)}`));
     }
     console.log();
   }
@@ -514,29 +516,30 @@ async function generatePlan(
 // ── Plan display and approval ──
 
 function displayPlan(plan: PlannerOutput): void {
+  const cols = process.stdout.columns || 80;
   console.log(chalk.bold("\n  Plan to Address Review Comments\n"));
 
   console.log(chalk.bold.blue("  Goals:"));
   for (const g of plan.goals) {
-    console.log(`    - ${g}`);
+    console.log(`    - ${wrapText(g, 6, cols)}`);
   }
   console.log();
 
   console.log(chalk.bold.blue("  Tasks:"));
   for (const t of plan.tasks) {
-    console.log(`    - ${t}`);
+    console.log(`    - ${wrapText(t, 6, cols)}`);
   }
   console.log();
 
   console.log(chalk.bold.blue("  Constraints:"));
   for (const c of plan.constraints) {
-    console.log(`    - ${c}`);
+    console.log(`    - ${wrapText(c, 6, cols)}`);
   }
   console.log();
 
   console.log(chalk.bold.blue("  Definition of Done:"));
   for (const d of plan.dod) {
-    console.log(`    - ${d}`);
+    console.log(`    - ${wrapText(d, 6, cols)}`);
   }
   console.log();
 }

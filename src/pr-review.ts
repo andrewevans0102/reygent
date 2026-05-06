@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import chalk from "chalk";
 import { getAgents } from "./config.js";
+import { wrapText } from "./format.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { extractJSON } from "./planner.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
@@ -174,30 +175,6 @@ export function formatPRReviewOutput(output: PRReviewOutput): string {
   return lines.join("\n");
 }
 
-function wrapText(text: string, indent: number, maxWidth: number): string {
-  const cols = maxWidth;
-  const available = cols - indent;
-  if (available <= 20 || text.length <= available) return text;
-
-  const words = text.split(" ");
-  const wrappedLines: string[] = [];
-  let currentLine = "";
-
-  for (const word of words) {
-    if (currentLine.length === 0) {
-      currentLine = word;
-    } else if (currentLine.length + 1 + word.length <= available) {
-      currentLine += " " + word;
-    } else {
-      wrappedLines.push(currentLine);
-      currentLine = word;
-    }
-  }
-  if (currentLine) wrappedLines.push(currentLine);
-
-  const pad = " ".repeat(indent);
-  return wrappedLines.join("\n" + pad);
-}
 
 export function formatPRReviewTerminal(output: PRReviewOutput): string {
   const lines: string[] = [];

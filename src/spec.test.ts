@@ -140,6 +140,85 @@ describe("loadSpec", () => {
   });
 });
 
+describe("loadSpec with explicit provider", () => {
+  beforeEach(() => {
+    vi.spyOn(process, "cwd").mockReturnValue("/fake");
+    mockIsLinearUrl.mockReturnValue(false);
+  });
+
+  it("routes to readSpec when provider is 'local'", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue("# Title\n\nContent");
+
+    const result = await loadSpec("spec.md", "local");
+    expect(result.source).toBe("markdown");
+  });
+
+  it("routes to readLinearSpec when provider is 'linear'", async () => {
+    mockReadLinearSpec.mockResolvedValue({
+      source: "linear",
+      issueId: "ENG-123",
+      title: "T",
+      content: "C",
+    });
+
+    const result = await loadSpec("ENG-123", "linear");
+    expect(mockReadLinearSpec).toHaveBeenCalledWith("ENG-123");
+    expect(result.source).toBe("linear");
+  });
+
+  it("routes to readJiraSpec when provider is 'jira'", async () => {
+    mockReadJiraSpec.mockResolvedValue({
+      source: "jira",
+      issueKey: "ENG-123",
+      title: "T",
+      content: "C",
+    });
+
+    const result = await loadSpec("ENG-123", "jira");
+    expect(mockReadJiraSpec).toHaveBeenCalledWith("ENG-123");
+    expect(result.source).toBe("jira");
+  });
+
+  it("extracts Linear ID from URL when provider is 'linear'", async () => {
+    mockIsLinearUrl.mockReturnValue(true);
+    mockExtractLinearId.mockReturnValue("DT-267");
+    mockReadLinearSpec.mockResolvedValue({
+      source: "linear",
+      issueId: "DT-267",
+      title: "T",
+      content: "C",
+    });
+
+    const result = await loadSpec("https://linear.app/team/issue/DT-267", "linear");
+    expect(mockReadLinearSpec).toHaveBeenCalledWith("DT-267");
+    expect(result.source).toBe("linear");
+  });
+
+  it("provider param bypasses env-based auto-detection", async () => {
+    // Even with Jira env vars set, provider=linear should use Linear
+    process.env.JIRA_URL = "https://test.atlassian.net";
+    process.env.JIRA_EMAIL = "a@b.com";
+    process.env.JIRA_API_TOKEN = "tok";
+
+    mockReadLinearSpec.mockResolvedValue({
+      source: "linear",
+      issueId: "PROJ-1",
+      title: "T",
+      content: "C",
+    });
+
+    const result = await loadSpec("PROJ-1", "linear");
+    expect(mockReadLinearSpec).toHaveBeenCalledWith("PROJ-1");
+    expect(mockReadJiraSpec).not.toHaveBeenCalled();
+    expect(result.source).toBe("linear");
+
+    delete process.env.JIRA_URL;
+    delete process.env.JIRA_EMAIL;
+    delete process.env.JIRA_API_TOKEN;
+  });
+});
+
 describe("readSpec", () => {
   beforeEach(() => {
     vi.spyOn(process, "cwd").mockReturnValue("/fake");
