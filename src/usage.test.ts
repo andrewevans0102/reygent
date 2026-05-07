@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { UsageTracker, formatDuration, printUsageSummary, calculateCacheSavings, printCacheWarnings } from "./usage.js";
+import { PROVIDER_PRICING } from "./pricing.js";
 
 describe("UsageTracker", () => {
   it("starts with zero cost", () => {
@@ -195,9 +196,9 @@ describe("calculateCacheSavings", () => {
   });
 
   it("calculates savings for openrouter provider", () => {
-    // 1M cached tokens * $3/M * 0.50 discount = $1.50
+    // openrouter does not support caching → 0 discount
     const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "openrouter" });
-    expect(savings).toBeCloseTo(1.50);
+    expect(savings).toBeCloseTo(0);
   });
 
   it("calculates savings for gemini provider", () => {
@@ -302,5 +303,35 @@ describe("printCacheWarnings", () => {
     printCacheWarnings(tracker);
     // Should only warn once for "dev"
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("calculateCacheSavings integration with PROVIDER_PRICING", () => {
+  it("matches PROVIDER_PRICING values for claude", () => {
+    const claudePricing = PROVIDER_PRICING.claude;
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "claude" });
+    const expected = (1_000_000 / 1_000_000) * claudePricing.inputCostPerMillion * claudePricing.cacheDiscountRate;
+    expect(savings).toBeCloseTo(expected);
+  });
+
+  it("matches PROVIDER_PRICING values for codex", () => {
+    const codexPricing = PROVIDER_PRICING.codex;
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "codex" });
+    const expected = (1_000_000 / 1_000_000) * codexPricing.inputCostPerMillion * codexPricing.cacheDiscountRate;
+    expect(savings).toBeCloseTo(expected);
+  });
+
+  it("matches PROVIDER_PRICING values for openrouter", () => {
+    const orPricing = PROVIDER_PRICING.openrouter;
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "openrouter" });
+    const expected = (1_000_000 / 1_000_000) * orPricing.inputCostPerMillion * orPricing.cacheDiscountRate;
+    expect(savings).toBeCloseTo(expected);
+  });
+
+  it("matches PROVIDER_PRICING values for gemini", () => {
+    const geminiPricing = PROVIDER_PRICING.gemini;
+    const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "gemini" });
+    const expected = (1_000_000 / 1_000_000) * geminiPricing.inputCostPerMillion * geminiPricing.cacheDiscountRate;
+    expect(savings).toBeCloseTo(expected);
   });
 });
