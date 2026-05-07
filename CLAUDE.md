@@ -11,6 +11,7 @@
 
 - Build: `npm run build`
 - Dev: `npm run dev`
+- Verify pricing: Use `/verify-pricing` skill in Claude Code (see below)
 
 ## Conventions
 
@@ -208,3 +209,21 @@ multi.stop();
 - On fatal errors: print with `chalk.red.bold('Error:')`, then the message, then `process.exit(1)`.
 - Use `chalk.gray` for timestamps and secondary metadata.
 - Keep output scannable: one concept per line, consistent indentation.
+
+## Provider Pricing Verification
+
+Provider pricing data lives in `src/pricing.ts`. To verify accuracy against current provider documentation:
+
+**Use Claude Code skill:**
+```
+/verify-pricing
+```
+
+The skill:
+- Fetches current pricing from provider documentation URLs
+- Compares against `src/pricing.ts` values
+- Reports mismatches with suggested updates
+- Auto-updates `lastVerified` dates when all values match
+- Prompts for confirmation before applying pricing changes when mismatches exist
+
+See `.claude/skills/verify-pricing.md` for full implementation details.

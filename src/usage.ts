@@ -1,7 +1,6 @@
 import chalk from "chalk";
 import { wrapText } from "./format.js";
-
-export type ProviderName = "claude" | "codex" | "openrouter" | "gemini";
+import { PROVIDER_PRICING, type ProviderName } from "./pricing.js";
 
 export interface UsageInfo {
   costUsd?: number;
@@ -74,28 +73,6 @@ function formatTokenCount(n: number): string {
   return String(n);
 }
 
-/**
- * Per-provider cached token discount rates.
- * Savings = cachedTokens * costPerMillion * discountMultiplier
- * Claude: cached tokens billed at ~10% → discount = 0.90 (save 90%)
- * Codex (OpenAI): cached tokens billed at 25% → discount = 0.75 (save 75%)
- * OpenRouter: passthrough, use conservative estimate
- * Gemini: varies, use conservative estimate
- */
-const CACHE_DISCOUNT_RATES: Record<ProviderName, number> = {
-  claude: 0.90,
-  codex: 0.75,
-  openrouter: 0.50,
-  gemini: 0.50,
-};
-
-// Rough per-1M-token input cost by provider (USD) for savings estimation
-const INPUT_COST_PER_MILLION: Record<ProviderName, number> = {
-  claude: 3.00,
-  codex: 2.50,
-  openrouter: 3.00,
-  gemini: 1.25,
-};
 
 /** Estimate dollar savings from cached tokens for a single entry. */
 export function calculateCacheSavings(usage: UsageInfo): number {
@@ -106,8 +83,8 @@ export function calculateCacheSavings(usage: UsageInfo): number {
   const cached = usage.cachedTokens ?? 0;
   if (cached === 0) return 0;
   const provider = usage.provider ?? "claude";
-  const discount = CACHE_DISCOUNT_RATES[provider] ?? 0.50;
-  const costPerMillion = INPUT_COST_PER_MILLION[provider] ?? 3.00;
+  const discount = PROVIDER_PRICING[provider]?.cacheDiscountRate ?? 0.50;
+  const costPerMillion = PROVIDER_PRICING[provider]?.inputCostPerMillion ?? 3.00;
   return (cached / 1_000_000) * costPerMillion * discount;
 }
 
