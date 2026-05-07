@@ -1,8 +1,6 @@
 import chalk from "chalk";
 import { wrapText } from "./format.js";
-import { PROVIDER_PRICING } from "./pricing.js";
-
-export type ProviderName = "claude" | "codex" | "openrouter" | "gemini";
+import { PROVIDER_PRICING, type ProviderName } from "./pricing.js";
 
 export interface UsageInfo {
   costUsd?: number;

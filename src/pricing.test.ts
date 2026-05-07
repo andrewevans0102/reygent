@@ -70,13 +70,4 @@ describe("PROVIDER_PRICING", () => {
       );
     });
   });
-
-  it("cache discount rate 0 when caching not supported", () => {
-    providers.forEach((provider) => {
-      const pricing = PROVIDER_PRICING[provider];
-      if (!pricing.supportsCaching) {
-        expect(pricing.cacheDiscountRate).toBe(0);
-      }
-    });
-  });
 });

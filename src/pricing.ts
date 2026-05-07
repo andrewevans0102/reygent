@@ -1,4 +1,4 @@
-import type { ProviderName } from "./usage.js";
+export type ProviderName = "claude" | "codex" | "openrouter" | "gemini";
 
 export interface ProviderPricing {
   /** Cost per 1M input tokens (USD) */
@@ -39,8 +39,8 @@ export const PROVIDER_PRICING: Record<ProviderName, ProviderPricing> = {
   openrouter: {
     inputCostPerMillion: 3.00,
     outputCostPerMillion: 15.00,
-    cacheDiscountRate: 0,
-    supportsCaching: false,
+    cacheDiscountRate: 0.50,
+    supportsCaching: true,
     defaultModel: "anthropic/claude-sonnet-4-5",
     pricingUrl: "https://openrouter.ai/models",
     lastVerified: "2025-05-04",

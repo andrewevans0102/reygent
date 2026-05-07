@@ -196,9 +196,9 @@ describe("calculateCacheSavings", () => {
   });
 
   it("calculates savings for openrouter provider", () => {
-    // openrouter does not support caching → 0 discount
+    // 1M cached tokens * $3/M * 0.50 discount = $1.50
     const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "openrouter" });
-    expect(savings).toBeCloseTo(0);
+    expect(savings).toBeCloseTo(1.50);
   });
 
   it("calculates savings for gemini provider", () => {

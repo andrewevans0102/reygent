@@ -11,6 +11,7 @@
 
 - Build: `npm run build`
 - Dev: `npm run dev`
+- Verify pricing: `./scripts/verify-pricing.sh` (checks provider pricing against current docs)
 
 ## Conventions
 

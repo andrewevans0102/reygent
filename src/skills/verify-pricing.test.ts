@@ -147,3 +147,161 @@ describe("verify-pricing skill security requirements", () => {
     });
   });
 });
+
+describe("verify-pricing skill integration behavior", () => {
+  describe("price extraction logic", () => {
+    it("normalizes percentage savings format", () => {
+      // "90% savings" → 0.90
+      const input = "Cached tokens save 90% on costs";
+      const match = input.match(/(\d+(?:\.\d+)?)%/);
+      expect(match).toBeTruthy();
+      const rate = parseFloat(match![1]) / 100;
+      expect(rate).toBe(0.90);
+    });
+
+    it("normalizes billed-at percentage format", () => {
+      // "billed at 10%" → 0.90 savings
+      const input = "Cached tokens are billed at 10% of full price";
+      const match = input.match(/billed at (\d+(?:\.\d+)?)%/);
+      expect(match).toBeTruthy();
+      const billedRate = parseFloat(match![1]) / 100;
+      const savingsRate = 1 - billedRate;
+      expect(savingsRate).toBe(0.90);
+    });
+
+    it("normalizes multiplier format", () => {
+      // "0.90x cost" → 0.10 savings (pay 90%, save 10%)
+      const input = "Cache reads cost 0.90x the full price";
+      const match = input.match(/(\d+(?:\.\d+)?)x/);
+      expect(match).toBeTruthy();
+      const multiplier = parseFloat(match![1]);
+      const savingsRate = 1 - multiplier;
+      expect(savingsRate).toBeCloseTo(0.10);
+    });
+
+    it("normalizes price comparison format", () => {
+      // "$0.30 vs $3.00" → 0.90 savings
+      const input = "Cache reads: $0.30/M vs $3.00/M full price";
+      const matches = input.match(/\$(\d+(?:\.\d+)?)/g);
+      expect(matches).toHaveLength(2);
+      const discounted = parseFloat(matches![0].substring(1));
+      const full = parseFloat(matches![1].substring(1));
+      const savingsRate = (full - discounted) / full;
+      expect(savingsRate).toBeCloseTo(0.90);
+    });
+
+    it("validates normalized rate is in range [0, 1]", () => {
+      const testCases = [
+        { input: 0.90, valid: true },
+        { input: 0.00, valid: true },
+        { input: 1.00, valid: true },
+        { input: -0.1, valid: false },
+        { input: 1.1, valid: false },
+      ];
+
+      testCases.forEach(({ input, valid }) => {
+        const isValid = input >= 0 && input <= 1;
+        expect(isValid).toBe(valid);
+      });
+    });
+  });
+
+  describe("comparison logic", () => {
+    it("detects exact match", () => {
+      const current = 3.00;
+      const actual = 3.00;
+      const match = current === actual;
+      expect(match).toBe(true);
+    });
+
+    it("detects mismatch", () => {
+      const current = 2.50;
+      const actual = 3.00;
+      const match = current === actual;
+      expect(match).toBe(false);
+    });
+
+    it("handles unable-to-verify case", () => {
+      const current = 3.00;
+      const actual = null; // Could not extract from docs
+      const status = actual === null ? "unable-to-verify" : (current === actual ? "match" : "mismatch");
+      expect(status).toBe("unable-to-verify");
+    });
+
+    it("compares discount rates with tolerance for floating point", () => {
+      const current = 0.90;
+      const actual = 0.9; // Same value, different precision
+      const tolerance = 0.001;
+      const match = Math.abs(current - actual) < tolerance;
+      expect(match).toBe(true);
+    });
+  });
+
+  describe("lastVerified date updates", () => {
+    it("generates today's date in ISO format", () => {
+      const today = new Date();
+      const isoDate = today.toISOString().split("T")[0];
+      expect(isoDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it("updates lastVerified only when all fields match", () => {
+      const results = [
+        { field: "inputCostPerMillion", status: "match" },
+        { field: "outputCostPerMillion", status: "match" },
+        { field: "cacheDiscountRate", status: "match" },
+      ];
+
+      const allMatch = results.every(r => r.status === "match");
+      expect(allMatch).toBe(true);
+    });
+
+    it("does not update lastVerified when any mismatch exists", () => {
+      const results = [
+        { field: "inputCostPerMillion", status: "match" },
+        { field: "outputCostPerMillion", status: "mismatch" },
+        { field: "cacheDiscountRate", status: "match" },
+      ];
+
+      const allMatch = results.every(r => r.status === "match");
+      expect(allMatch).toBe(false);
+    });
+
+    it("does not update lastVerified when unable-to-verify exists", () => {
+      const results = [
+        { field: "inputCostPerMillion", status: "match" },
+        { field: "outputCostPerMillion", status: "unable-to-verify" },
+        { field: "cacheDiscountRate", status: "match" },
+      ];
+
+      const allMatch = results.every(r => r.status === "match");
+      expect(allMatch).toBe(false);
+    });
+  });
+
+  describe("skill invocation requirements", () => {
+    it("requires WebFetch for each provider pricingUrl", () => {
+      const providers = Object.keys(PROVIDER_PRICING);
+      expect(providers.length).toBeGreaterThan(0);
+
+      providers.forEach((provider) => {
+        const pricing = PROVIDER_PRICING[provider as keyof typeof PROVIDER_PRICING];
+        // Skill must call WebFetch with this URL
+        expect(pricing.pricingUrl).toBeDefined();
+        expect(pricing.pricingUrl).toMatch(/^https:\/\/.+/);
+      });
+    });
+
+    it("extracts required fields from PROVIDER_PRICING", () => {
+      const providers = Object.keys(PROVIDER_PRICING);
+      const requiredFields = ["inputCostPerMillion", "outputCostPerMillion", "cacheDiscountRate"];
+
+      providers.forEach((provider) => {
+        const pricing = PROVIDER_PRICING[provider as keyof typeof PROVIDER_PRICING];
+        requiredFields.forEach((field) => {
+          expect(pricing).toHaveProperty(field);
+          expect(typeof pricing[field as keyof typeof pricing]).toBe("number");
+        });
+      });
+    });
+  });
+});

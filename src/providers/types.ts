@@ -1,6 +1,7 @@
 import type { UsageInfo } from "../usage.js";
+import type { ProviderName } from "../pricing.js";
 
-export type ProviderName = "claude" | "gemini" | "codex" | "openrouter";
+export type { ProviderName };
 
 export interface ActivityEvent {
   agent: string;
