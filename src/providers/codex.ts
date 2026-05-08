@@ -5,13 +5,12 @@ import { TaskError } from "../task.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
 const SUPPORTED_MODELS: ModelEntry[] = [
-  { id: "o4-mini", label: "o4-mini (recommended)" },
-  { id: "o3", label: "o3" },
+  { id: "gpt-5.4", label: "gpt-5.4" },
 ];
 
 const SHORT_ALIASES: Record<string, string> = {};
 
-const DEFAULT_MODEL = "o4-mini";
+const DEFAULT_MODEL = "gpt-5.4";
 
 let availabilityCache: { available: boolean; reason?: string } | null = null;
 

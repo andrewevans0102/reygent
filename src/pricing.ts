@@ -32,7 +32,7 @@ export const PROVIDER_PRICING: Record<ProviderName, ProviderPricing> = {
     outputCostPerMillion: 10.00,
     cacheDiscountRate: 0.90,
     supportsCaching: true,
-    defaultModel: "codex",
+    defaultModel: "gpt-5.4",
     pricingUrl: "https://openai.com/api/pricing/",
     lastVerified: "2026-05-08",
   },

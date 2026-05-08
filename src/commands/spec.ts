@@ -1,6 +1,6 @@
-import { createInterface } from "node:readline";
 import chalk from "chalk";
 import { select } from "@inquirer/prompts";
+import cursorAwareInput from "../cursor-aware-input.js";
 import { ExitPromptError } from "@inquirer/core";
 import { isDebug } from "../debug.js";
 import { wrapText } from "../format.js";
@@ -124,26 +124,17 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
         console.log(chalk.yellow("\nPlanner needs clarification:\n"));
 
         const answers: string[] = [];
-        const rl = createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
 
-        try {
-          for (let i = 0; i < result.questions.length; i++) {
-            const question = result.questions[i];
-            const answer = await new Promise<string>((resolve) => {
-              rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
-            });
+        for (let i = 0; i < result.questions.length; i++) {
+          const question = result.questions[i];
+          console.log(`  [${i + 1}/${result.questions.length}] ${question}`);
+          const answer = await cursorAwareInput({ message: ">" });
 
-            if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
-              throw new TaskError("Planner: clarification aborted by user");
-            }
-
-            answers.push(`Q: ${question}\nA: ${answer}`);
+          if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
+            throw new TaskError("Planner: clarification aborted by user");
           }
-        } finally {
-          rl.close();
+
+          answers.push(`Q: ${question}\nA: ${answer}`);
         }
         clarificationAnswers = answers.join("\n\n");
         console.log(chalk.blue("\nRe-running planner with clarifications...\n"));

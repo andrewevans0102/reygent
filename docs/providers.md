@@ -44,13 +44,13 @@ reygent run --spec spec.md --provider gemini --model gemini-2.5-flash
 | Property | Value |
 |---|---|
 | **Type** | CLI-based (`codex` subprocess) |
-| **Default model** | `o4-mini` |
-| **Supported models** | o4-mini, o3 |
+| **Default model** | `gpt-5.4` |
+| **Supported models** | gpt-5.4 |
 | **Requires** | `codex` CLI installed |
 
 ```bash
 reygent run --spec spec.md --provider codex
-reygent run --spec spec.md --provider codex --model o3
+reygent run --spec spec.md --provider codex --model gpt-5.4
 ```
 
 ### OpenRouter

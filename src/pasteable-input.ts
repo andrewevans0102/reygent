@@ -1,4 +1,4 @@
-import { input as inquirerInput } from "@inquirer/prompts";
+import cursorAwareInput from "./cursor-aware-input.js";
 
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
@@ -26,8 +26,8 @@ const PASTE_BRACKET_OFF = "\x1b[?2004l";
  * wrapped past the terminal width.
  */
 export async function pasteableInput(
-  config: Parameters<typeof inquirerInput>[0],
-  context?: Parameters<typeof inquirerInput>[1],
+  config: Parameters<typeof cursorAwareInput>[0],
+  context?: Parameters<typeof cursorAwareInput>[1],
 ): Promise<string> {
   const stdin = process.stdin;
   let inPaste = false;
@@ -82,7 +82,7 @@ export async function pasteableInput(
   stdin.emit = patchedEmit as any;
 
   try {
-    return await inquirerInput(config, context);
+    return await cursorAwareInput(config, context);
   } finally {
     stdin.emit = originalEmit;
     if (stdin.isTTY) {

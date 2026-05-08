@@ -17,7 +17,10 @@ const mockInput = vi.fn();
 vi.mock("@inquirer/prompts", () => ({
   select: (...args: unknown[]) => mockSelect(...args),
   confirm: (...args: unknown[]) => mockConfirm(...args),
-  input: (...args: unknown[]) => mockInput(...args),
+}));
+
+vi.mock("../cursor-aware-input.js", () => ({
+  default: (...args: unknown[]) => mockInput(...args),
 }));
 
 vi.mock("../config.js", () => ({
@@ -70,8 +73,8 @@ vi.mock("../providers/index.js", () => ({
       },
       codex: {
         name: "codex",
-        defaultModel: "o4-mini",
-        supportedModels: [{ id: "o4-mini", label: "o4-mini" }],
+        defaultModel: "gpt-5.4",
+        supportedModels: [{ id: "gpt-5.4", label: "gpt-5.4" }],
         isAvailable: mockCodexAvailable,
       },
       openrouter: {
