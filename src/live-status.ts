@@ -61,14 +61,15 @@ export function buildAnimationFrame(
     const parts = [lastActivity.agent];
     if (lastActivity.tool) parts.push(lastActivity.tool);
     if (lastActivity.detail) parts.push(lastActivity.detail);
-    const activityLine = chalk.cyan(parts.join(" → "));
+    const activityText = chalk.cyan(parts.join(" → "));
 
-    // Truncate activity line if it exceeds terminal width minus padding
+    // Combine on single line with separator to prevent cursor misalignment
     const terminalWidth = process.stdout.columns || 120;
-    const maxActivityWidth = terminalWidth - 2; // 2 chars padding
-    const truncatedActivity = truncateToWidth(activityLine, maxActivityWidth);
+    const separator = chalk.gray(" | ");
+    const combined = `${mainLine}${separator}${activityText}`;
 
-    return `${truncatedActivity}\n${mainLine}`;
+    // Truncate if combined line exceeds terminal width
+    return truncateToWidth(combined, terminalWidth - 2);
   }
 
   return mainLine;

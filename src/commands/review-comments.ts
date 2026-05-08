@@ -760,6 +760,9 @@ export async function reviewCommentsCommand(
     // 9. Approval loop with additional instructions support
     let userInstructions: string | undefined;
 
+    // Ensure clean terminal state before prompts (prevents cursor misalignment after spinners)
+    console.log();
+
     if (!options.autoApprove) {
       let approved = false;
       while (!approved) {
@@ -784,6 +787,7 @@ export async function reviewCommentsCommand(
             plan = await generatePlan(classified, diff, feedback);
             planSpinner.succeed(chalk.green("Plan regenerated"));
             displayPlan(plan);
+            console.log(); // Clean terminal state before next prompt
           }
         } else if (action === "instructions") {
           const extra = await input({
