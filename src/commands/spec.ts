@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { select } from "@inquirer/prompts";
-import cursorAwareInput from "../cursor-aware-input.js";
+import { pasteableInput } from "../pasteable-input.js";
 import { ExitPromptError } from "@inquirer/core";
 import { isDebug } from "../debug.js";
 import { wrapText } from "../format.js";
@@ -128,7 +128,7 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
         for (let i = 0; i < result.questions.length; i++) {
           const question = result.questions[i];
           console.log(`  [${i + 1}/${result.questions.length}] ${question}`);
-          const answer = await cursorAwareInput({ message: ">" });
+          const answer = await pasteableInput({ message: ">" });
 
           if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
             throw new TaskError("Planner: clarification aborted by user");

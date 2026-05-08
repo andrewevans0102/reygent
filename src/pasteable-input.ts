@@ -1,4 +1,5 @@
 import cursorAwareInput from "./cursor-aware-input.js";
+import { pasteState } from "./paste-state.js";
 
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
@@ -6,24 +7,21 @@ const PASTE_BRACKET_ON = "\x1b[?2004h";
 const PASTE_BRACKET_OFF = "\x1b[?2004l";
 
 /**
- * Paste-aware wrapper around @inquirer/prompts `input()`.
+ * Paste-aware wrapper around cursor-aware input.
  *
- * Problem: @inquirer/input treats every \r / \n as Enter (submit).
- * When text is pasted from clipboard it almost always contains a trailing
- * newline, causing the prompt to submit immediately.
+ * Problem: readline treats every \r / \n as Enter (submit), and each
+ * character triggers a separate keypress → re-render cycle.  Pasting
+ * text causes immediate submission (trailing newline) and visible
+ * cursor jumping (N renders for N characters).
  *
- * Solution: enable terminal *bracketed paste mode* so the terminal wraps
- * pasted content in \x1b[200~ … \x1b[201~ markers.  We temporarily patch
- * stdin.emit to intercept 'data' events, stripping the markers and replacing
- * newlines inside pasted content with spaces so readline never sees an
- * Enter keypress during a paste.
- *
- * Previous approach used a PassThrough proxy stream, but this broke word-wrap
- * cursor tracking: @inquirer/prompts' ScreenManager relies on readline having
- * accurate terminal dimensions via the real stdin/stdout chain.  The proxy
- * stream lacked proper TTY properties (columns, rows, resize events), causing
- * readline's getCursorPos() to desync from the actual terminal when text
- * wrapped past the terminal width.
+ * Solution: enable terminal *bracketed paste mode* so the terminal
+ * wraps pasted content in \x1b[200~ … \x1b[201~ markers.  We patch
+ * stdin.emit to intercept 'data' events.  Instead of forwarding pasted
+ * characters to readline (which would process them one-by-one), we
+ * accumulate the text in a shared pasteState object.  After the paste
+ * ends we emit a single synthetic keypress; cursor-aware-input detects
+ * the pending paste, injects the text into rl.line directly, and
+ * triggers exactly one render.  Zero intermediate redraws.
  */
 export async function pasteableInput(
   config: Parameters<typeof cursorAwareInput>[0],
@@ -31,6 +29,7 @@ export async function pasteableInput(
 ): Promise<string> {
   const stdin = process.stdin;
   let inPaste = false;
+  let justPasted = false; // stays true for one chunk after paste ends
 
   // Enable bracketed paste mode
   if (stdin.isTTY) {
@@ -47,6 +46,8 @@ export async function pasteableInput(
       let chunk = args[0];
       let str: string = Buffer.isBuffer(chunk) ? chunk.toString("utf-8") : String(chunk);
       const wasPasting = inPaste;
+      const wasJustPasted = justPasted;
+      justPasted = false;
 
       // Detect and strip paste-start marker
       const startIdx = str.indexOf(PASTE_START);
@@ -60,20 +61,41 @@ export async function pasteableInput(
       if (endIdx !== -1) {
         str = str.slice(0, endIdx) + str.slice(endIdx + PASTE_END.length);
         inPaste = false;
+        justPasted = true;
       }
 
-      // Strip only trailing newline inside pasted content to prevent auto-submit
-      // Preserve internal newlines for multi-line paste formatting
+      // --- Paste content: accumulate, don't forward to readline ---
       if (wasPasting || startIdx !== -1) {
-        str = str.replace(/(\r?\n|\r)$/, "");
+        str = str.replace(/\r?\n|\r/g, " ");
+        pasteState.text += str;
+
+        if (!inPaste) {
+          // Paste complete — trim trailing whitespace from accumulated
+          // text (clipboard often appends a newline → trailing space).
+          pasteState.text = pasteState.text.trimEnd();
+          pasteState.pending = true;
+
+          // Emit synthetic keypress so cursor-aware-input's useKeypress
+          // fires once, picks up the pending text, and renders.
+          // Empty string → readline's _ttyWrite is a no-op.
+          // checkCursorPos sees no change (rl.line hasn't changed yet).
+          originalEmit.apply(this, ["keypress", "", { name: "" }]);
+        }
+        return false; // swallow data event — don't send to readline
       }
 
-      // Drop empty chunks after marker stripping
+      // --- Straggling newline after paste-end (arrives in next chunk) ---
+      if (wasJustPasted) {
+        if (/^(\r?\n|\r)+$/.test(str)) {
+          return false; // swallow pure newline stragglers
+        }
+        // Non-newline content right after paste — fall through to normal
+      }
+
+      // --- Regular keystroke: forward unchanged ---
       if (str.length === 0) {
         return false;
       }
-
-      // Forward modified data as a Buffer (what readline expects)
       args[0] = Buffer.from(str, "utf-8");
     }
     return originalEmit.apply(this, [event, ...args]);
@@ -89,5 +111,8 @@ export async function pasteableInput(
       process.stdout.write(PASTE_BRACKET_OFF);
     }
     inPaste = false;
+    justPasted = false;
+    pasteState.pending = false;
+    pasteState.text = "";
   }
 }

@@ -2,7 +2,7 @@ import { createInterface } from "node:readline";
 import chalk from "chalk";
 import ora from "ora";
 import { select } from "@inquirer/prompts";
-import cursorAwareInput from "../cursor-aware-input.js";
+import { pasteableInput } from "../pasteable-input.js";
 import { isDebug } from "../debug.js";
 import { wrapText } from "../format.js";
 import { loadEnvFile } from "../env.js";
@@ -157,7 +157,7 @@ async function promptLinearSpec(): Promise<string> {
     console.log(chalk.red.bold("Error:"), "LINEAR_API_KEY not set. Add it to your .env file.");
     process.exit(1);
   }
-  const value = await cursorAwareInput({
+  const value = await pasteableInput({
     message: "Linear issue URL or ID (e.g. https://linear.app/team/ENG-123 or ENG-123):",
     validate: (v) => {
       const trimmed = v.trim();
@@ -180,7 +180,7 @@ async function promptJiraSpec(): Promise<string> {
     console.log(chalk.red.bold("Error:"), `Missing env vars: ${missing.join(", ")}. Add them to your .env file.`);
     process.exit(1);
   }
-  const value = await cursorAwareInput({
+  const value = await pasteableInput({
     message: "Jira issue key (e.g. PROJ-123):",
     validate: (v) => {
       const trimmed = v.trim();
@@ -193,7 +193,7 @@ async function promptJiraSpec(): Promise<string> {
 }
 
 async function promptMarkdownSpec(): Promise<string> {
-  const value = await cursorAwareInput({
+  const value = await pasteableInput({
     message: "Path to markdown spec file:",
     validate: (v) => (v.trim() ? true : "Required"),
   });
@@ -369,7 +369,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
               for (let i = 0; i < result.questions.length; i++) {
                 const question = result.questions[i];
                 console.log(`  [${i + 1}/${result.questions.length}] ${question}`);
-                const answer = await cursorAwareInput({ message: ">" });
+                const answer = await pasteableInput({ message: ">" });
 
                 if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
                   throw new TaskError("Planner: clarification aborted by user");

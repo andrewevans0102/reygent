@@ -9,6 +9,10 @@
  * Fix: track `rl.cursor` in a separate `useState`. When cursor position
  * changes, `useState` sees a new value → triggers `handleChange()` →
  * full `render()` → correct row+column positioning.
+ *
+ * Also handles paste injection: when pasteState.pending is true,
+ * the accumulated text is inserted directly into rl.line (bypassing
+ * readline's per-character processing) and a single render fires.
  */
 import {
   createPrompt,
@@ -23,6 +27,7 @@ import {
   type Theme,
 } from "@inquirer/core";
 import type { PartialDeep } from "@inquirer/type";
+import { pasteState } from "./paste-state.js";
 
 type InputTheme = {
   validationFailureMode: "keep" | "clear";
@@ -72,6 +77,25 @@ export default createPrompt<string, InputConfig>((config, done) => {
 
   useKeypress(async (key, rl) => {
     if (status !== "idle") {
+      return;
+    }
+
+    // --- Paste injection: insert accumulated text into rl.line directly ---
+    if (pasteState.pending) {
+      const text = pasteState.text;
+      pasteState.pending = false;
+      pasteState.text = "";
+
+      // Insert at current cursor position
+      const before = rl.line.slice(0, rl.cursor);
+      const after = rl.line.slice(rl.cursor);
+      rl.line = before + text + after;
+      rl.cursor = before.length + text.length;
+
+      setDefaultValue("");
+      setValue(rl.line);
+      setError(undefined);
+      setCursorPos(rl.cursor);
       return;
     }
 

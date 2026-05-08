@@ -3,7 +3,7 @@ import { join, dirname } from "node:path";
 import { randomBytes } from "node:crypto";
 import chalk from "chalk";
 import { select, confirm } from "@inquirer/prompts";
-import cursorAwareInput from "../cursor-aware-input.js";
+import { pasteableInput } from "../pasteable-input.js";
 import { findLocalConfigDir, resolveGlobalConfigPath } from "../config.js";
 import type { ReygentConfig } from "../config.js";
 import type { AgentConfig } from "../agents.js";
@@ -215,7 +215,7 @@ async function runConfig(): Promise<void> {
 
   if (provider.supportedModels.length === 0) {
     // OpenRouter or similar — free-text input
-    selectedModel = await cursorAwareInput({
+    selectedModel = await pasteableInput({
       message: "Model ID:",
       default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
     });
@@ -298,7 +298,7 @@ async function runConfig(): Promise<void> {
       let agentModelChoice: string;
 
       if (agentProviderAdapter.supportedModels.length === 0) {
-        agentModelChoice = await cursorAwareInput({
+        agentModelChoice = await pasteableInput({
           message: `Model ID for ${agent.name}:`,
           default: agent.model ?? agentProviderAdapter.defaultModel,
         });
