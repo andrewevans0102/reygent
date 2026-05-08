@@ -190,9 +190,9 @@ describe("calculateCacheSavings", () => {
   });
 
   it("calculates savings for codex provider", () => {
-    // 1M cached tokens * $2.50/M * 0.75 discount = $1.875
+    // 1M cached tokens * $1.25/M * 0.90 discount = $1.125
     const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "codex" });
-    expect(savings).toBeCloseTo(1.875);
+    expect(savings).toBeCloseTo(1.125);
   });
 
   it("calculates savings for openrouter provider", () => {
@@ -202,9 +202,9 @@ describe("calculateCacheSavings", () => {
   });
 
   it("calculates savings for gemini provider", () => {
-    // 1M cached tokens * $1.25/M * 0.50 discount = $0.625
+    // 1M cached tokens * $1.25/M * 0.90 discount = $1.125
     const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "gemini" });
-    expect(savings).toBeCloseTo(0.625);
+    expect(savings).toBeCloseTo(1.125);
   });
 
   it("uses claude defaults when provider is undefined", () => {

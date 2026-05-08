@@ -189,6 +189,7 @@ Reygent searches upward from the current directory to find `.reygent/`, so you c
 | [Workflows](./docs/workflows.md) | Visual diagrams of pipeline and retry logic |
 | [Architecture](./docs/architecture.md) | Technical deep-dive into internals |
 | [Harness Pattern](./docs/harness-pattern.md) | How reygent implements Anthropic's harness pattern |
+| [Verify Pricing](./docs/verify-pricing.md) | Claude Code skill for verifying provider token pricing |
 
 ## Development
 
