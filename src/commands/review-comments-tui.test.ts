@@ -91,11 +91,14 @@ vi.mock("../implement.js", () => ({
 vi.mock("node:child_process", () => ({
   execFile: (cmd: string, args: string[], opts: unknown, cb: Function) => {
     const result = mockExecFile(cmd, args);
-    if (result instanceof Error) {
-      cb(result, "", "");
-    } else {
-      cb(null, result, "");
-    }
+    // Yield event loop to simulate async behavior and allow spinner to start
+    setImmediate(() => {
+      if (result instanceof Error) {
+        cb(result, "", "");
+      } else {
+        cb(null, result, "");
+      }
+    });
   },
 }));
 
@@ -425,8 +428,9 @@ describe("review-comments TUI cursor alignment", () => {
 
       await reviewCommentsCommand({ autoApprove: false });
 
-      // Should complete without errors
+      // Should complete without errors and no spinners remain active
       expect(mockInput).toHaveBeenCalledTimes(1);
+      expect(activeSpinners.filter((s) => !s.stopped)).toHaveLength(0);
     });
 
     it("handles SIGINT during prompt without leaving spinners active", async () => {
@@ -438,15 +442,15 @@ describe("review-comments TUI cursor alignment", () => {
       try {
         await reviewCommentsCommand({ autoApprove: false });
       } catch (err) {
+        // No spinners should remain active after SIGINT
+        expect(activeSpinners).toHaveLength(0);
+
         if (err instanceof Error && err.message.includes("process.exit")) {
           // Expected exit
         } else {
           throw err;
         }
       }
-
-      // No spinners should remain active after SIGINT
-      expect(activeSpinners).toHaveLength(0);
     });
 
     it("handles long feedback strings without cursor position corruption", async () => {

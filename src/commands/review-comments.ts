@@ -763,9 +763,9 @@ export async function reviewCommentsCommand(
     let userInstructions: string | undefined;
 
     if (!options.autoApprove) {
+      resetTerminalForInput();
       let approved = false;
       while (!approved) {
-        resetTerminalForInput();
         const action = await select({
           message: "How would you like to proceed?",
           choices: [

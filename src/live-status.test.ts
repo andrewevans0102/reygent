@@ -53,7 +53,7 @@ describe("buildAnimationFrame", () => {
       tool: "Read",
       detail: "src/foo.ts",
     });
-    const lines = frame.split("\n");
+    const lines = frame.trim().split("\n");
     expect(lines).toHaveLength(1);
     // Single line contains: spinner track + label + elapsed + separator + activity
     expect(lines[0]).toContain("🐾");

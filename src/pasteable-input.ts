@@ -1,4 +1,3 @@
-import { PassThrough } from "node:stream";
 import { input as inquirerInput } from "@inquirer/prompts";
 
 const PASTE_START = "\x1b[200~";
@@ -14,77 +13,81 @@ const PASTE_BRACKET_OFF = "\x1b[?2004l";
  * newline, causing the prompt to submit immediately.
  *
  * Solution: enable terminal *bracketed paste mode* so the terminal wraps
- * pasted content in \x1b[200~ … \x1b[201~ markers.  A proxy stream sits
- * between real stdin and readline, stripping the markers and replacing
+ * pasted content in \x1b[200~ … \x1b[201~ markers.  We temporarily patch
+ * stdin.emit to intercept 'data' events, stripping the markers and replacing
  * newlines inside pasted content with spaces so readline never sees an
  * Enter keypress during a paste.
+ *
+ * Previous approach used a PassThrough proxy stream, but this broke word-wrap
+ * cursor tracking: @inquirer/prompts' ScreenManager relies on readline having
+ * accurate terminal dimensions via the real stdin/stdout chain.  The proxy
+ * stream lacked proper TTY properties (columns, rows, resize events), causing
+ * readline's getCursorPos() to desync from the actual terminal when text
+ * wrapped past the terminal width.
  */
 export async function pasteableInput(
   config: Parameters<typeof inquirerInput>[0],
   context?: Parameters<typeof inquirerInput>[1],
 ): Promise<string> {
   const stdin = process.stdin;
-
-  // Proxy stream with TTY surface so readline behaves normally
-  const proxy = new PassThrough();
-  Object.defineProperty(proxy, "isTTY", {
-    value: stdin.isTTY,
-    configurable: true,
-  });
-  Object.defineProperty(proxy, "setRawMode", {
-    value: (mode: boolean) => {
-      if (stdin.isTTY) stdin.setRawMode(mode);
-      return proxy;
-    },
-    configurable: true,
-  });
-
   let inPaste = false;
 
-  const onData = (chunk: Buffer) => {
-    let str = chunk.toString("utf-8");
-    const wasPasting = inPaste;
-
-    // Detect and strip paste-start marker
-    const startIdx = str.indexOf(PASTE_START);
-    if (startIdx !== -1) {
-      inPaste = true;
-      str = str.slice(0, startIdx) + str.slice(startIdx + PASTE_START.length);
-    }
-
-    // Detect and strip paste-end marker
-    const endIdx = str.indexOf(PASTE_END);
-    if (endIdx !== -1) {
-      str = str.slice(0, endIdx) + str.slice(endIdx + PASTE_END.length);
-      inPaste = false;
-    }
-
-    // Replace newlines with spaces inside pasted content
-    if (wasPasting || startIdx !== -1) {
-      str = str.replace(/\r?\n|\r/g, " ");
-    }
-
-    if (str.length > 0) {
-      proxy.write(str);
-    }
-  };
-
-  // Enable bracketed paste and wire stdin → proxy
+  // Enable bracketed paste mode
   if (stdin.isTTY) {
     process.stdout.write(PASTE_BRACKET_ON);
   }
-  stdin.on("data", onData);
-  stdin.resume();
+
+  // Temporarily patch stdin.emit to intercept 'data' events for paste
+  // handling while preserving all TTY properties for readline/inquirer.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const originalEmit = stdin.emit as (...args: any[]) => boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function patchedEmit(this: typeof stdin, event: string | symbol, ...args: any[]): boolean {
+    if (event === "data") {
+      let chunk = args[0];
+      let str: string = Buffer.isBuffer(chunk) ? chunk.toString("utf-8") : String(chunk);
+      const wasPasting = inPaste;
+
+      // Detect and strip paste-start marker
+      const startIdx = str.indexOf(PASTE_START);
+      if (startIdx !== -1) {
+        inPaste = true;
+        str = str.slice(0, startIdx) + str.slice(startIdx + PASTE_START.length);
+      }
+
+      // Detect and strip paste-end marker
+      const endIdx = str.indexOf(PASTE_END);
+      if (endIdx !== -1) {
+        str = str.slice(0, endIdx) + str.slice(endIdx + PASTE_END.length);
+        inPaste = false;
+      }
+
+      // Strip only trailing newline inside pasted content to prevent auto-submit
+      // Preserve internal newlines for multi-line paste formatting
+      if (wasPasting || startIdx !== -1) {
+        str = str.replace(/(\r?\n|\r)$/, "");
+      }
+
+      // Drop empty chunks after marker stripping
+      if (str.length === 0) {
+        return false;
+      }
+
+      // Forward modified data as a Buffer (what readline expects)
+      args[0] = Buffer.from(str, "utf-8");
+    }
+    return originalEmit.apply(this, [event, ...args]);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  stdin.emit = patchedEmit as any;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return await inquirerInput(config, { ...context, input: proxy as any });
+    return await inquirerInput(config, context);
   } finally {
-    stdin.removeListener("data", onData);
+    stdin.emit = originalEmit;
     if (stdin.isTTY) {
       process.stdout.write(PASTE_BRACKET_OFF);
     }
     inPaste = false;
-    proxy.end();
   }
 }

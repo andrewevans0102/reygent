@@ -61,7 +61,7 @@ export function buildAnimationFrame(
   if (lastActivity) {
     const parts = [lastActivity.agent];
     if (lastActivity.tool) parts.push(lastActivity.tool);
-    if (lastActivity.detail) parts.push(lastActivity.detail);
+    if (lastActivity.detail) parts.push(lastActivity.detail.replace(/[\r\n]+/g, " "));
     const activityText = chalk.cyan(parts.join(" → "));
 
     // Combine on single line with separator to prevent cursor misalignment
@@ -90,7 +90,7 @@ export function createLiveStatus(label: string): LiveStatus {
   const spinner = ora({
     spinner: { frames: [""], interval: 200 },
     text: "",
-    discardStdin: true,
+    discardStdin: false,
   }).start();
 
   let frameIndex = 0;

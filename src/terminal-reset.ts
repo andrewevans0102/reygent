@@ -21,8 +21,9 @@ export function resetTerminalForInput(): void {
   process.stdout.write('\x1b[?25h');
 
   // Ensure stdin is not stuck in raw mode — readline/inquirer manage their own
-  // raw mode and will break if stdin is already raw when they start
-  if (process.stdin.isTTY && process.stdin.isRaw) {
+  // raw mode and will break if stdin is already raw when they start.
+  // Only disable raw mode if stdin is paused (not actively managed by readline).
+  if (process.stdin.isTTY && process.stdin.isRaw && process.stdin.isPaused()) {
     process.stdin.setRawMode(false);
   }
 
