@@ -53,7 +53,12 @@ export const geminiAdapter: ProviderAdapter = {
 
       const name = options.agentName;
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
-      const child = spawn("gemini", args, { stdio: [stdinMode, "pipe", "pipe"] });
+      // Gemini CLI requires workspace trust for non-interactive spawns;
+      // without this it exits 55 when stdin is not a TTY.
+      const child = spawn("gemini", args, {
+        stdio: [stdinMode, "pipe", "pipe"],
+        env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
+      });
       registerChild(child);
 
       let stdout = "";
@@ -135,7 +140,7 @@ export const geminiAdapter: ProviderAdapter = {
       const child = spawn(
         "gemini",
         ["--model", model, "-i", `Follow these instructions for this session:\n\n${systemPrompt}`],
-        { stdio: "inherit" },
+        { stdio: "inherit", env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" } },
       );
       registerChild(child);
 

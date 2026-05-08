@@ -37,6 +37,8 @@ reygent run --spec spec.md --provider gemini
 reygent run --spec spec.md --provider gemini --model gemini-2.5-flash
 ```
 
+**Workspace trust:** Gemini CLI requires the working directory to be "trusted" before it will run. Reygent sets the `GEMINI_CLI_TRUST_WORKSPACE=true` environment variable automatically when spawning Gemini subprocesses, so no manual trust configuration is needed.
+
 ### Codex
 
 | Property | Value |
