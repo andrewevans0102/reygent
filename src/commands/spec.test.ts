@@ -3,8 +3,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // ── Mocks ────────────────────────────────────────────────────────────
 
 const mockSelect = vi.fn();
+const mockCursorAwareInput = vi.fn();
 vi.mock("@inquirer/prompts", () => ({
   select: (...args: unknown[]) => mockSelect(...args),
+}));
+
+vi.mock("../cursor-aware-input.js", () => ({
+  default: (...args: unknown[]) => mockCursorAwareInput(...args),
 }));
 
 const inquirerCoreMock = vi.hoisted(() => {

@@ -30,7 +30,7 @@ program
   .description("Reygent CLI tool")
   .version(pkg.version)
   .option("--debug", "Show full stack traces on errors (or set REYGENT_DEBUG=1)")
-  .option("--model <id>", "Model ID (e.g. claude-sonnet-4-5, gemini-2.5-pro, o4-mini)")
+  .option("--model <id>", "Model ID (e.g. claude-sonnet-4-5, gemini-2.5-pro, gpt-5.4)")
   .option("--provider <name>", `AI provider (${PROVIDER_NAMES.join(", ")})`)
   .addHelpText("after", `
 ${chalk.yellow("Disclaimer:")} This software is provided "as is" with no warranty. AI-generated output should be reviewed by a human. See LICENSE for full terms.`);

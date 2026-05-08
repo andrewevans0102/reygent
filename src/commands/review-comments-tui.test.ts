@@ -77,7 +77,10 @@ vi.mock("ora", () => ({
 
 vi.mock("@inquirer/prompts", () => ({
   select: mockSelect,
-  input: mockInput,
+}));
+
+vi.mock("../cursor-aware-input.js", () => ({
+  default: (...args: unknown[]) => mockInput(...args),
 }));
 
 vi.mock("../config.js", () => ({
