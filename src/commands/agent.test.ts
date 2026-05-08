@@ -106,35 +106,22 @@ describe("agent command with --spec flag", () => {
     });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
 
-    await expect(
-      agentCommand("dev", { spec: specPath })
-    ).rejects.toThrow("exit");
+    await agentCommand("dev", { spec: specPath });
 
+    expect(exitSpy).toHaveBeenCalledWith(0);
     expect(mockLoadSpec).toHaveBeenCalledWith(specPath);
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("You are a dev agent."),
-      expect.any(String)
-    );
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("## Spec"),
-      expect.any(String)
-    );
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("**Title:** Test Feature"),
-      expect.any(String)
-    );
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("# Test Feature"),
-      expect.any(String)
-    );
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("Implement user authentication."),
-      expect.any(String)
-    );
+    expect(mockSpawnInteractive).toHaveBeenCalledTimes(1);
+
+    const systemPrompt = mockSpawnInteractive.mock.calls[0][0];
+    expect(systemPrompt).toContain("You are a dev agent.");
+    expect(systemPrompt).toContain("## Spec");
+    expect(systemPrompt).toContain("**Title:** Test Feature");
+    expect(systemPrompt).toContain("# Test Feature");
+    expect(systemPrompt).toContain("Implement user authentication.");
 
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
@@ -147,23 +134,19 @@ describe("agent command with --spec flag", () => {
     });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
 
-    await expect(
-      agentCommand("dev", {})
-    ).rejects.toThrow("exit");
+    await agentCommand("dev", {});
 
+    expect(exitSpy).toHaveBeenCalledWith(0);
     expect(mockLoadSpec).not.toHaveBeenCalled();
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      "You are a dev agent.",
-      expect.any(String)
-    );
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.not.stringContaining("## Spec"),
-      expect.any(String)
-    );
+    expect(mockSpawnInteractive).toHaveBeenCalledTimes(1);
+
+    const systemPrompt = mockSpawnInteractive.mock.calls[0][0];
+    expect(systemPrompt).toBe("You are a dev agent.");
+    expect(systemPrompt).not.toMatch(/## Spec/);
 
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
@@ -173,17 +156,14 @@ describe("agent command with --spec flag", () => {
     mockLoadSpec.mockRejectedValue(new SpecError("File not found: /nonexistent.md"));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
 
-    await expect(
-      agentCommand("dev", { spec: "/nonexistent.md" })
-    ).rejects.toThrow("exit");
+    await agentCommand("dev", { spec: "/nonexistent.md" });
 
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
-    expect(output).toContain("Error:");
-    expect(output).toContain("File not found");
+    expect(output).toMatch(/Error:.*File not found/);
 
     expect(exitSpy).toHaveBeenCalledWith(1);
 
@@ -195,17 +175,14 @@ describe("agent command with --spec flag", () => {
     mockLoadSpec.mockRejectedValue(new SpecError("Spec file is empty: /empty.md"));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
 
-    await expect(
-      agentCommand("dev", { spec: "/empty.md" })
-    ).rejects.toThrow("exit");
+    await agentCommand("dev", { spec: "/empty.md" });
 
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
-    expect(output).toContain("Error:");
-    expect(output).toContain("Spec file is empty");
+    expect(output).toMatch(/Error:.*Spec file is empty/);
 
     expect(exitSpy).toHaveBeenCalledWith(1);
 
@@ -228,23 +205,19 @@ describe("agent command with --spec flag", () => {
     });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
 
-    await expect(
-      agentCommand("dev", { spec: "PROJ-123" })
-    ).rejects.toThrow("exit");
+    await agentCommand("dev", { spec: "PROJ-123" });
 
+    expect(exitSpy).toHaveBeenCalledWith(0);
     expect(mockLoadSpec).toHaveBeenCalledWith("PROJ-123");
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("**Title:** Add login flow"),
-      expect.any(String)
-    );
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("# Add login flow"),
-      expect.any(String)
-    );
+    expect(mockSpawnInteractive).toHaveBeenCalledTimes(1);
+
+    const systemPrompt = mockSpawnInteractive.mock.calls[0][0];
+    expect(systemPrompt).toContain("**Title:** Add login flow");
+    expect(systemPrompt).toContain("# Add login flow");
 
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
@@ -265,23 +238,19 @@ describe("agent command with --spec flag", () => {
     });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
 
-    await expect(
-      agentCommand("dev", { spec: "https://linear.app/team/DT-456" })
-    ).rejects.toThrow("exit");
+    await agentCommand("dev", { spec: "https://linear.app/team/DT-456" });
 
+    expect(exitSpy).toHaveBeenCalledWith(0);
     expect(mockLoadSpec).toHaveBeenCalledWith("https://linear.app/team/DT-456");
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("**Title:** Fix auth bug"),
-      expect.any(String)
-    );
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("# Fix auth bug"),
-      expect.any(String)
-    );
+    expect(mockSpawnInteractive).toHaveBeenCalledTimes(1);
+
+    const systemPrompt = mockSpawnInteractive.mock.calls[0][0];
+    expect(systemPrompt).toContain("**Title:** Fix auth bug");
+    expect(systemPrompt).toContain("# Fix auth bug");
 
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
@@ -310,24 +279,88 @@ describe("agent command with --spec flag", () => {
     });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("exit");
-    });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
 
-    await expect(
-      agentCommand(undefined, { spec: specPath })
-    ).rejects.toThrow("exit");
+    await agentCommand(undefined, { spec: specPath });
 
+    expect(exitSpy).toHaveBeenCalledWith(0);
     expect(mockSelect).toHaveBeenCalled();
     expect(mockLoadSpec).toHaveBeenCalledWith(specPath);
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("You are QA."),
-      expect.any(String)
-    );
-    expect(mockSpawnInteractive).toHaveBeenCalledWith(
-      expect.stringContaining("## Spec"),
-      expect.any(String)
-    );
+    expect(mockSpawnInteractive).toHaveBeenCalledTimes(1);
+
+    const systemPrompt = mockSpawnInteractive.mock.calls[0][0];
+    expect(systemPrompt).toContain("You are QA.");
+    expect(systemPrompt).toContain("## Spec");
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("handles invalid agent name with --spec provided", async () => {
+    const specContent = "# Test Spec\n\nContent here.";
+    writeFileSync(specPath, specContent);
+
+    mockLoadSpec.mockResolvedValue({
+      source: "markdown",
+      title: "Test Spec",
+      content: specContent,
+    });
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand("nonexistent", { spec: specPath });
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toMatch(/Unknown agent.*nonexistent/i);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("handles getAgents returning empty array", async () => {
+    mockGetAgents.mockReturnValue([]);
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand("dev", {});
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toMatch(/Unknown agent.*dev/i);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("handles getAgents missing dev agent", async () => {
+    mockGetAgents.mockReturnValue([
+      {
+        name: "qa",
+        description: "QA agent",
+        systemPrompt: "You are QA.",
+        provider: "anthropic",
+      },
+    ]);
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand("dev", {});
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toMatch(/Unknown agent.*dev/i);
+    expect(exitSpy).toHaveBeenCalledWith(1);
 
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
