@@ -480,7 +480,7 @@ async function generatePlan(
     ? buildPlanPromptWithFeedback(agent.systemPrompt, comments, diff, feedback)
     : buildPlanPrompt(agent.systemPrompt, comments, diff);
 
-  const result = await spawnAgent("planner", prompt, { quiet: true });
+  const result = await spawnAgent("planner", prompt, { quiet: true, provider: agent.provider, model: agent.model });
 
   if (result.exitCode !== 0) {
     throw new TaskError(`review-comments: planner agent exited with code ${result.exitCode}`);
@@ -622,7 +622,7 @@ async function executeWithDevAgent(
 
   const prompt = buildDevPrompt(devAgent.systemPrompt, comments, plan, userInstructions);
 
-  const result = await spawnAgent("dev", prompt, { autoApprove, quiet: true, onActivity });
+  const result = await spawnAgent("dev", prompt, { autoApprove, quiet: true, onActivity, provider: devAgent.provider, model: devAgent.model });
 
   if (result.exitCode !== 0) {
     throw new TaskError(`review-comments: dev agent exited with code ${result.exitCode}`);

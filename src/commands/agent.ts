@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { getAgents } from "../config.js";
 import type { AgentConfig } from "../agents.js";
 import { isDebug } from "../debug.js";
-import { resolveModel, resolveProvider } from "../model.js";
+import { resolveModel, resolveProvider, validateModel } from "../model.js";
 import { getProvider } from "../providers/index.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { TaskError } from "../task.js";
@@ -58,7 +58,9 @@ ${spec.content}`;
 
     const providerName = resolveProvider(agent.provider);
     const provider = getProvider(providerName);
-    const modelId = await resolveModel(providerName);
+    const modelId = agent.model
+      ? validateModel(agent.model, providerName)
+      : await resolveModel(providerName);
 
     console.log(
       chalk.bold.cyan(`\nStarting session with ${agent.name} agent`) +
