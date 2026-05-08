@@ -76,6 +76,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
 
     if (!autoApprove) {
+      resetTerminalForInput();
       const rl = createInterface({ input: process.stdin, output: process.stdout });
       const answer = await new Promise<string>((resolve) => {
         rl.question(
@@ -608,6 +609,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         if (autoApprove) {
           console.log(chalk.yellow("Auto-approved — bypassing security gate..."));
         } else {
+          resetTerminalForInput();
           const rl = createInterface({
             input: process.stdin,
             output: process.stdout,
@@ -657,6 +659,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             branchType = autoDetected;
           } else {
             // No auto-detection - prompt user
+            resetTerminalForInput();
             branchType = await select({
               message: "Select branch type:",
               choices: VALID_BRANCH_TYPES.map(t => ({ name: t, value: t })),

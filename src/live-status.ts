@@ -2,6 +2,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { killAllChildren } from "./child-registry.js";
 import type { ActivityEvent } from "./providers/types.js";
+import { resetTerminalForInput } from "./terminal-reset.js";
 
 export type { ActivityEvent };
 
@@ -177,22 +178,27 @@ export function createLiveStatus(label: string): LiveStatus {
     succeed(msg: string) {
       cleanup();
       spinner.succeed(msg);
+      resetTerminalForInput();
     },
     fail(msg: string) {
       cleanup();
       spinner.fail(msg);
+      resetTerminalForInput();
     },
     warn(msg: string) {
       cleanup();
       spinner.warn(msg);
+      resetTerminalForInput();
     },
     info(msg: string) {
       cleanup();
       spinner.info(msg);
+      resetTerminalForInput();
     },
     stop() {
       cleanup();
       spinner.stop();
+      resetTerminalForInput();
     },
     start() {
       spinner.start();
