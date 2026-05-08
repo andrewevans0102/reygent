@@ -6,6 +6,7 @@ import { isDebug } from "../debug.js";
 import { wrapText } from "../format.js";
 import { createLiveStatus } from "../live-status.js";
 import { loadSpec, SpecError, ISSUE_KEY_PATTERN } from "../spec.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 import { runPlanner } from "../planner.js";
 import { TaskError } from "../task.js";
 import type { PlannerOutput } from "../task.js";
@@ -119,6 +120,7 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
 
       if ("needsClarification" in result && result.needsClarification) {
         status.stop();
+        resetTerminalForInput();
         console.log(chalk.yellow("\nPlanner needs clarification:\n"));
 
         const answers: string[] = [];
@@ -127,21 +129,22 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
           output: process.stdout,
         });
 
-        for (let i = 0; i < result.questions.length; i++) {
-          const question = result.questions[i];
-          const answer = await new Promise<string>((resolve) => {
-            rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
-          });
+        try {
+          for (let i = 0; i < result.questions.length; i++) {
+            const question = result.questions[i];
+            const answer = await new Promise<string>((resolve) => {
+              rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
+            });
 
-          if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
-            rl.close();
-            throw new TaskError("Planner: clarification aborted by user");
+            if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
+              throw new TaskError("Planner: clarification aborted by user");
+            }
+
+            answers.push(`Q: ${question}\nA: ${answer}`);
           }
-
-          answers.push(`Q: ${question}\nA: ${answer}`);
+        } finally {
+          rl.close();
         }
-
-        rl.close();
         clarificationAnswers = answers.join("\n\n");
         console.log(chalk.blue("\nRe-running planner with clarifications...\n"));
         status.start();

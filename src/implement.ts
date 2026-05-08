@@ -21,6 +21,8 @@ const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
 export interface AgentSpawnOptions {
   autoApprove?: boolean;
   quiet?: boolean;
+  provider?: string;
+  model?: string;
   onActivity?: (event: ActivityEvent) => void;
 }
 
@@ -231,7 +233,7 @@ export async function runImplement(
 
     if (runDev) {
       promises.push(
-        spawnAgent("dev", devPrompt, options).then(
+        spawnAgent("dev", devPrompt, { ...options, provider: devAgent.provider, model: devAgent.model }).then(
           (v) => ({ status: "fulfilled" as const, value: v }),
           (e) => ({ status: "rejected" as const, reason: e }),
         ),
@@ -239,7 +241,7 @@ export async function runImplement(
     }
     if (runQE) {
       promises.push(
-        spawnAgent("qe", qePrompt, options).then(
+        spawnAgent("qe", qePrompt, { ...options, provider: qeAgent.provider, model: qeAgent.model }).then(
           (v) => ({ status: "fulfilled" as const, value: v }),
           (e) => ({ status: "rejected" as const, reason: e }),
         ),
@@ -281,7 +283,7 @@ export async function runImplement(
     if (runDev) {
       console.log(chalk.blue("Running dev agent (approve edits as prompted)..."));
       try {
-        const devResult = await spawnAgent("dev", devPrompt, options);
+        const devResult = await spawnAgent("dev", devPrompt, { ...options, provider: devAgent.provider, model: devAgent.model });
         if (devResult.exitCode === 0) {
           dev = extractDevOutput(devResult.stdout);
         }
@@ -297,7 +299,7 @@ export async function runImplement(
     if (runQE) {
       console.log(chalk.blue("Running qe agent (approve edits as prompted)..."));
       try {
-        const qeResult = await spawnAgent("qe", qePrompt, options);
+        const qeResult = await spawnAgent("qe", qePrompt, { ...options, provider: qeAgent.provider, model: qeAgent.model });
         if (qeResult.exitCode === 0) {
           qe = extractQEOutput(qeResult.stdout);
         }

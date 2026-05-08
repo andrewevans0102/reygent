@@ -27,7 +27,7 @@ describe("buildAnimationFrame", () => {
     expect(frame).toContain("5s");
   });
 
-  it("includes activity when provided", () => {
+  it("includes activity when provided on same line", () => {
     const frame = buildAnimationFrame(2, "running...", "1m 03s", {
       agent: "dev",
       tool: "Read",
@@ -36,6 +36,9 @@ describe("buildAnimationFrame", () => {
     expect(frame).toContain("dev");
     expect(frame).toContain("Read");
     expect(frame).toContain("src/foo.ts");
+    expect(frame).toContain("running...");
+    // Should be single line with separator
+    expect(frame.split("\n")).toHaveLength(1);
   });
 
   it("omits activity section when not provided", () => {
@@ -44,37 +47,35 @@ describe("buildAnimationFrame", () => {
     expect(frame).not.toContain("│");
   });
 
-  it("places activity trail on first line, spinner on second (prevents wrap)", () => {
+  it("places activity and spinner on single line with separator", () => {
     const frame = buildAnimationFrame(2, "running", "30s", {
       agent: "dev",
       tool: "Read",
       detail: "src/foo.ts",
     });
-    const lines = frame.split("\n");
-    expect(lines).toHaveLength(2);
-    // First line: activity trail
+    const lines = frame.trim().split("\n");
+    expect(lines).toHaveLength(1);
+    // Single line contains: spinner track + label + elapsed + separator + activity
+    expect(lines[0]).toContain("🐾");
+    expect(lines[0]).toContain("running");
+    expect(lines[0]).toContain("30s");
     expect(lines[0]).toContain("dev");
     expect(lines[0]).toContain("Read");
     expect(lines[0]).toContain("src/foo.ts");
-    // Second line: spinner track + label + elapsed
-    expect(lines[1]).toContain("🐾");
-    expect(lines[1]).toContain("running");
-    expect(lines[1]).toContain("30s");
   });
 
-  it("handles long activity trail gracefully (detail already capped at 80 chars)", () => {
+  it("handles long activity trail gracefully by truncating combined line", () => {
     const frame = buildAnimationFrame(1, "processing", "1m 15s", {
       agent: "planner",
       tool: "Bash",
-      detail: "x".repeat(200), // Will be truncated in onActivity, but test buildAnimationFrame
+      detail: "x".repeat(200), // Will be truncated to fit terminal width
     });
     const lines = frame.split("\n");
-    expect(lines).toHaveLength(2);
-    // Activity line should not exceed reasonable length (agent + tool + detail)
-    // Detail itself isn't truncated by buildAnimationFrame, only by onActivity
-    // So this just confirms multiline structure holds even with long detail
+    expect(lines).toHaveLength(1);
+    // Combined line is truncated to terminal width
     expect(lines[0]).toContain("planner");
     expect(lines[0]).toContain("Bash");
+    expect(lines[0]).toContain("processing");
   });
 
   it("single-line output when no activity (spinner only)", () => {
@@ -86,7 +87,7 @@ describe("buildAnimationFrame", () => {
     expect(lines[0]).toContain("5s");
   });
 
-  it("truncates activity trail when exceeds terminal width", () => {
+  it("truncates combined line when exceeds terminal width", () => {
     // Mock narrow terminal
     const originalColumns = process.stdout.columns;
     Object.defineProperty(process.stdout, "columns", { value: 40, writable: true });
@@ -104,16 +105,16 @@ describe("buildAnimationFrame", () => {
     });
 
     const lines = frame.split("\n");
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(1);
 
-    // Strip ANSI from activity line to measure visible length
+    // Strip ANSI from combined line to measure visible length
     const stripAnsi = (s: string) => s.replace(/\x1b\[\d+m/g, "");
-    const activityVisible = stripAnsi(lines[0]);
+    const combinedVisible = stripAnsi(lines[0]);
 
     // Should be truncated to fit 40-column terminal (minus 2 for padding = 38)
-    expect(activityVisible.length).toBeLessThanOrEqual(38);
+    expect(combinedVisible.length).toBeLessThanOrEqual(38);
     // Should end with ellipsis
-    expect(activityVisible).toMatch(/…$/);
+    expect(combinedVisible).toMatch(/…$/);
   });
 });
 

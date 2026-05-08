@@ -313,7 +313,7 @@ export async function runPRReview(
 
   const diff = await getDiff(prNumber);
   const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff);
-  const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true });
+  const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model });
 
   if (result.exitCode !== 0) {
     throw new TaskError(

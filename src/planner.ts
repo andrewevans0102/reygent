@@ -111,8 +111,10 @@ export async function runPlanner(
   previousAnswers?: string,
   options?: PlannerOptions,
 ): Promise<{ result: PlannerResult; usage?: UsageInfo }> {
+  const agents = getAgents();
+  const plannerAgent = agents.find((a) => a.name === "planner");
   const prompt = buildPrompt(spec, previousAnswers, options);
-  const { stdout: raw, exitCode, usage } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true, onActivity: options?.onActivity });
+  const { stdout: raw, exitCode, usage } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true, onActivity: options?.onActivity, provider: plannerAgent?.provider, model: plannerAgent?.model });
 
   if (exitCode !== 0) {
     throw new TaskError(`Planner: agent exited with code ${exitCode}`);

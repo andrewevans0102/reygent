@@ -297,7 +297,7 @@ async function runAgentReview(
   }
 
   const prompt = buildReviewPrompt(agent.systemPrompt, diff, spec);
-  const result = await spawnAgent("pr-review", prompt, { quiet: true, onActivity });
+  const result = await spawnAgent("pr-review", prompt, { quiet: true, onActivity, provider: agent.provider, model: agent.model });
 
   if (result.exitCode !== 0) {
     throw new TaskError(

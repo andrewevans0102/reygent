@@ -2,6 +2,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { killAllChildren } from "./child-registry.js";
 import type { ActivityEvent } from "./providers/types.js";
+import { resetTerminalForInput } from "./terminal-reset.js";
 
 export type { ActivityEvent };
 
@@ -60,15 +61,16 @@ export function buildAnimationFrame(
   if (lastActivity) {
     const parts = [lastActivity.agent];
     if (lastActivity.tool) parts.push(lastActivity.tool);
-    if (lastActivity.detail) parts.push(lastActivity.detail);
-    const activityLine = chalk.cyan(parts.join(" → "));
+    if (lastActivity.detail) parts.push(lastActivity.detail.replace(/[\r\n]+/g, " "));
+    const activityText = chalk.cyan(parts.join(" → "));
 
-    // Truncate activity line if it exceeds terminal width minus padding
+    // Combine on single line with separator to prevent cursor misalignment
     const terminalWidth = process.stdout.columns || 120;
-    const maxActivityWidth = terminalWidth - 2; // 2 chars padding
-    const truncatedActivity = truncateToWidth(activityLine, maxActivityWidth);
+    const separator = chalk.gray(" | ");
+    const combined = `${mainLine}${separator}${activityText}`;
 
-    return `${truncatedActivity}\n${mainLine}`;
+    // Truncate if combined line exceeds terminal width
+    return truncateToWidth(combined, terminalWidth - 2);
   }
 
   return mainLine;
@@ -176,22 +178,27 @@ export function createLiveStatus(label: string): LiveStatus {
     succeed(msg: string) {
       cleanup();
       spinner.succeed(msg);
+      resetTerminalForInput();
     },
     fail(msg: string) {
       cleanup();
       spinner.fail(msg);
+      resetTerminalForInput();
     },
     warn(msg: string) {
       cleanup();
       spinner.warn(msg);
+      resetTerminalForInput();
     },
     info(msg: string) {
       cleanup();
       spinner.info(msg);
+      resetTerminalForInput();
     },
     stop() {
       cleanup();
       spinner.stop();
+      resetTerminalForInput();
     },
     start() {
       spinner.start();

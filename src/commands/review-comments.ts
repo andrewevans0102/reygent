@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
-import { select, input } from "@inquirer/prompts";
+import { select } from "@inquirer/prompts";
+import { pasteableInput } from "../pasteable-input.js";
 import { wrapText } from "../format.js";
 import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
@@ -14,6 +15,7 @@ import { parseRemote, resolveToken } from "../pr-create.js";
 import type { RemoteInfo } from "../pr-create.js";
 import type { PlannerOutput } from "../task.js";
 import { TaskError } from "../task.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 
 interface ReviewCommentsOptions {
   insecure?: boolean;
@@ -478,7 +480,7 @@ async function generatePlan(
     ? buildPlanPromptWithFeedback(agent.systemPrompt, comments, diff, feedback)
     : buildPlanPrompt(agent.systemPrompt, comments, diff);
 
-  const result = await spawnAgent("planner", prompt, { quiet: true });
+  const result = await spawnAgent("planner", prompt, { quiet: true, provider: agent.provider, model: agent.model });
 
   if (result.exitCode !== 0) {
     throw new TaskError(`review-comments: planner agent exited with code ${result.exitCode}`);
@@ -620,7 +622,7 @@ async function executeWithDevAgent(
 
   const prompt = buildDevPrompt(devAgent.systemPrompt, comments, plan, userInstructions);
 
-  const result = await spawnAgent("dev", prompt, { autoApprove, quiet: true, onActivity });
+  const result = await spawnAgent("dev", prompt, { autoApprove, quiet: true, onActivity, provider: devAgent.provider, model: devAgent.model });
 
   if (result.exitCode !== 0) {
     throw new TaskError(`review-comments: dev agent exited with code ${result.exitCode}`);
@@ -761,6 +763,7 @@ export async function reviewCommentsCommand(
     let userInstructions: string | undefined;
 
     if (!options.autoApprove) {
+      resetTerminalForInput();
       let approved = false;
       while (!approved) {
         const action = await select({
@@ -776,7 +779,8 @@ export async function reviewCommentsCommand(
         if (action === "approve") {
           approved = true;
         } else if (action === "feedback") {
-          const feedback = await input({
+          resetTerminalForInput();
+          const feedback = await pasteableInput({
             message: "Enter your feedback:",
           });
           if (feedback.trim()) {
@@ -786,7 +790,8 @@ export async function reviewCommentsCommand(
             displayPlan(plan);
           }
         } else if (action === "instructions") {
-          const extra = await input({
+          resetTerminalForInput();
+          const extra = await pasteableInput({
             message: "Enter additional instructions for the dev agent:",
           });
           if (extra.trim()) {

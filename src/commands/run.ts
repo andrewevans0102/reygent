@@ -10,6 +10,7 @@ import { runImplement } from "../implement.js";
 import type { FailureContext } from "../implement.js";
 import { createLiveStatus } from "../live-status.js";
 import { runPlanner } from "../planner.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 import { runPRCreate } from "../pr-create.js";
 import { normalizeType, detectTypeFromJiraIssueType, detectTypeFromLinearLabels, VALID_BRANCH_TYPES, type BranchType } from "../branch-type.js";
 import { runPRReview, formatPRReviewTerminal, postPRReviewComment } from "../pr-review.js";
@@ -75,6 +76,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
 
     if (!autoApprove) {
+      resetTerminalForInput();
       const rl = createInterface({ input: process.stdin, output: process.stdout });
       const answer = await new Promise<string>((resolve) => {
         rl.question(
@@ -358,6 +360,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
             if ("needsClarification" in result && result.needsClarification) {
               status.stop();
+              resetTerminalForInput();
               console.log(chalk.yellow("\nPlanner needs clarification:\n"));
 
               const answers: string[] = [];
@@ -366,21 +369,22 @@ export async function runCommand(options: RunOptions): Promise<void> {
                 output: process.stdout,
               });
 
-              for (let i = 0; i < result.questions.length; i++) {
-                const question = result.questions[i];
-                const answer = await new Promise<string>((resolve) => {
-                  rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
-                });
+              try {
+                for (let i = 0; i < result.questions.length; i++) {
+                  const question = result.questions[i];
+                  const answer = await new Promise<string>((resolve) => {
+                    rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
+                  });
 
-                if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
-                  rl.close();
-                  throw new TaskError("Planner: clarification aborted by user");
+                  if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
+                    throw new TaskError("Planner: clarification aborted by user");
+                  }
+
+                  answers.push(`Q: ${question}\nA: ${answer}`);
                 }
-
-                answers.push(`Q: ${question}\nA: ${answer}`);
+              } finally {
+                rl.close();
               }
-
-              rl.close();
               clarificationAnswers = answers.join("\n\n");
               console.log(chalk.blue("\nRe-running planner with clarifications...\n"));
               status.start();
@@ -605,6 +609,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         if (autoApprove) {
           console.log(chalk.yellow("Auto-approved — bypassing security gate..."));
         } else {
+          resetTerminalForInput();
           const rl = createInterface({
             input: process.stdin,
             output: process.stdout,
@@ -654,6 +659,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             branchType = autoDetected;
           } else {
             // No auto-detection - prompt user
+            resetTerminalForInput();
             branchType = await select({
               message: "Select branch type:",
               choices: VALID_BRANCH_TYPES.map(t => ({ name: t, value: t })),
