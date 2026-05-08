@@ -89,7 +89,7 @@ export function createLiveStatus(label: string): LiveStatus {
   const spinner = ora({
     spinner: { frames: [""], interval: 200 },
     text: "",
-    discardStdin: false,
+    discardStdin: true,
   }).start();
 
   let frameIndex = 0;
