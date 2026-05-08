@@ -14,6 +14,7 @@ import { parseRemote, resolveToken } from "../pr-create.js";
 import type { RemoteInfo } from "../pr-create.js";
 import type { PlannerOutput } from "../task.js";
 import { TaskError } from "../task.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 
 interface ReviewCommentsOptions {
   insecure?: boolean;
@@ -760,12 +761,10 @@ export async function reviewCommentsCommand(
     // 9. Approval loop with additional instructions support
     let userInstructions: string | undefined;
 
-    // Ensure clean terminal state before prompts (prevents cursor misalignment after spinners)
-    console.log();
-
     if (!options.autoApprove) {
       let approved = false;
       while (!approved) {
+        resetTerminalForInput();
         const action = await select({
           message: "How would you like to proceed?",
           choices: [
@@ -779,6 +778,7 @@ export async function reviewCommentsCommand(
         if (action === "approve") {
           approved = true;
         } else if (action === "feedback") {
+          resetTerminalForInput();
           const feedback = await input({
             message: "Enter your feedback:",
           });
@@ -787,9 +787,9 @@ export async function reviewCommentsCommand(
             plan = await generatePlan(classified, diff, feedback);
             planSpinner.succeed(chalk.green("Plan regenerated"));
             displayPlan(plan);
-            console.log(); // Clean terminal state before next prompt
           }
         } else if (action === "instructions") {
+          resetTerminalForInput();
           const extra = await input({
             message: "Enter additional instructions for the dev agent:",
           });

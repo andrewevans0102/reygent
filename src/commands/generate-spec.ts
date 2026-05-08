@@ -6,6 +6,7 @@ import { isDebug } from "../debug.js";
 import { generateSpec, runClarification } from "../generate-spec.js";
 import { createLiveStatus } from "../live-status.js";
 import { TaskError } from "../task.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 
 async function prompt(question: string, fallback?: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -66,6 +67,7 @@ export async function generateSpecCommand(
 
         if ("needsClarification" in result && result.needsClarification) {
           clarifyStatus.stop();
+          resetTerminalForInput();
           console.log(chalk.yellow("\nClarifying questions:\n"));
 
           const answers: string[] = [];

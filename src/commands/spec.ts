@@ -6,6 +6,7 @@ import { isDebug } from "../debug.js";
 import { wrapText } from "../format.js";
 import { createLiveStatus } from "../live-status.js";
 import { loadSpec, SpecError, ISSUE_KEY_PATTERN } from "../spec.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 import { runPlanner } from "../planner.js";
 import { TaskError } from "../task.js";
 import type { PlannerOutput } from "../task.js";
@@ -119,6 +120,7 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
 
       if ("needsClarification" in result && result.needsClarification) {
         status.stop();
+        resetTerminalForInput();
         console.log(chalk.yellow("\nPlanner needs clarification:\n"));
 
         const answers: string[] = [];
