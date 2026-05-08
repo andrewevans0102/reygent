@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
-import { select, input } from "@inquirer/prompts";
+import { select } from "@inquirer/prompts";
+import { pasteableInput } from "../pasteable-input.js";
 import { wrapText } from "../format.js";
 import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
@@ -779,7 +780,7 @@ export async function reviewCommentsCommand(
           approved = true;
         } else if (action === "feedback") {
           resetTerminalForInput();
-          const feedback = await input({
+          const feedback = await pasteableInput({
             message: "Enter your feedback:",
           });
           if (feedback.trim()) {
@@ -790,7 +791,7 @@ export async function reviewCommentsCommand(
           }
         } else if (action === "instructions") {
           resetTerminalForInput();
-          const extra = await input({
+          const extra = await pasteableInput({
             message: "Enter additional instructions for the dev agent:",
           });
           if (extra.trim()) {
