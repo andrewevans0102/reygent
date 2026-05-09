@@ -235,7 +235,6 @@ describe("runCommand --verbose flag integration", () => {
       provider: "claude",
     });
 
-    const mockUsage = { ...import("./usage.js") };
     const printVerboseUsageSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     // Simulate the guard: if verbose is false, don't call printVerboseUsage

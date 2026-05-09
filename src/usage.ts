@@ -151,7 +151,7 @@ export function printUsageSummary(tracker: UsageTracker): void {
     const prefix = chalk.cyan("│") + "    ";
 
     // First line: agent name, cost, calls
-    console.log(prefix + `${agent.padEnd(20)} ${formatCost(stats.cost).padStart(7)}  (${callLabel})`);
+    console.log(prefix + `${agent.padEnd(12)} ${formatCost(stats.cost).padStart(7)}  (${callLabel})`);
 
     // Second line: token breakdown (if present)
     if (stats.inputTokens > 0 || stats.outputTokens > 0) {
@@ -176,7 +176,7 @@ export function printUsageSummary(tracker: UsageTracker): void {
       const parts: string[] = [];
       if (agentSavings > 0) parts.push(chalk.green(formatCost(agentSavings) + " saved"));
       if (hitRate > 0) parts.push(chalk.green(hitRate + "% hit"));
-      console.log(prefix + `  ${parts.join("  ")}`);
+      console.log(prefix + `  ${parts.join(" ")}`);
     }
   }
 
