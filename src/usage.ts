@@ -187,7 +187,7 @@ export function printVerboseUsage(tracker: UsageTracker): void {
   if (entries.length === 0) return;
 
   console.log("");
-  console.log(chalk.bold.cyan("┌─ Detailed Usage"));
+  console.log(chalk.bold.cyan("┌─ Detailed Usage") + chalk.gray(" (--verbose)"));
 
   for (const entry of entries) {
     const { agent, stage, usage } = entry;
