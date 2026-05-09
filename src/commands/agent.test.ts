@@ -38,6 +38,15 @@ vi.mock("../spec.js", () => ({
   },
 }));
 
+vi.mock("../task.js", () => ({
+  TaskError: class TaskError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "TaskError";
+    }
+  },
+}));
+
 // Mock chalk
 vi.mock("chalk", () => {
   const handler: ProxyHandler<object> = {
@@ -54,6 +63,7 @@ import { select } from "@inquirer/prompts";
 import { getAgents } from "../config.js";
 import { getProvider } from "../providers/index.js";
 import { loadSpec, SpecError } from "../spec.js";
+import { TaskError } from "../task.js";
 import { agentCommand } from "./agent.js";
 
 const mockSelect = vi.mocked(select);
@@ -361,6 +371,189 @@ describe("agent command with --spec flag", () => {
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(output).toMatch(/Unknown agent.*dev/i);
     expect(exitSpy).toHaveBeenCalledWith(1);
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("verifies full spec format structure with separator", async () => {
+    const specContent = "# Test Feature\n\nImplement user authentication.";
+    writeFileSync(specPath, specContent);
+
+    mockLoadSpec.mockResolvedValue({
+      source: "markdown",
+      title: "Test Feature",
+      content: specContent,
+    });
+
+    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    mockGetProvider.mockReturnValue({
+      spawnInteractive: mockSpawnInteractive,
+    });
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand("dev", { spec: specPath });
+
+    const systemPrompt = mockSpawnInteractive.mock.calls[0][0];
+
+    // Verify full format structure
+    expect(systemPrompt).toContain("You are a dev agent.");
+    expect(systemPrompt).toMatch(/\n---\n/); // Separator
+    expect(systemPrompt).toContain("## Spec");
+    expect(systemPrompt).toContain("**Title:** Test Feature");
+    expect(systemPrompt).toContain(specContent);
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("handles per-agent model override with --spec", async () => {
+    mockGetAgents.mockReturnValue([
+      {
+        name: "dev",
+        description: "Development agent",
+        systemPrompt: "You are a dev agent.",
+        provider: "anthropic",
+        model: "claude-opus-4-6",
+      },
+    ]);
+
+    const specContent = "# Test Feature\n\nImplement user authentication.";
+    writeFileSync(specPath, specContent);
+
+    mockLoadSpec.mockResolvedValue({
+      source: "markdown",
+      title: "Test Feature",
+      content: specContent,
+    });
+
+    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    mockGetProvider.mockReturnValue({
+      spawnInteractive: mockSpawnInteractive,
+    });
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand("dev", { spec: specPath });
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(mockSpawnInteractive).toHaveBeenCalledWith(
+      expect.stringContaining("## Spec"),
+      "claude-opus-4-6"
+    );
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("handles internal errors with exit code 2", async () => {
+    // Cause an internal error by making spawnInteractive throw an unexpected error
+    const mockSpawnInteractive = vi.fn(() => {
+      throw new Error("Unexpected internal error");
+    });
+    mockGetProvider.mockReturnValue({
+      spawnInteractive: mockSpawnInteractive,
+    });
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand("dev", {});
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toMatch(/Internal error:.*Unexpected internal error/);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+
+    consoleSpy.mockRestore();
+    errorSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("handles TaskError with exit code 1", async () => {
+    mockGetAgents.mockReturnValue([]);
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand(undefined, {});
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toMatch(/Error:.*No agents configured/);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("handles malformed spec data gracefully", async () => {
+    // loadSpec returns data missing required fields
+    mockLoadSpec.mockResolvedValue({
+      source: "markdown",
+      // Missing title
+      content: undefined, // Malformed content
+    } as any);
+
+    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    mockGetProvider.mockReturnValue({
+      spawnInteractive: mockSpawnInteractive,
+    });
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand("dev", { spec: specPath });
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(mockSpawnInteractive).toHaveBeenCalledTimes(1);
+
+    const systemPrompt = mockSpawnInteractive.mock.calls[0][0];
+    // Should still append spec section even with malformed data
+    expect(systemPrompt).toContain("## Spec");
+    expect(systemPrompt).toContain("**Title:** undefined");
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("handles spec with special characters in title and content", async () => {
+    const specContent = "# $pecial <Ch@rs> & \"Quotes\"\n\nContent with `code` and **bold**.";
+    mockLoadSpec.mockResolvedValue({
+      source: "markdown",
+      title: "$pecial <Ch@rs> & \"Quotes\"",
+      content: specContent,
+    });
+
+    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    mockGetProvider.mockReturnValue({
+      spawnInteractive: mockSpawnInteractive,
+    });
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as any);
+
+    await agentCommand("dev", { spec: specPath });
+
+    expect(exitSpy).toHaveBeenCalledWith(0);
+
+    const systemPrompt = mockSpawnInteractive.mock.calls[0][0];
+    expect(systemPrompt).toContain("**Title:** $pecial <Ch@rs> & \"Quotes\"");
+    expect(systemPrompt).toContain(specContent);
 
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
