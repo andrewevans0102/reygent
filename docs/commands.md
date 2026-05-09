@@ -179,12 +179,17 @@ reygent run --spec feature.md --verbose
 **Verbose output example:**
 
 ```
-[dev] Input tokens: 12,345 | Output tokens: 3,456 | Cost: $0.15
-[qe] Input tokens: 8,901 | Output tokens: 2,345 | Cost: $0.09
-[planner] Input tokens: 5,678 | Output tokens: 1,234 | Cost: $0.06
----
-Total cost: $0.30
+┌─ Detailed Usage (--verbose)
+│  planner (plan)  $0.45  12s  3 turns  2,500 in / 850 out
+│    cache: { cached: 1,200, saved: $0.08, provider: claude }
+│  dev (implement)  $0.32  8s  2 turns  1,800 in / 600 out
+│  qe (implement)  $0.19  5s  1 turn  900 in / 400 out
+│    cache: { cached: 300, saved: $0.02, provider: claude }
+│  pr-review (pr-review)  $0.12  4s  1 turn  600 in / 250 out
+└─
 ```
+
+Shows individual agent calls with stage names, duration, turn count, tokens, and cache metadata.
 
 ### Reygent Workflow Stages
 
