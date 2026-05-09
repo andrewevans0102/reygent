@@ -148,32 +148,36 @@ export function printUsageSummary(tracker: UsageTracker): void {
 
   for (const [agent, stats] of byAgent) {
     const callLabel = stats.calls === 1 ? "1 call" : `${stats.calls} calls`;
-    const tokenParts: string[] = [];
+    const prefix = chalk.cyan("│") + "    ";
+
+    // First line: agent name, cost, calls
+    console.log(prefix + `${agent.padEnd(20)} ${formatCost(stats.cost).padStart(7)}  (${callLabel})`);
+
+    // Second line: token breakdown (if present)
     if (stats.inputTokens > 0 || stats.outputTokens > 0) {
+      const tokenParts: string[] = [];
       tokenParts.push(`${formatTokenCount(stats.inputTokens)} in`);
       tokenParts.push(`${formatTokenCount(stats.outputTokens)} out`);
       if (stats.cachedTokens > 0) {
         tokenParts.push(`${formatTokenCount(stats.cachedTokens)} cached`);
       }
+      console.log(prefix + chalk.gray(`  ${tokenParts.join(" / ")}`));
     }
-    const tokenSuffix = tokenParts.length > 0 ? `  ${tokenParts.join(" / ")}` : "";
 
-    // Per-agent savings
+    // Third line: cache savings and hit rate (if present)
     const agentSavings = stats.cachedTokens > 0 && stats.provider
       ? calculateCacheSavings({ cachedTokens: stats.cachedTokens, provider: stats.provider })
       : 0;
-    const savingsSuffix = agentSavings > 0 ? `  ${chalk.green("(" + formatCost(agentSavings) + " saved)")}` : "";
-
-    // Cache hit rate
     const hitRate = stats.inputTokens > 0 && stats.cachedTokens > 0
       ? Math.round((stats.cachedTokens / stats.inputTokens) * 100)
       : 0;
-    const hitRateSuffix = hitRate > 0 ? `  ${chalk.green(hitRate + "% hit")}` : "";
 
-    const cols = process.stdout.columns || 80;
-    const agentLine = `${agent.padEnd(16)} → ${formatCost(stats.cost).padStart(7)}  (${callLabel})${tokenSuffix}${savingsSuffix}${hitRateSuffix}`;
-    const linePrefix = chalk.cyan("│") + "    ";
-    console.log(linePrefix + wrapText(agentLine, 5, cols, linePrefix));
+    if (agentSavings > 0 || hitRate > 0) {
+      const parts: string[] = [];
+      if (agentSavings > 0) parts.push(chalk.green(formatCost(agentSavings) + " saved"));
+      if (hitRate > 0) parts.push(chalk.green(hitRate + "% hit"));
+      console.log(prefix + `  ${parts.join("  ")}`);
+    }
   }
 
   console.log(chalk.cyan("└─"));

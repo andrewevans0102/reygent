@@ -43,4 +43,6 @@ Gemini and Codex are CLI providers. Token counts depend on whether the CLI inclu
 
 ## Summary Output
 
-`printUsageSummary()` displays a table with total cost, duration, token counts, and per-agent breakdown. `printVerboseUsage()` shows every individual invocation with full detail.
+`printUsageSummary()` displays a table with total cost, duration, token counts, and per-agent breakdown. Always shown at the end of `reygent run`.
+
+`printVerboseUsage()` shows every individual invocation with full detail including stage names, duration, turn count, input/output tokens, and cache metadata. Only shown when `reygent run --verbose` flag is passed.
