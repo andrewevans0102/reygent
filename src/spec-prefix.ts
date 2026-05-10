@@ -12,7 +12,7 @@ export interface ParsedSpecSource {
   identifier: string;
 }
 
-const VALID_PREFIXES = ["jira:", "linear:", "markdown:"] as const;
+export const VALID_PREFIXES = ["jira:", "linear:", "markdown:"] as const;
 
 /**
  * Parse spec source with required provider prefix.

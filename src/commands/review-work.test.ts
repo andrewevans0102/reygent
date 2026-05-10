@@ -237,10 +237,12 @@ describe("review-work --spec prefix parsing", () => {
         throw new Error(`process.exit(${code})`);
       });
 
+      const prefixError = new SpecPrefixError(
+        "Source prefix required. Use jira:PROJ-123, linear:DT-275, or markdown:./spec.md"
+      );
+
       mockParseSpecWithPrefix.mockImplementation(() => {
-        throw new SpecPrefixError(
-          "Source prefix required. Use jira:PROJ-123, linear:DT-275, or markdown:./spec.md"
-        );
+        throw prefixError;
       });
 
       try {
@@ -248,6 +250,7 @@ describe("review-work --spec prefix parsing", () => {
         expect.fail("should have thrown");
       } catch (err) {
         expect((err as Error).message).toContain("process.exit");
+        expect(prefixError).toBeInstanceOf(SpecPrefixError);
       }
 
       expect(mockExit).toHaveBeenCalledWith(1);
@@ -260,22 +263,26 @@ describe("review-work --spec prefix parsing", () => {
         throw new Error(`process.exit(${code})`);
       });
 
+      const prefixError = new SpecPrefixError(
+        "Source prefix required. Valid formats:\n" +
+          "  jira:PROJ-123\n" +
+          "  linear:DT-275\n" +
+          "  markdown:./spec.md\n" +
+          "Or use file path (ends in .md or starts with ./ or /)"
+      );
+
       mockParseSpecWithPrefix.mockImplementation(() => {
-        throw new SpecPrefixError(
-          "Source prefix required. Valid formats:\n" +
-            "  jira:PROJ-123\n" +
-            "  linear:DT-275\n" +
-            "  markdown:./spec.md\n" +
-            "Or use file path (ends in .md or starts with ./ or /)"
-        );
+        throw prefixError;
       });
 
       try {
         await reviewWorkCommand({ spec: "PROJ-123" });
-      } catch {
+      } catch (err) {
         // Expected to throw
+        expect(err).toBeDefined();
       }
 
+      expect(prefixError).toBeInstanceOf(SpecPrefixError);
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining("Error:"),
         expect.stringContaining("prefix required")
@@ -291,21 +298,26 @@ describe("review-work --spec prefix parsing", () => {
         throw new Error(`process.exit(${code})`);
       });
 
+      const prefixError = new SpecPrefixError(
+        "Source prefix required. Valid formats:\n" +
+          "  jira:PROJ-123\n" +
+          "  linear:DT-275\n" +
+          "  markdown:./spec.md\n" +
+          "Or use file path (ends in .md or starts with ./ or /)"
+      );
+
       mockParseSpecWithPrefix.mockImplementation(() => {
-        throw new SpecPrefixError(
-          "Source prefix required. Valid formats:\n" +
-            "  jira:PROJ-123\n" +
-            "  linear:DT-275\n" +
-            "  markdown:./spec.md\n" +
-            "Or use file path (ends in .md or starts with ./ or /)"
-        );
+        throw prefixError;
       });
 
       try {
         await reviewWorkCommand({ spec: "https://linear.app/team/issue/DT-275" });
-      } catch {
+      } catch (err) {
         // Expected
+        expect(err).toBeDefined();
       }
+
+      expect(prefixError).toBeInstanceOf(SpecPrefixError);
 
       const errorMessage = consoleSpy.mock.calls.find((call) =>
         call.some((arg) => typeof arg === "string" && arg.includes("prefix required"))
