@@ -20,8 +20,36 @@ import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
 import type { Severity, StageResult, TaskContext, PlannerOutput } from "../task.js";
 import { UsageTracker, printUsageSummary, printVerboseUsage } from "../usage.js";
+import { getChesstrace } from "../chesstrace/index.js";
+import type { Chesstrace } from "../chesstrace/index.js";
+import { Events, TelemetryLevel } from "../chesstrace/events.js";
+import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
+import { loadConfig } from "../config.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
+
+/**
+ * Emit stage.end event with duration and success status
+ */
+function emitStageEnd(
+  chesstrace: Chesstrace | null,
+  stageName: string,
+  stageStartTime: number,
+  success: boolean,
+  metadata?: { cost?: number; outputSummary?: string },
+): void {
+  if (!chesstrace) return;
+  try {
+    chesstrace.emit(Events.PIPELINE_STAGE_END, {
+      stage: stageName,
+      success,
+      durationMs: Date.now() - stageStartTime,
+      ...(metadata && { metadata }),
+    });
+  } catch {
+    // Swallow emit errors
+  }
+}
 
 /**
  * Helper to merge agentOptions with onActivity callback from a LiveStatus instance.
@@ -147,8 +175,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
   }
 
   // All retries exhausted
-  console.log(chalk.red.bold(`\n${gateName} failed after ${maxRetries} retries. Exiting.`));
-  process.exit(1);
+  throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
 }
 
 async function promptLinearSpec(): Promise<string> {
@@ -222,6 +249,34 @@ async function promptForSpec(): Promise<string> {
 }
 
 export async function runCommand(options: RunOptions): Promise<void> {
+  const pipelineStartTime = Date.now();
+
+  // Initialize tracker and context early for error handling
+  const tracker = new UsageTracker();
+  let context: TaskContext | undefined;
+
+  // Load config and check if telemetry is enabled
+  const config = loadConfig();
+  const telemetryEnabled = config.telemetry?.enabled === true;
+  let chesstrace: Chesstrace | null = null;
+
+  // Initialize telemetry backend only if enabled
+  if (telemetryEnabled) {
+    try {
+      const telemetryLevel = TelemetryLevel[config.telemetry?.level ?? 'standard'];
+      chesstrace = getChesstrace();
+      const backend = new SqliteBackend();
+      await chesstrace.init(backend);
+      await chesstrace.startRun();
+    } catch (err) {
+      // Telemetry init failed - continue without telemetry
+      if (isDebug()) {
+        console.error(chalk.gray("Telemetry init failed:"), err);
+      }
+      chesstrace = null;
+    }
+  }
+
   try {
     let specSource = options.spec;
     if (!specSource) {
@@ -233,6 +288,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
     }
     const spec = await loadSpec(specSource);
 
+    // Skip telemetry in dry-run mode
     if (options.dryRun) {
       console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
       console.log("");
@@ -272,6 +328,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
       console.log("");
       return;
     }
+
+    // Initialize context after dry-run check
+    context = { spec, results: [] };
 
     const threshold = options.securityThreshold.toUpperCase();
     if (!VALID_SEVERITIES.has(threshold)) {
@@ -321,11 +380,44 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
     const maxRetries = Math.max(0, parseInt(options.maxRetries, 10) || 0);
 
-    const context: TaskContext = { spec, results: [] };
     const agentOptions = { autoApprove };
-    const tracker = new UsageTracker();
+
+    // Emit pipeline.start
+    if (chesstrace) {
+      try {
+        chesstrace.emit(Events.PIPELINE_START, {
+          spec: {
+            source: spec.source,
+            title: spec.title,
+          },
+          options: {
+            autoApprove,
+            skipClarification,
+            maxRetries,
+            securityThreshold: options.securityThreshold,
+            insecure: options.insecure,
+          },
+        });
+      } catch {
+        // Swallow emit errors
+      }
+    }
 
     for (const stage of PIPELINE) {
+      const stageStartTime = Date.now();
+
+      // Emit pipeline.stage.start
+      if (chesstrace) {
+        try {
+          chesstrace.emit(Events.PIPELINE_STAGE_START, {
+            stage: stage.name,
+            description: stage.description,
+          });
+        } catch {
+          // Swallow emit errors
+        }
+      }
+
       if (stage.name === "plan") {
         const status = createLiveStatus("running planner...");
 
@@ -412,6 +504,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: true,
           output: JSON.stringify(plan),
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
         continue;
       }
 
@@ -453,6 +547,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: devSuccess && qeSuccess,
           output: JSON.stringify(impl),
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, devSuccess && qeSuccess);
         continue;
       }
 
@@ -480,10 +576,22 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: gateResult.output,
           });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
           continue;
         }
 
         unitStatus.fail(chalk.red("Unit tests FAILED"));
+
+        // If no retries configured, emit failure and throw
+        if (maxRetries === 0) {
+          context.results.push({
+            stage: stage.name,
+            success: false,
+            output: gateResult.output,
+          });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+          throw new TaskError("unit tests failed with 0 retries configured");
+        }
 
         // Retry loop — dev agent only for unit test failures
         gateResult = await retryGate({
@@ -503,6 +611,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: gateResult.passed,
           output: gateResult.output,
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed);
         continue;
       }
 
@@ -530,11 +640,23 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: gateResult.output,
           });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
           continue;
         }
 
         funcStatus.fail(chalk.red("Functional tests FAILED"));
         console.log(gateResult.output);
+
+        // If no retries configured, emit failure and throw
+        if (maxRetries === 0) {
+          context.results.push({
+            stage: stage.name,
+            success: false,
+            output: gateResult.output,
+          });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+          throw new TaskError("functional tests failed with 0 retries configured");
+        }
 
         // Retry loop — both dev + qe agents for functional test failures
         gateResult = await retryGate({
@@ -554,6 +676,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: gateResult.passed,
           output: gateResult.output,
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed);
         continue;
       }
 
@@ -588,6 +712,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: JSON.stringify(output),
           });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
           continue;
         }
 
@@ -597,6 +722,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: false,
           output: JSON.stringify(output),
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, false);
 
         if (autoApprove) {
           console.log(chalk.yellow("Auto-approved — bypassing security gate..."));
@@ -672,6 +799,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: true,
           output: JSON.stringify(prResult),
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
         continue;
       }
 
@@ -702,6 +831,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(reviewOutput),
         });
 
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
         continue;
       }
 
@@ -712,6 +842,33 @@ export async function runCommand(options: RunOptions): Promise<void> {
       };
       console.log(chalk.gray(`[${stage.name}] skipped`));
       context.results.push(result);
+      emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+    }
+
+    // Emit pipeline.end
+    const allSuccess = context.results.every((r) => r.success);
+    if (chesstrace) {
+      try {
+        chesstrace.emit(Events.PIPELINE_END, {
+          success: allSuccess,
+          totalDurationMs: Date.now() - pipelineStartTime,
+          totalCost: tracker.getTotalCost(),
+        });
+      } catch {
+        // Swallow emit errors
+      }
+
+      // Flush and close telemetry
+      try {
+        await chesstrace.flush();
+      } catch {
+        // Swallow flush errors
+      }
+      try {
+        await chesstrace.close();
+      } catch {
+        // Swallow close errors
+      }
     }
 
     // Print usage summary after pipeline completes
@@ -720,6 +877,33 @@ export async function runCommand(options: RunOptions): Promise<void> {
       printVerboseUsage(tracker);
     }
   } catch (err) {
+    // Emit pipeline.end with failure status (if context exists)
+    if (chesstrace) {
+      try {
+        if (context) {
+          chesstrace.emit(Events.PIPELINE_END, {
+            success: false,
+            totalDurationMs: Date.now() - pipelineStartTime,
+            totalCost: tracker?.getTotalCost() ?? 0,
+          });
+        }
+      } catch {
+        // Swallow emit errors
+      }
+
+      // Flush and close telemetry even on error
+      try {
+        await chesstrace.flush();
+      } catch {
+        // Swallow flush errors
+      }
+      try {
+        await chesstrace.close();
+      } catch {
+        // Swallow close errors
+      }
+    }
+
     if (err instanceof Error && err.name === "ExitPromptError") {
       process.exit(0);
     }

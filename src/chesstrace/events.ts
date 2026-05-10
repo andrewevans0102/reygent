@@ -17,7 +17,8 @@ export type TelemetryCategory =
   | 'git'
   | 'spec'
   | 'error'
-  | 'performance';
+  | 'performance'
+  | 'pipeline';
 
 /**
  * Core telemetry event interface
@@ -71,6 +72,12 @@ export const Events = {
   // Performance events (verbose level)
   PERF_METRIC: 'performance.metric',
   PERF_DURATION: 'performance.duration',
+
+  // Pipeline events (standard level)
+  PIPELINE_START: 'pipeline.start',
+  PIPELINE_END: 'pipeline.end',
+  PIPELINE_STAGE_START: 'pipeline.stage_start',
+  PIPELINE_STAGE_END: 'pipeline.stage_end',
 } as const;
 
 /**
@@ -112,6 +119,12 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   // Performance events - verbose
   [Events.PERF_METRIC]: TelemetryLevel.verbose,
   [Events.PERF_DURATION]: TelemetryLevel.verbose,
+
+  // Pipeline events - standard
+  [Events.PIPELINE_START]: TelemetryLevel.standard,
+  [Events.PIPELINE_END]: TelemetryLevel.standard,
+  [Events.PIPELINE_STAGE_START]: TelemetryLevel.standard,
+  [Events.PIPELINE_STAGE_END]: TelemetryLevel.standard,
 };
 
 /**
@@ -131,6 +144,7 @@ export function categoryFromEvent(event: string): TelemetryCategory {
     'spec',
     'error',
     'performance',
+    'pipeline',
   ];
 
   if (validCategories.includes(category as TelemetryCategory)) {
