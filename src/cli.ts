@@ -17,6 +17,7 @@ import { reviewWorkCommand } from "./commands/review-work.js";
 import { reviewCommentsCommand } from "./commands/review-comments.js";
 import { configCommand } from "./commands/config.js";
 import { isValidType, VALID_BRANCH_TYPES } from "./branch-type.js";
+import { shouldPromptForTelemetry, promptForTelemetryOptIn } from "./chesstrace/prompt.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
@@ -32,6 +33,7 @@ program
   .option("--debug", "Show full stack traces on errors (or set REYGENT_DEBUG=1)")
   .option("--model <id>", "Model ID (e.g. claude-sonnet-4-5, gemini-2.5-pro, gpt-5.4)")
   .option("--provider <name>", `AI provider (${PROVIDER_NAMES.join(", ")})`)
+  .option("--no-telemetry", "Disable telemetry for this session")
   .addHelpText("after", `
 ${chalk.yellow("Disclaimer:")} This software is provided "as is" with no warranty. AI-generated output should be reviewed by a human. See LICENSE for full terms.`);
 
@@ -118,7 +120,7 @@ if (!isHelpOrVersion) {
 }
 
 // Set debug flag, provider, and model override before any command action runs
-program.hook("preAction", () => {
+program.hook("preAction", async () => {
   if (program.opts().debug) {
     setDebug(true);
   }
@@ -143,6 +145,24 @@ program.hook("preAction", () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       program.error(message);
+    }
+  }
+
+  // Show telemetry opt-in prompt on first run (unless --no-telemetry flag set)
+  const noTelemetry = program.opts().telemetry === false;
+  if (!noTelemetry && shouldPromptForTelemetry()) {
+    try {
+      await promptForTelemetryOptIn();
+    } catch (err) {
+      // Ctrl+C from inquirer
+      if (err && typeof err === "object" && "name" in err && (err as { name: string }).name === "ExitPromptError") {
+        console.log(chalk.yellow("\nTelemetry setup cancelled."));
+        process.exit(0);
+      }
+      // Other errors shouldn't block command execution
+      if (program.opts().debug) {
+        console.error(chalk.gray("Telemetry prompt failed:"), err);
+      }
     }
   }
 });
