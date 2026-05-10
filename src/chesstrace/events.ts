@@ -47,6 +47,9 @@ export const Events = {
   AGENT_END: 'agent.end',
   AGENT_ERROR: 'agent.error',
   AGENT_TOOL_CALL: 'agent.tool_call',
+  AGENT_SPAWN: 'agent.spawn',
+  AGENT_COMPLETE: 'agent.complete',
+  AGENT_TIMEOUT: 'agent.timeout',
 
   // LLM events (verbose level)
   LLM_REQUEST: 'llm.request',
@@ -94,6 +97,9 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   [Events.AGENT_END]: TelemetryLevel.standard,
   [Events.AGENT_ERROR]: TelemetryLevel.standard,
   [Events.AGENT_TOOL_CALL]: TelemetryLevel.standard,
+  [Events.AGENT_SPAWN]: TelemetryLevel.standard,
+  [Events.AGENT_COMPLETE]: TelemetryLevel.standard,
+  [Events.AGENT_TIMEOUT]: TelemetryLevel.standard,
 
   // LLM events - verbose
   [Events.LLM_REQUEST]: TelemetryLevel.verbose,

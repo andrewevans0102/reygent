@@ -3,6 +3,8 @@ import { resolveModel, resolveProvider } from "./model.js";
 import { TaskError } from "./task.js";
 import type { ActivityEvent } from "./providers/types.js";
 import type { UsageInfo } from "./usage.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 export interface SpawnResult {
   stdout: string;
@@ -17,6 +19,7 @@ export interface SpawnOptions {
   model?: string;
   systemPrompt?: string;
   onActivity?: (event: ActivityEvent) => void;
+  stage?: string;
 }
 
 /**
@@ -40,14 +43,61 @@ export async function spawnAgentStream(
 
   const modelId = options?.model ?? await resolveModel(providerName);
 
-  return adapter.spawn({
-    prompt,
-    systemPrompt: options?.systemPrompt,
+  const chesstrace = getChesstrace();
+  const startTime = Date.now();
+
+  // Emit agent.spawn event before spawning
+  chesstrace.emit(Events.AGENT_SPAWN, {
+    agent: name,
+    provider: providerName,
     model: modelId,
-    autoApprove: options?.autoApprove,
-    quiet: options?.quiet,
-    timeoutMs,
-    agentName: name,
-    onActivity: options?.onActivity,
+    stage: options?.stage,
   });
+
+  // Setup timeout handler
+  const timeoutHandle = setTimeout(() => {
+    chesstrace.emit(Events.AGENT_TIMEOUT, {
+      agent: name,
+      stage: options?.stage,
+      timeoutMs,
+    });
+  }, timeoutMs);
+
+  try {
+    const result = await adapter.spawn({
+      prompt,
+      systemPrompt: options?.systemPrompt,
+      model: modelId,
+      autoApprove: options?.autoApprove,
+      quiet: options?.quiet,
+      timeoutMs,
+      agentName: name,
+      onActivity: options?.onActivity,
+    });
+
+    clearTimeout(timeoutHandle);
+
+    // Emit agent.complete event after spawn returns
+    const duration = Date.now() - startTime;
+    chesstrace.emit(Events.AGENT_COMPLETE, {
+      agent: name,
+      stage: options?.stage,
+      exitCode: result.exitCode,
+      duration,
+      success: result.exitCode === 0,
+    });
+
+    return result;
+  } catch (err) {
+    clearTimeout(timeoutHandle);
+    const duration = Date.now() - startTime;
+    chesstrace.emit(Events.AGENT_COMPLETE, {
+      agent: name,
+      stage: options?.stage,
+      exitCode: -1,
+      duration,
+      success: false,
+    });
+    throw err;
+  }
 }

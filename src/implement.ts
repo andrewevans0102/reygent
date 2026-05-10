@@ -24,6 +24,7 @@ export interface AgentSpawnOptions {
   provider?: string;
   model?: string;
   onActivity?: (event: ActivityEvent) => void;
+  stage?: string;
 }
 
 export interface FailureContext {
@@ -233,7 +234,7 @@ export async function runImplement(
 
     if (runDev) {
       promises.push(
-        spawnAgent("dev", devPrompt, { ...options, provider: devAgent.provider, model: devAgent.model }).then(
+        spawnAgent("dev", devPrompt, { ...options, provider: devAgent.provider, model: devAgent.model, stage: "implement" }).then(
           (v) => ({ status: "fulfilled" as const, value: v }),
           (e) => ({ status: "rejected" as const, reason: e }),
         ),
@@ -241,7 +242,7 @@ export async function runImplement(
     }
     if (runQE) {
       promises.push(
-        spawnAgent("qe", qePrompt, { ...options, provider: qeAgent.provider, model: qeAgent.model }).then(
+        spawnAgent("qe", qePrompt, { ...options, provider: qeAgent.provider, model: qeAgent.model, stage: "implement" }).then(
           (v) => ({ status: "fulfilled" as const, value: v }),
           (e) => ({ status: "rejected" as const, reason: e }),
         ),
@@ -283,7 +284,7 @@ export async function runImplement(
     if (runDev) {
       console.log(chalk.blue("Running dev agent (approve edits as prompted)..."));
       try {
-        const devResult = await spawnAgent("dev", devPrompt, { ...options, provider: devAgent.provider, model: devAgent.model });
+        const devResult = await spawnAgent("dev", devPrompt, { ...options, provider: devAgent.provider, model: devAgent.model, stage: "implement" });
         if (devResult.exitCode === 0) {
           dev = extractDevOutput(devResult.stdout);
         }
@@ -299,7 +300,7 @@ export async function runImplement(
     if (runQE) {
       console.log(chalk.blue("Running qe agent (approve edits as prompted)..."));
       try {
-        const qeResult = await spawnAgent("qe", qePrompt, { ...options, provider: qeAgent.provider, model: qeAgent.model });
+        const qeResult = await spawnAgent("qe", qePrompt, { ...options, provider: qeAgent.provider, model: qeAgent.model, stage: "implement" });
         if (qeResult.exitCode === 0) {
           qe = extractQEOutput(qeResult.stdout);
         }
