@@ -20,8 +20,30 @@ import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
 import type { Severity, StageResult, TaskContext, PlannerOutput } from "../task.js";
 import { UsageTracker, printUsageSummary, printVerboseUsage } from "../usage.js";
+import { getChesstrace } from "../chesstrace/index.js";
+import { Events } from "../chesstrace/events.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
+
+/**
+ * Emit stage.end event with duration and success status
+ */
+function emitStageEnd(
+  chesstrace: ReturnType<typeof getChesstrace>,
+  stageName: string,
+  stageStartTime: number,
+  success: boolean,
+): void {
+  try {
+    chesstrace.emit(Events.PIPELINE_STAGE_END, {
+      stage: stageName,
+      success,
+      durationMs: Date.now() - stageStartTime,
+    });
+  } catch {
+    // Swallow emit errors
+  }
+}
 
 /**
  * Helper to merge agentOptions with onActivity callback from a LiveStatus instance.
@@ -222,6 +244,13 @@ async function promptForSpec(): Promise<string> {
 }
 
 export async function runCommand(options: RunOptions): Promise<void> {
+  const chesstrace = getChesstrace();
+  const pipelineStartTime = Date.now();
+
+  // Initialize tracker and context early for error handling
+  const tracker = new UsageTracker();
+  let context: TaskContext | undefined;
+
   try {
     let specSource = options.spec;
     if (!specSource) {
@@ -233,6 +262,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
     }
     const spec = await loadSpec(specSource);
 
+    // Initialize context after spec loaded
+    context = { spec, results: [] };
+
+    // Skip telemetry in dry-run mode
     if (options.dryRun) {
       console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
       console.log("");
@@ -321,11 +354,40 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
     const maxRetries = Math.max(0, parseInt(options.maxRetries, 10) || 0);
 
-    const context: TaskContext = { spec, results: [] };
     const agentOptions = { autoApprove };
-    const tracker = new UsageTracker();
+
+    // Emit pipeline.start
+    try {
+      chesstrace.emit(Events.PIPELINE_START, {
+        spec: {
+          source: spec.source,
+          title: spec.title,
+        },
+        options: {
+          autoApprove,
+          skipClarification,
+          maxRetries,
+          securityThreshold: options.securityThreshold,
+          insecure: options.insecure,
+        },
+      });
+    } catch {
+      // Swallow emit errors
+    }
 
     for (const stage of PIPELINE) {
+      const stageStartTime = Date.now();
+
+      // Emit pipeline.stage.start
+      try {
+        chesstrace.emit(Events.PIPELINE_STAGE_START, {
+          stage: stage.name,
+          description: stage.description,
+        });
+      } catch {
+        // Swallow emit errors
+      }
+
       if (stage.name === "plan") {
         const status = createLiveStatus("running planner...");
 
@@ -412,6 +474,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: true,
           output: JSON.stringify(plan),
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
         continue;
       }
 
@@ -453,6 +517,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: devSuccess && qeSuccess,
           output: JSON.stringify(impl),
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, devSuccess && qeSuccess);
         continue;
       }
 
@@ -480,10 +546,23 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: gateResult.output,
           });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
           continue;
         }
 
         unitStatus.fail(chalk.red("Unit tests FAILED"));
+
+        // If no retries configured, emit failure and exit
+        if (maxRetries === 0) {
+          context.results.push({
+            stage: stage.name,
+            success: false,
+            output: gateResult.output,
+          });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+          console.log(chalk.red.bold("\nunit tests failed with 0 retries configured. Exiting."));
+          process.exit(1);
+        }
 
         // Retry loop — dev agent only for unit test failures
         gateResult = await retryGate({
@@ -503,6 +582,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: gateResult.passed,
           output: gateResult.output,
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed);
         continue;
       }
 
@@ -530,11 +611,24 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: gateResult.output,
           });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
           continue;
         }
 
         funcStatus.fail(chalk.red("Functional tests FAILED"));
         console.log(gateResult.output);
+
+        // If no retries configured, emit failure and exit
+        if (maxRetries === 0) {
+          context.results.push({
+            stage: stage.name,
+            success: false,
+            output: gateResult.output,
+          });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+          console.log(chalk.red.bold("\nfunctional tests failed with 0 retries configured. Exiting."));
+          process.exit(1);
+        }
 
         // Retry loop — both dev + qe agents for functional test failures
         gateResult = await retryGate({
@@ -554,6 +648,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: gateResult.passed,
           output: gateResult.output,
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed);
         continue;
       }
 
@@ -588,6 +684,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: JSON.stringify(output),
           });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
           continue;
         }
 
@@ -597,6 +694,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: false,
           output: JSON.stringify(output),
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, false);
 
         if (autoApprove) {
           console.log(chalk.yellow("Auto-approved — bypassing security gate..."));
@@ -672,6 +771,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           success: true,
           output: JSON.stringify(prResult),
         });
+
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
         continue;
       }
 
@@ -702,6 +803,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(reviewOutput),
         });
 
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
         continue;
       }
 
@@ -712,6 +814,35 @@ export async function runCommand(options: RunOptions): Promise<void> {
       };
       console.log(chalk.gray(`[${stage.name}] skipped`));
       context.results.push(result);
+      emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+    }
+
+    // Emit pipeline.end
+    const allSuccess = context.results.every((r) => r.success);
+    try {
+      chesstrace.emit(Events.PIPELINE_END, {
+        success: allSuccess,
+        totalDurationMs: Date.now() - pipelineStartTime,
+        totalCost: tracker.getTotalCost(),
+        stageResults: context.results.map((r) => ({
+          stage: r.stage,
+          success: r.success,
+        })),
+      });
+    } catch {
+      // Swallow emit errors
+    }
+
+    // Flush and close telemetry
+    try {
+      await chesstrace.flush();
+    } catch {
+      // Swallow flush errors
+    }
+    try {
+      await chesstrace.close();
+    } catch {
+      // Swallow close errors
     }
 
     // Print usage summary after pipeline completes
@@ -720,6 +851,35 @@ export async function runCommand(options: RunOptions): Promise<void> {
       printVerboseUsage(tracker);
     }
   } catch (err) {
+    // Emit pipeline.end with failure status (if context exists)
+    try {
+      if (context) {
+        chesstrace.emit(Events.PIPELINE_END, {
+          success: false,
+          totalDurationMs: Date.now() - pipelineStartTime,
+          totalCost: tracker.getTotalCost(),
+          stageResults: context.results.map((r) => ({
+            stage: r.stage,
+            success: r.success,
+          })),
+        });
+      }
+    } catch {
+      // Swallow emit errors
+    }
+
+    // Flush and close telemetry even on error
+    try {
+      await chesstrace.flush();
+    } catch {
+      // Swallow flush errors
+    }
+    try {
+      await chesstrace.close();
+    } catch {
+      // Swallow close errors
+    }
+
     if (err instanceof Error && err.name === "ExitPromptError") {
       process.exit(0);
     }
