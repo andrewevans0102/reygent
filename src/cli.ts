@@ -88,7 +88,7 @@ program
 program
   .command("review-work")
   .description("Review current branch and post summary to PR/MR")
-  .option("--spec <source>", "Path to a markdown file, issue key, or Linear URL")
+  .option("--spec <source>", "Spec source with provider prefix (jira:KEY, linear:ID, markdown:FILE) — file paths auto-infer markdown:")
   .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .action(reviewWorkCommand);
 

@@ -20,6 +20,7 @@ import {
 } from "../pr-review.js";
 import type { PRReviewOutput, TaskContext } from "../task.js";
 import { TaskError } from "../task.js";
+import { parseSpecWithPrefix, SpecPrefixError } from "../spec-prefix.js";
 
 interface ReviewWorkOptions {
   spec?: string;
@@ -327,7 +328,8 @@ export async function reviewWorkCommand(
     if (options.spec) {
       const spinner = ora("Loading spec...").start();
       try {
-        const loaded = await loadSpec(options.spec);
+        const parsed = parseSpecWithPrefix(options.spec);
+        const loaded = await loadSpec(parsed.identifier, parsed.provider);
         spec = { title: loaded.title, content: loaded.content };
         spinner.succeed(chalk.green(`Spec loaded: ${loaded.title}`));
       } catch (err) {
@@ -467,7 +469,7 @@ export async function reviewWorkCommand(
     if (err instanceof Error && err.name === "ExitPromptError") {
       process.exit(0);
     }
-    if (err instanceof SpecError || err instanceof TaskError) {
+    if (err instanceof SpecError || err instanceof SpecPrefixError || err instanceof TaskError) {
       console.log(chalk.red.bold("Error:"), err.message);
       if (isDebug()) console.error(err.stack);
       process.exit(1);

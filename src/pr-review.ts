@@ -141,6 +141,8 @@ export function extractPRReviewOutput(stdout: string): PRReviewOutput {
 export function formatPRReviewOutput(output: PRReviewOutput): string {
   const lines: string[] = [];
 
+  lines.push("# 🐱 Reygent PR Review");
+  lines.push("");
   lines.push("## Summary");
   lines.push(output.summary);
   lines.push("");
