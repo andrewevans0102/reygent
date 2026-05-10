@@ -7,6 +7,7 @@ import type { TelemetryEvent } from './events.js';
 // Mock storage backend
 class MockBackend implements StorageBackend {
   public initCalled = false;
+  public initCallCount = 0;
   public writeCalls: TelemetryEvent[] = [];
   public writeBatchCalls: TelemetryEvent[][] = [];
   public flushCalls = 0;
@@ -15,12 +16,15 @@ class MockBackend implements StorageBackend {
   public listRunsCalls = 0;
   public pruneCalls: number[] = [];
   public shouldThrow = false;
+  public shouldThrowOnInit = false;
   public queryResults: TelemetryEvent[] = [];
   public runsResults: RunSummary[] = [];
   public pruneResult = 0;
 
   async init(): Promise<void> {
+    this.initCallCount++;
     this.initCalled = true;
+    if (this.shouldThrowOnInit) throw new Error('Mock init error');
   }
 
   async write(event: TelemetryEvent): Promise<void> {
@@ -44,6 +48,7 @@ class MockBackend implements StorageBackend {
   }
 
   async flush(): Promise<void> {
+    if (this.shouldThrow) throw new Error('Mock flush error');
     this.flushCalls++;
   }
 
@@ -53,6 +58,7 @@ class MockBackend implements StorageBackend {
   }
 
   async close(): Promise<void> {
+    if (this.shouldThrow) throw new Error('Mock close error');
     this.closeCalls++;
   }
 }
@@ -89,15 +95,17 @@ describe('Chesstrace', () => {
       expect(backend.initCalled).toBe(true);
     });
 
-    it('processes buffered events after init', async () => {
+    it('processes buffered events after init and startRun', async () => {
       const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
 
       // Emit before init
       chesstrace.emit(Events.COMMAND_START, { cmd: 'test' });
       expect(backend.writeBatchCalls.length).toBe(0);
 
-      // Init should flush buffer
+      // Init and startRun should process buffer
       await chesstrace.init(backend);
+      await chesstrace.startRun();
+      await chesstrace.flush();
       expect(backend.writeBatchCalls.length).toBe(1);
       expect(backend.writeBatchCalls[0].length).toBe(1);
       expect(backend.writeBatchCalls[0][0].event).toBe(Events.COMMAND_START);
@@ -111,6 +119,8 @@ describe('Chesstrace', () => {
       chesstrace.emit(Events.ERROR_UNHANDLED, { err: 'oops' });
 
       await chesstrace.init(backend);
+      await chesstrace.startRun();
+      await chesstrace.flush();
       expect(backend.writeBatchCalls.length).toBe(1);
       expect(backend.writeBatchCalls[0].length).toBe(3);
     });
@@ -119,7 +129,13 @@ describe('Chesstrace', () => {
       const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
       await chesstrace.init(backend);
       await chesstrace.init(backend);
-      expect(backend.initCalled).toBe(true);
+      expect(backend.initCallCount).toBe(1);
+    });
+
+    it('throws when backend.init fails', async () => {
+      const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
+      backend.shouldThrowOnInit = true;
+      await expect(chesstrace.init(backend)).rejects.toThrow('Mock init error');
     });
   });
 
@@ -250,6 +266,8 @@ describe('Chesstrace', () => {
       expect(backend.writeCalls.length).toBe(0);
 
       await chesstrace.init(backend);
+      await chesstrace.startRun();
+      await chesstrace.flush();
       expect(backend.writeBatchCalls.length).toBe(1);
     });
 
@@ -636,6 +654,55 @@ describe('error handling', () => {
     expect(backend.writeBatchCalls.length).toBe(1);
     expect(backend.writeBatchCalls[0][0].event).toBe(Events.COMMAND_END);
   });
+
+  it('calls onError callback on writeBatch failure', async () => {
+    const errors: Array<{ err: unknown; op: string }> = [];
+    const chesstrace = new Chesstrace({
+      level: TelemetryLevel.minimal,
+      onError: (err, op) => errors.push({ err, op }),
+    });
+    await chesstrace.init(backend);
+    await chesstrace.startRun();
+
+    backend.shouldThrow = true;
+    chesstrace.emit(Events.COMMAND_START, { cmd: 'test' });
+    await chesstrace.flush();
+
+    expect(errors.length).toBe(2); // writeBatch + flush both throw
+    expect(errors[0].op).toBe('writeBatch');
+    expect((errors[0].err as Error).message).toBe('Mock writeBatch error');
+    expect(errors[1].op).toBe('flush');
+  });
+
+  it('calls onError callback on flush failure', async () => {
+    const errors: Array<{ err: unknown; op: string }> = [];
+    const chesstrace = new Chesstrace({
+      level: TelemetryLevel.minimal,
+      onError: (err, op) => errors.push({ err, op }),
+    });
+    backend.shouldThrow = true;
+    await chesstrace.init(backend);
+    await chesstrace.startRun();
+
+    await chesstrace.flush();
+
+    expect(errors.length).toBe(1);
+    expect(errors[0].op).toBe('flush');
+  });
+
+  it('calls onError callback on close failure', async () => {
+    const errors: Array<{ err: unknown; op: string }> = [];
+    const chesstrace = new Chesstrace({
+      level: TelemetryLevel.minimal,
+      onError: (err, op) => errors.push({ err, op }),
+    });
+    await chesstrace.init(backend);
+
+    backend.shouldThrow = true;
+    await chesstrace.close();
+
+    expect(errors.some((e) => e.op === 'close')).toBe(true);
+  });
 });
 
 describe('integration scenarios', () => {
@@ -693,13 +760,12 @@ describe('integration scenarios', () => {
     await chesstrace.init(backend);
     await chesstrace.startRun();
 
-    // After init
+    // After startRun
     chesstrace.emit(Events.COMMAND_START, { cmd: 'late' });
     await chesstrace.flush();
 
-    // Should have buffered events + new event
-    expect(backend.writeBatchCalls.length).toBe(2);
-    expect(backend.writeBatchCalls[0].length).toBe(2); // buffered
-    expect(backend.writeBatchCalls[1].length).toBe(1); // new
+    // Should have buffered events + new event in single batch
+    expect(backend.writeBatchCalls.length).toBe(1);
+    expect(backend.writeBatchCalls[0].length).toBe(3);
   });
 });

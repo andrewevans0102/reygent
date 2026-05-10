@@ -13,9 +13,9 @@ export interface TelemetryConfig {
   level: TelemetryLevel;
 
   /**
-   * Whether telemetry system is active
+   * Optional callback for swallowed errors (for debugging)
    */
-  enabled: boolean;
+  onError?: (err: unknown, operation: string) => void;
 }
 
 /**
@@ -46,38 +46,6 @@ export class Chesstrace {
     this.initPromise = (async () => {
       this.backend = backend;
       await backend.init();
-
-      // Auto-start run if not already started
-      if (!this.currentRunId) {
-        this.currentRunId = randomUUID();
-      }
-
-      // Process buffered raw events (emitted before init)
-      const rawBuffered = this.rawEventBuffer.splice(0);
-      if (rawBuffered.length > 0) {
-        const events: TelemetryEvent[] = [];
-        for (const { event, data } of rawBuffered) {
-          const minLevel = EVENT_LEVELS[event];
-          if (minLevel !== undefined && minLevel <= this.config.level) {
-            events.push({
-              id: randomUUID(),
-              runId: this.currentRunId!,
-              timestamp: Date.now(),
-              category: categoryFromEvent(event),
-              event,
-              minLevel,
-              data,
-            });
-          }
-        }
-        if (events.length > 0) {
-          try {
-            await backend.writeBatch(events);
-          } catch (err) {
-            // Swallow write errors
-          }
-        }
-      }
     })();
 
     return this.initPromise;
@@ -88,6 +56,30 @@ export class Chesstrace {
    */
   async startRun(): Promise<string> {
     this.currentRunId = randomUUID();
+
+    // Process buffered raw events (emitted before startRun)
+    const rawBuffered = this.rawEventBuffer.splice(0);
+    if (rawBuffered.length > 0 && this.backend) {
+      const events: TelemetryEvent[] = [];
+      for (const { event, data } of rawBuffered) {
+        const minLevel = EVENT_LEVELS[event];
+        if (minLevel !== undefined && minLevel <= this.config.level) {
+          events.push({
+            id: randomUUID(),
+            runId: this.currentRunId,
+            timestamp: Date.now(),
+            category: categoryFromEvent(event),
+            event,
+            minLevel,
+            data,
+          });
+        }
+      }
+      if (events.length > 0) {
+        this.eventBuffer.push(...events);
+      }
+    }
+
     return this.currentRunId;
   }
 
@@ -95,8 +87,11 @@ export class Chesstrace {
    * Emit telemetry event with level filtering
    */
   emit(event: string, data: Record<string, unknown> = {}): void {
-    // Buffer raw events before init
-    if (!this.backend) {
+    // Reset flushed flag when new events arrive
+    this.flushed = false;
+
+    // Buffer raw events before init or before startRun
+    if (!this.backend || !this.currentRunId) {
       this.rawEventBuffer.push({ event, data });
       return;
     }
@@ -104,10 +99,6 @@ export class Chesstrace {
     // Filter by level
     const minLevel = EVENT_LEVELS[event];
     if (minLevel === undefined || minLevel > this.config.level) {
-      return;
-    }
-
-    if (!this.currentRunId) {
       return;
     }
 
@@ -122,7 +113,6 @@ export class Chesstrace {
     };
 
     this.eventBuffer.push(telemetryEvent);
-    this.flushed = false;
   }
 
   /**
@@ -138,14 +128,14 @@ export class Chesstrace {
       try {
         await this.backend.writeBatch(buffered);
       } catch (err) {
-        // Swallow flush errors
+        this.config.onError?.(err, 'writeBatch');
       }
     }
 
     try {
       await this.backend.flush();
     } catch (err) {
-      // Swallow flush errors
+      this.config.onError?.(err, 'flush');
     }
 
     this.flushed = true;
@@ -213,7 +203,7 @@ export class Chesstrace {
       try {
         await this.backend.close();
       } catch (err) {
-        // Swallow close errors
+        this.config.onError?.(err, 'close');
       }
     }
 
@@ -236,7 +226,7 @@ let instance: Chesstrace | null = null;
  */
 export function getChesstrace(): Chesstrace {
   if (!instance) {
-    instance = new Chesstrace({ level: 0, enabled: false });
+    instance = new Chesstrace({ level: 0 });
   }
   return instance;
 }
