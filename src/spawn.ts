@@ -3,6 +3,8 @@ import { resolveModel, resolveProvider } from "./model.js";
 import { TaskError } from "./task.js";
 import type { ActivityEvent } from "./providers/types.js";
 import type { UsageInfo } from "./usage.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 export interface SpawnResult {
   stdout: string;
@@ -17,6 +19,7 @@ export interface SpawnOptions {
   model?: string;
   systemPrompt?: string;
   onActivity?: (event: ActivityEvent) => void;
+  stage?: string;
 }
 
 /**
@@ -40,14 +43,74 @@ export async function spawnAgentStream(
 
   const modelId = options?.model ?? await resolveModel(providerName);
 
-  return adapter.spawn({
-    prompt,
-    systemPrompt: options?.systemPrompt,
+  const chesstrace = getChesstrace();
+  const startTime = Date.now();
+
+  // Emit agent.spawn event before spawning
+  chesstrace.emit(Events.AGENT_SPAWN, {
+    agent: name,
+    provider: providerName,
     model: modelId,
-    autoApprove: options?.autoApprove,
-    quiet: options?.quiet,
-    timeoutMs,
-    agentName: name,
-    onActivity: options?.onActivity,
+    stage: options?.stage,
   });
+
+  // Track timeout state to prevent duplicate events
+  let timedOut = false;
+
+  // Setup timeout handler
+  const timeoutHandle = setTimeout(() => {
+    timedOut = true;
+    chesstrace.emit(Events.AGENT_TIMEOUT, {
+      agent: name,
+      stage: options?.stage,
+      timeoutMs,
+    });
+  }, timeoutMs);
+
+  try {
+    const result = await adapter.spawn({
+      prompt,
+      systemPrompt: options?.systemPrompt,
+      model: modelId,
+      autoApprove: options?.autoApprove,
+      quiet: options?.quiet,
+      timeoutMs,
+      agentName: name,
+      onActivity: options?.onActivity,
+    });
+
+    // Clear timeout immediately after spawn completes
+    clearTimeout(timeoutHandle);
+
+    // Only emit complete if timeout didn't fire
+    if (!timedOut) {
+      const duration = Date.now() - startTime;
+      chesstrace.emit(Events.AGENT_COMPLETE, {
+        agent: name,
+        stage: options?.stage,
+        exitCode: result.exitCode,
+        duration,
+        success: result.exitCode === 0,
+      });
+    }
+
+    return result;
+  } catch (err) {
+    // Clear timeout immediately
+    clearTimeout(timeoutHandle);
+
+    // Only emit complete if timeout didn't fire
+    if (!timedOut) {
+      const duration = Date.now() - startTime;
+      chesstrace.emit(Events.AGENT_COMPLETE, {
+        agent: name,
+        stage: options?.stage,
+        exitCode: -1,
+        duration,
+        success: false,
+      });
+    }
+
+    throw err;
+  }
 }

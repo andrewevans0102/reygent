@@ -47,6 +47,12 @@ export const Events = {
   AGENT_END: 'agent.end',
   AGENT_ERROR: 'agent.error',
   AGENT_TOOL_CALL: 'agent.tool_call',
+  /** Emitted when agent spawn begins - { agent, provider, model, stage? } */
+  AGENT_SPAWN: 'agent.spawn',
+  /** Emitted when agent spawn completes or errors - { agent, stage?, exitCode, duration, success } */
+  AGENT_COMPLETE: 'agent.complete',
+  /** Emitted when agent spawn exceeds timeout - { agent, stage?, timeoutMs } */
+  AGENT_TIMEOUT: 'agent.timeout',
 
   // LLM events (verbose level)
   LLM_REQUEST: 'llm.request',
@@ -94,6 +100,9 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   [Events.AGENT_END]: TelemetryLevel.standard,
   [Events.AGENT_ERROR]: TelemetryLevel.standard,
   [Events.AGENT_TOOL_CALL]: TelemetryLevel.standard,
+  [Events.AGENT_SPAWN]: TelemetryLevel.standard,
+  [Events.AGENT_COMPLETE]: TelemetryLevel.standard,
+  [Events.AGENT_TIMEOUT]: TelemetryLevel.standard,
 
   // LLM events - verbose
   [Events.LLM_REQUEST]: TelemetryLevel.verbose,

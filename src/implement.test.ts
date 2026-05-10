@@ -242,7 +242,7 @@ describe("runImplement", () => {
       "dev",
       expect.any(String),
       15 * 60 * 1000,
-      { autoApprove: true },
+      { autoApprove: true, provider: undefined, model: undefined, stage: "implement" },
     );
     expect(result.implement.dev).toEqual({ files: ["src/fix.ts"] });
     expect(result.implement.qe).toBeNull();
