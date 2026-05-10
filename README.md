@@ -177,6 +177,40 @@ Requires corresponding API keys in `.env` for tracker sources. See [Commands Ref
 
 Reygent searches upward from the current directory to find `.reygent/`, so you can run commands from any subdirectory.
 
+## Telemetry
+
+Reygent includes opt-in telemetry to help improve the tool. On first run, you'll be prompted to enable or disable telemetry. Your choice is stored in `.reygent/config.json`.
+
+**Configuration:**
+
+```json
+{
+  "telemetry": {
+    "enabled": true,
+    "level": "standard",
+    "backend": "sqlite",
+    "retention": 30
+  }
+}
+```
+
+**Telemetry Levels:**
+
+| Level | What's captured | When to use |
+|---|---|---|
+| `minimal` | Only critical events (errors, warnings) | CI environments, production deployments, or when bandwidth/storage is limited |
+| `standard` | Normal usage events including commands, success/failure outcomes | Interactive development and typical debugging workflows (default) |
+| `verbose` | Detailed diagnostic events including timing, internal state transitions, API calls | Troubleshooting specific issues or developing Reygent itself |
+
+**Fields:**
+
+- `enabled` — `true` (opted in), `false` (opted out), or `undefined` (prompts on first run)
+- `level` — Capture level: `minimal`, `standard`, or `verbose`
+- `backend` — Storage backend (currently only `sqlite` supported)
+- `retention` — Number of days to retain telemetry data (must be positive integer)
+
+**Privacy:** Telemetry data is stored locally in `.reygent/` and never transmitted to external servers. You can disable telemetry at any time by setting `enabled: false` in your config.
+
 ## Documentation
 
 | Document | Description |

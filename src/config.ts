@@ -69,6 +69,8 @@ export function loadConfig(): ReygentConfig {
         skills: config.skills ?? {},
         model: config.model,
         provider: config.provider,
+        // Apply default telemetry config when local config lacks telemetry field.
+        // This preserves partial configs — existing local config.json without telemetry field gets defaults.
         telemetry: config.telemetry ?? DEFAULT_TELEMETRY_CONFIG,
       };
     } catch (err) {
@@ -90,6 +92,8 @@ export function loadConfig(): ReygentConfig {
         skills: config.skills ?? {},
         model: config.model,
         provider: config.provider,
+        // Apply default telemetry config when global config lacks telemetry field.
+        // This preserves partial configs — existing global config.json without telemetry field gets defaults.
         telemetry: config.telemetry ?? DEFAULT_TELEMETRY_CONFIG,
       };
     } catch (err) {

@@ -247,7 +247,8 @@ describe("Config telemetry integration", () => {
       expect(config.telemetry?.retention).toBe(120);
     });
 
-    it("global config provides telemetry when no local config", () => {
+    it("global config provides telemetry when no local .reygent directory exists", () => {
+      // Mock returns true only for global config.json, false for all local .reygent paths
       mockExistsSync.mockImplementation((p) => {
         const path = String(p);
         return path.endsWith(".reygent/config.json") && path.includes(require("os").homedir());
@@ -276,6 +277,53 @@ describe("Config telemetry integration", () => {
       const config = loadConfig();
       expect(config.telemetry).toEqual(DEFAULT_TELEMETRY_CONFIG);
       expect(config.model).toBe("claude-opus-4-6");
+    });
+
+    it("verifies full precedence chain: local > global > default for telemetry field", () => {
+      // Scenario 1: Local config with telemetry overrides global
+      mockExistsSync.mockImplementation((p) => String(p).includes(".reygent"));
+      mockReadFileSync.mockImplementation((p) => {
+        const path = String(p);
+        if (path.includes(".reygent/config.json") && !path.includes(require("os").homedir())) {
+          // Local config
+          return JSON.stringify({
+            telemetry: { enabled: true, level: "verbose", backend: "sqlite", retention: 90 },
+          });
+        }
+        // Global config (should be ignored)
+        return JSON.stringify({
+          telemetry: { enabled: false, level: "minimal", backend: "sqlite", retention: 7 },
+        });
+      });
+
+      const configLocalWins = loadConfig();
+      expect(configLocalWins.telemetry?.enabled).toBe(true);
+      expect(configLocalWins.telemetry?.level).toBe("verbose");
+      expect(configLocalWins.telemetry?.retention).toBe(90);
+
+      // Scenario 2: No local config, global config provides telemetry
+      mockExistsSync.mockImplementation((p) => {
+        const path = String(p);
+        // Only global config exists
+        return path.endsWith(".reygent/config.json") && path.includes(require("os").homedir());
+      });
+      mockReadFileSync.mockReturnValue(JSON.stringify({
+        telemetry: { enabled: false, level: "minimal", backend: "sqlite", retention: 14 },
+      }));
+
+      const configGlobalWins = loadConfig();
+      expect(configGlobalWins.telemetry?.enabled).toBe(false);
+      expect(configGlobalWins.telemetry?.level).toBe("minimal");
+      expect(configGlobalWins.telemetry?.retention).toBe(14);
+
+      // Scenario 3: No local, no global, defaults apply
+      mockExistsSync.mockReturnValue(false);
+
+      const configDefaultWins = loadConfig();
+      expect(configDefaultWins.telemetry).toEqual(DEFAULT_TELEMETRY_CONFIG);
+      expect(configDefaultWins.telemetry?.enabled).toBeUndefined();
+      expect(configDefaultWins.telemetry?.level).toBe("standard");
+      expect(configDefaultWins.telemetry?.retention).toBe(30);
     });
   });
 

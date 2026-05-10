@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 /**
  * Telemetry level enumeration
- * - minimal: Only critical events (errors, warnings)
- * - standard: Normal usage events
- * - verbose: Detailed diagnostic events
+ * - minimal: Only critical events (errors, warnings). Use in CI environments or production deployments where bandwidth/storage is limited.
+ * - standard: Normal usage events including commands, success/failure outcomes. Use for interactive development and typical debugging workflows.
+ * - verbose: Detailed diagnostic events including timing, internal state transitions, API calls. Use when troubleshooting specific issues or developing Reygent itself.
  */
 export type TelemetryConfigLevel = 'minimal' | 'standard' | 'verbose';
 

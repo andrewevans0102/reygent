@@ -54,6 +54,12 @@ describe('TelemetryUserConfigSchema', () => {
     };
     const result = TelemetryUserConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
+    if (!result.success) {
+      const levelError = result.error.issues.find((issue) => issue.path.includes('level'));
+      expect(levelError).toBeDefined();
+      expect(levelError?.code).toBe('invalid_value');
+      expect(levelError?.message).toMatch(/minimal|standard|verbose/);
+    }
   });
 
   it('rejects invalid backend', () => {
@@ -65,6 +71,12 @@ describe('TelemetryUserConfigSchema', () => {
     };
     const result = TelemetryUserConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
+    if (!result.success) {
+      const backendError = result.error.issues.find((issue) => issue.path.includes('backend'));
+      expect(backendError).toBeDefined();
+      expect(backendError?.code).toBe('invalid_value');
+      expect(backendError?.message).toMatch(/sqlite/);
+    }
   });
 
   it('rejects zero retention', () => {
@@ -76,6 +88,12 @@ describe('TelemetryUserConfigSchema', () => {
     };
     const result = TelemetryUserConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
+    if (!result.success) {
+      const retentionError = result.error.issues.find((issue) => issue.path.includes('retention'));
+      expect(retentionError).toBeDefined();
+      expect(retentionError?.code).toBe('too_small');
+      expect(retentionError?.message).toMatch(/>0|positive/);
+    }
   });
 
   it('rejects negative retention', () => {
@@ -109,6 +127,12 @@ describe('TelemetryUserConfigSchema', () => {
     };
     const result = TelemetryUserConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
+    if (!result.success) {
+      const enabledError = result.error.issues.find((issue) => issue.path.includes('enabled'));
+      expect(enabledError).toBeDefined();
+      expect(enabledError?.code).toBe('invalid_type');
+      expect(enabledError?.message).toContain('boolean');
+    }
   });
 });
 
