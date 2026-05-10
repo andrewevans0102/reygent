@@ -266,14 +266,26 @@ describe("spawn telemetry", () => {
     });
 
     it("does not emit timeout when spawn completes normally", async () => {
+      vi.useFakeTimers();
+
       mockSpawn.mockResolvedValue({ stdout: "done", exitCode: 0 });
 
-      await spawnAgentStream("dev", "do stuff", 30_000);
+      const promise = spawnAgentStream("dev", "do stuff", 30_000);
+
+      // Advance time but not past timeout
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await promise;
+
+      // Advance past timeout to verify it was cleared
+      await vi.advanceTimersByTimeAsync(30_000);
 
       const timeoutCalls = mockEmit.mock.calls.filter(
         (call) => call[0] === "agent.timeout",
       );
       expect(timeoutCalls.length).toBe(0);
+
+      vi.useRealTimers();
     });
   });
 

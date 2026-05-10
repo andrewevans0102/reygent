@@ -54,8 +54,12 @@ export async function spawnAgentStream(
     stage: options?.stage,
   });
 
+  // Track timeout state to prevent duplicate events
+  let timedOut = false;
+
   // Setup timeout handler
   const timeoutHandle = setTimeout(() => {
+    timedOut = true;
     chesstrace.emit(Events.AGENT_TIMEOUT, {
       agent: name,
       stage: options?.stage,
@@ -75,29 +79,38 @@ export async function spawnAgentStream(
       onActivity: options?.onActivity,
     });
 
+    // Clear timeout immediately after spawn completes
     clearTimeout(timeoutHandle);
 
-    // Emit agent.complete event after spawn returns
-    const duration = Date.now() - startTime;
-    chesstrace.emit(Events.AGENT_COMPLETE, {
-      agent: name,
-      stage: options?.stage,
-      exitCode: result.exitCode,
-      duration,
-      success: result.exitCode === 0,
-    });
+    // Only emit complete if timeout didn't fire
+    if (!timedOut) {
+      const duration = Date.now() - startTime;
+      chesstrace.emit(Events.AGENT_COMPLETE, {
+        agent: name,
+        stage: options?.stage,
+        exitCode: result.exitCode,
+        duration,
+        success: result.exitCode === 0,
+      });
+    }
 
     return result;
   } catch (err) {
+    // Clear timeout immediately
     clearTimeout(timeoutHandle);
-    const duration = Date.now() - startTime;
-    chesstrace.emit(Events.AGENT_COMPLETE, {
-      agent: name,
-      stage: options?.stage,
-      exitCode: -1,
-      duration,
-      success: false,
-    });
+
+    // Only emit complete if timeout didn't fire
+    if (!timedOut) {
+      const duration = Date.now() - startTime;
+      chesstrace.emit(Events.AGENT_COMPLETE, {
+        agent: name,
+        stage: options?.stage,
+        exitCode: -1,
+        duration,
+        success: false,
+      });
+    }
+
     throw err;
   }
 }

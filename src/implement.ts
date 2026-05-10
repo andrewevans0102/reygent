@@ -18,6 +18,12 @@ export type { SpawnResult };
 
 const AGENT_TIMEOUT_MS = 15 * 60 * 1000;
 
+/**
+ * Options for spawning agents via spawnAgent() wrapper.
+ * This interface mirrors SpawnOptions from spawn.ts and adds semantic clarity
+ * for callers in the implement module. Changes to SpawnOptions should be
+ * reflected here to maintain compatibility.
+ */
 export interface AgentSpawnOptions {
   autoApprove?: boolean;
   quiet?: boolean;

@@ -47,8 +47,11 @@ export const Events = {
   AGENT_END: 'agent.end',
   AGENT_ERROR: 'agent.error',
   AGENT_TOOL_CALL: 'agent.tool_call',
+  /** Emitted when agent spawn begins - { agent, provider, model, stage? } */
   AGENT_SPAWN: 'agent.spawn',
+  /** Emitted when agent spawn completes or errors - { agent, stage?, exitCode, duration, success } */
   AGENT_COMPLETE: 'agent.complete',
+  /** Emitted when agent spawn exceeds timeout - { agent, stage?, timeoutMs } */
   AGENT_TIMEOUT: 'agent.timeout',
 
   // LLM events (verbose level)
