@@ -41,6 +41,16 @@ describe("loadConfig", () => {
     expect(config.skills).toEqual({});
   });
 
+  it("returns default telemetry config when no local config", () => {
+    const config = loadConfig();
+    expect(config.telemetry).toEqual({
+      enabled: undefined,
+      level: 'standard',
+      backend: 'sqlite',
+      retention: 30,
+    });
+  });
+
   it("loads local config when found", () => {
     mockExistsSync.mockImplementation((p) => {
       return String(p).includes(".reygent");
@@ -64,6 +74,45 @@ describe("loadConfig", () => {
 
     const config = loadConfig();
     expect(config.agents).toEqual(builtinAgents);
+  });
+
+  it("loads custom telemetry config when provided", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        enabled: true,
+        level: 'verbose',
+        backend: 'sqlite',
+        retention: 90,
+      },
+    }));
+
+    const config = loadConfig();
+    expect(config.telemetry).toEqual({
+      enabled: true,
+      level: 'verbose',
+      backend: 'sqlite',
+      retention: 90,
+    });
+  });
+
+  it("applies default telemetry when config has no telemetry field", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      agents: [{ name: "custom", description: "d", systemPrompt: "s", tools: ["read"], role: "dev" }],
+    }));
+
+    const config = loadConfig();
+    expect(config.telemetry).toEqual({
+      enabled: undefined,
+      level: 'standard',
+      backend: 'sqlite',
+      retention: 30,
+    });
   });
 
   it("throws on invalid JSON", () => {
@@ -103,6 +152,12 @@ describe("loadConfig", () => {
     expect(config.provider).toBe("gemini");
     expect(config.model).toBe("gemini-2.5-pro");
     expect(config.agents).toEqual(builtinAgents);
+    expect(config.telemetry).toEqual({
+      enabled: undefined,
+      level: 'standard',
+      backend: 'sqlite',
+      retention: 30,
+    });
   });
 
   it("local config takes precedence over global config", () => {
@@ -126,6 +181,203 @@ describe("loadConfig", () => {
     mockReadFileSync.mockReturnValue("invalid json{");
 
     expect(() => loadConfig()).toThrow(/failed to parse global config/i);
+  });
+
+  it("validates telemetry schema and rejects invalid config", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        enabled: true,
+        level: 'invalid-level',
+        backend: 'sqlite',
+        retention: 30,
+      },
+    }));
+
+    expect(() => loadConfig()).toThrow();
+  });
+
+  it("loads telemetry with enabled false from local config", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        enabled: false,
+        level: 'minimal',
+        backend: 'sqlite',
+        retention: 7,
+      },
+    }));
+
+    const config = loadConfig();
+    expect(config.telemetry?.enabled).toBe(false);
+    expect(config.telemetry?.level).toBe('minimal');
+    expect(config.telemetry?.retention).toBe(7);
+  });
+
+  it("distinguishes telemetry enabled undefined vs false", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        level: 'standard',
+        backend: 'sqlite',
+        retention: 30,
+      },
+    }));
+    const configUndefined = loadConfig();
+
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        enabled: false,
+        level: 'standard',
+        backend: 'sqlite',
+        retention: 30,
+      },
+    }));
+    const configFalse = loadConfig();
+
+    expect(configUndefined.telemetry?.enabled).toBeUndefined();
+    expect(configFalse.telemetry?.enabled).toBe(false);
+    expect(configUndefined.telemetry?.enabled === configFalse.telemetry?.enabled).toBe(false);
+  });
+
+  it("loads telemetry from global config with all fields", () => {
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      return path.endsWith(".reygent/config.json") && path.includes(require("os").homedir());
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        enabled: true,
+        level: 'verbose',
+        backend: 'sqlite',
+        retention: 14,
+      },
+    }));
+
+    const config = loadConfig();
+    expect(config.telemetry?.enabled).toBe(true);
+    expect(config.telemetry?.level).toBe('verbose');
+    expect(config.telemetry?.retention).toBe(14);
+  });
+
+  it("rejects telemetry with invalid backend", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        level: 'standard',
+        backend: 'postgres',
+        retention: 30,
+      },
+    }));
+
+    expect(() => loadConfig()).toThrow();
+  });
+
+  it("rejects telemetry with negative retention", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        level: 'standard',
+        backend: 'sqlite',
+        retention: -10,
+      },
+    }));
+
+    expect(() => loadConfig()).toThrow();
+  });
+
+  it("rejects telemetry with zero retention", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        level: 'standard',
+        backend: 'sqlite',
+        retention: 0,
+      },
+    }));
+
+    expect(() => loadConfig()).toThrow();
+  });
+
+  it("accepts telemetry with retention 1 day", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        level: 'minimal',
+        backend: 'sqlite',
+        retention: 1,
+      },
+    }));
+
+    const config = loadConfig();
+    expect(config.telemetry?.retention).toBe(1);
+  });
+
+  it("accepts telemetry with large retention value", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        enabled: true,
+        level: 'verbose',
+        backend: 'sqlite',
+        retention: 365,
+      },
+    }));
+
+    const config = loadConfig();
+    expect(config.telemetry?.retention).toBe(365);
+  });
+
+  it("loads all three telemetry levels correctly", () => {
+    mockExistsSync.mockImplementation((p) => {
+      return String(p).includes(".reygent");
+    });
+
+    const levels = ['minimal', 'standard', 'verbose'] as const;
+    for (const level of levels) {
+      mockReadFileSync.mockReturnValue(JSON.stringify({
+        telemetry: {
+          level,
+          backend: 'sqlite',
+          retention: 30,
+        },
+      }));
+      const config = loadConfig();
+      expect(config.telemetry?.level).toBe(level);
+    }
+  });
+
+  it("local telemetry config takes precedence over global", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      telemetry: {
+        enabled: true,
+        level: 'verbose',
+        backend: 'sqlite',
+        retention: 90,
+      },
+    }));
+
+    const config = loadConfig();
+    expect(config.telemetry?.level).toBe('verbose');
+    expect(config.telemetry?.retention).toBe(90);
   });
 });
 
