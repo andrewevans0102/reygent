@@ -3,7 +3,14 @@ import type { Chesstrace } from "../chesstrace/index.js";
 
 // Mock all external dependencies
 vi.mock("@inquirer/prompts", () => ({ select: vi.fn() }));
-vi.mock("../config.js", () => ({ getAgents: vi.fn(() => []) }));
+vi.mock("../config.js", () => ({
+  getAgents: vi.fn(() => []),
+  loadConfig: vi.fn(() => ({
+    agents: [],
+    skills: {},
+    telemetry: { enabled: true, level: "standard", backend: "sqlite", retention: 30 },
+  })),
+}));
 vi.mock("../spawn.js", () => ({ spawnAgentStream: vi.fn() }));
 vi.mock("../spec.js", () => ({
   loadSpec: vi.fn(),
@@ -52,6 +59,12 @@ vi.mock("../usage.js", () => ({
 vi.mock("../chesstrace/index.js", () => ({
   getChesstrace: vi.fn(),
   resetChesstrace: vi.fn(),
+}));
+vi.mock("../chesstrace/backends/sqlite.js", () => ({
+  SqliteBackend: vi.fn(() => ({
+    init: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 import { loadSpec } from "../spec.js";
@@ -724,6 +737,64 @@ describe("run command - Chesstrace instrumentation", () => {
         success: false,
         totalCost: 0, // No usage tracked yet
       });
+    });
+  });
+
+  describe("telemetry opt-out", () => {
+    it("does not initialize or use chesstrace when telemetry.enabled=false", async () => {
+      // Import and mock loadConfig to return disabled telemetry
+      const { loadConfig } = await import("../config.js");
+      vi.mocked(loadConfig).mockReturnValue({
+        agents: [],
+        skills: {},
+        telemetry: { enabled: false, level: "standard", backend: "sqlite", retention: 30 },
+      });
+
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "0",
+        verbose: false,
+      });
+
+      // Verify chesstrace methods were NEVER called when disabled
+      expect(mockChesstrace.init).not.toHaveBeenCalled();
+      expect(mockChesstrace.startRun).not.toHaveBeenCalled();
+      expect(mockChesstrace.emit).not.toHaveBeenCalled();
+      expect(mockChesstrace.flush).not.toHaveBeenCalled();
+      expect(mockChesstrace.close).not.toHaveBeenCalled();
+    });
+
+    it("does not initialize or use chesstrace when telemetry.enabled=undefined", async () => {
+      // Import and mock loadConfig to return undefined enabled
+      const { loadConfig } = await import("../config.js");
+      vi.mocked(loadConfig).mockReturnValue({
+        agents: [],
+        skills: {},
+        telemetry: { enabled: undefined, level: "standard", backend: "sqlite", retention: 30 },
+      });
+
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "0",
+        verbose: false,
+      });
+
+      // Verify chesstrace methods were NEVER called when disabled
+      expect(mockChesstrace.init).not.toHaveBeenCalled();
+      expect(mockChesstrace.startRun).not.toHaveBeenCalled();
+      expect(mockChesstrace.emit).not.toHaveBeenCalled();
+      expect(mockChesstrace.flush).not.toHaveBeenCalled();
+      expect(mockChesstrace.close).not.toHaveBeenCalled();
     });
   });
 });

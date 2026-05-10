@@ -21,7 +21,10 @@ import { PIPELINE, TaskError } from "../task.js";
 import type { Severity, StageResult, TaskContext, PlannerOutput } from "../task.js";
 import { UsageTracker, printUsageSummary, printVerboseUsage } from "../usage.js";
 import { getChesstrace } from "../chesstrace/index.js";
-import { Events } from "../chesstrace/events.js";
+import type { Chesstrace } from "../chesstrace/index.js";
+import { Events, TelemetryLevel } from "../chesstrace/events.js";
+import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
+import { loadConfig } from "../config.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -29,12 +32,13 @@ const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
  * Emit stage.end event with duration and success status
  */
 function emitStageEnd(
-  chesstrace: ReturnType<typeof getChesstrace>,
+  chesstrace: Chesstrace | null,
   stageName: string,
   stageStartTime: number,
   success: boolean,
   metadata?: { cost?: number; outputSummary?: string },
 ): void {
+  if (!chesstrace) return;
   try {
     chesstrace.emit(Events.PIPELINE_STAGE_END, {
       stage: stageName,
@@ -245,12 +249,33 @@ async function promptForSpec(): Promise<string> {
 }
 
 export async function runCommand(options: RunOptions): Promise<void> {
-  const chesstrace = getChesstrace();
   const pipelineStartTime = Date.now();
 
   // Initialize tracker and context early for error handling
   const tracker = new UsageTracker();
   let context: TaskContext | undefined;
+
+  // Load config and check if telemetry is enabled
+  const config = loadConfig();
+  const telemetryEnabled = config.telemetry?.enabled === true;
+  let chesstrace: Chesstrace | null = null;
+
+  // Initialize telemetry backend only if enabled
+  if (telemetryEnabled) {
+    try {
+      const telemetryLevel = TelemetryLevel[config.telemetry?.level ?? 'standard'];
+      chesstrace = getChesstrace();
+      const backend = new SqliteBackend();
+      await chesstrace.init(backend);
+      await chesstrace.startRun();
+    } catch (err) {
+      // Telemetry init failed - continue without telemetry
+      if (isDebug()) {
+        console.error(chalk.gray("Telemetry init failed:"), err);
+      }
+      chesstrace = null;
+    }
+  }
 
   try {
     let specSource = options.spec;
@@ -358,35 +383,39 @@ export async function runCommand(options: RunOptions): Promise<void> {
     const agentOptions = { autoApprove };
 
     // Emit pipeline.start
-    try {
-      chesstrace.emit(Events.PIPELINE_START, {
-        spec: {
-          source: spec.source,
-          title: spec.title,
-        },
-        options: {
-          autoApprove,
-          skipClarification,
-          maxRetries,
-          securityThreshold: options.securityThreshold,
-          insecure: options.insecure,
-        },
-      });
-    } catch {
-      // Swallow emit errors
+    if (chesstrace) {
+      try {
+        chesstrace.emit(Events.PIPELINE_START, {
+          spec: {
+            source: spec.source,
+            title: spec.title,
+          },
+          options: {
+            autoApprove,
+            skipClarification,
+            maxRetries,
+            securityThreshold: options.securityThreshold,
+            insecure: options.insecure,
+          },
+        });
+      } catch {
+        // Swallow emit errors
+      }
     }
 
     for (const stage of PIPELINE) {
       const stageStartTime = Date.now();
 
       // Emit pipeline.stage.start
-      try {
-        chesstrace.emit(Events.PIPELINE_STAGE_START, {
-          stage: stage.name,
-          description: stage.description,
-        });
-      } catch {
-        // Swallow emit errors
+      if (chesstrace) {
+        try {
+          chesstrace.emit(Events.PIPELINE_STAGE_START, {
+            stage: stage.name,
+            description: stage.description,
+          });
+        } catch {
+          // Swallow emit errors
+        }
       }
 
       if (stage.name === "plan") {
@@ -818,26 +847,28 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
     // Emit pipeline.end
     const allSuccess = context.results.every((r) => r.success);
-    try {
-      chesstrace.emit(Events.PIPELINE_END, {
-        success: allSuccess,
-        totalDurationMs: Date.now() - pipelineStartTime,
-        totalCost: tracker.getTotalCost(),
-      });
-    } catch {
-      // Swallow emit errors
-    }
+    if (chesstrace) {
+      try {
+        chesstrace.emit(Events.PIPELINE_END, {
+          success: allSuccess,
+          totalDurationMs: Date.now() - pipelineStartTime,
+          totalCost: tracker.getTotalCost(),
+        });
+      } catch {
+        // Swallow emit errors
+      }
 
-    // Flush and close telemetry
-    try {
-      await chesstrace.flush();
-    } catch {
-      // Swallow flush errors
-    }
-    try {
-      await chesstrace.close();
-    } catch {
-      // Swallow close errors
+      // Flush and close telemetry
+      try {
+        await chesstrace.flush();
+      } catch {
+        // Swallow flush errors
+      }
+      try {
+        await chesstrace.close();
+      } catch {
+        // Swallow close errors
+      }
     }
 
     // Print usage summary after pipeline completes
@@ -847,28 +878,30 @@ export async function runCommand(options: RunOptions): Promise<void> {
     }
   } catch (err) {
     // Emit pipeline.end with failure status (if context exists)
-    try {
-      if (context) {
-        chesstrace.emit(Events.PIPELINE_END, {
-          success: false,
-          totalDurationMs: Date.now() - pipelineStartTime,
-          totalCost: tracker?.getTotalCost() ?? 0,
-        });
+    if (chesstrace) {
+      try {
+        if (context) {
+          chesstrace.emit(Events.PIPELINE_END, {
+            success: false,
+            totalDurationMs: Date.now() - pipelineStartTime,
+            totalCost: tracker?.getTotalCost() ?? 0,
+          });
+        }
+      } catch {
+        // Swallow emit errors
       }
-    } catch {
-      // Swallow emit errors
-    }
 
-    // Flush and close telemetry even on error
-    try {
-      await chesstrace.flush();
-    } catch {
-      // Swallow flush errors
-    }
-    try {
-      await chesstrace.close();
-    } catch {
-      // Swallow close errors
+      // Flush and close telemetry even on error
+      try {
+        await chesstrace.flush();
+      } catch {
+        // Swallow flush errors
+      }
+      try {
+        await chesstrace.close();
+      } catch {
+        // Swallow close errors
+      }
     }
 
     if (err instanceof Error && err.name === "ExitPromptError") {
