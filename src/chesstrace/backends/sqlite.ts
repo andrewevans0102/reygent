@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import type { StorageBackend, EventFilter, RunSummary } from './types.js';
 import type { TelemetryEvent, TelemetryCategory } from '../events.js';
@@ -12,8 +12,8 @@ export class SqliteBackend implements StorageBackend {
   private db: Database.Database | null = null;
   private dbPath: string;
 
-  constructor(scope: 'local' | 'global' = 'local') {
-    this.dbPath = this.resolveDbPath(scope);
+  constructor(scope: 'local' | 'global' = 'local', explicitPath?: string) {
+    this.dbPath = explicitPath ?? this.resolveDbPath(scope);
   }
 
   /**
@@ -44,7 +44,7 @@ export class SqliteBackend implements StorageBackend {
    */
   async init(): Promise<void> {
     // Ensure parent directory exists
-    const dbDir = this.dbPath.substring(0, this.dbPath.lastIndexOf('/'));
+    const dbDir = dirname(this.dbPath);
     if (!existsSync(dbDir)) {
       mkdirSync(dbDir, { recursive: true });
     }

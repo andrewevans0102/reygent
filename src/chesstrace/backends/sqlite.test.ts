@@ -13,9 +13,8 @@ describe('SqliteBackend', () => {
     // Use temp directory for test database
     testDbPath = join(tmpdir(), `test-chesstrace-${Date.now()}.db`);
 
-    // Create backend with custom path (we'll override resolveDbPath via instance property)
-    backend = new SqliteBackend('global');
-    (backend as any).dbPath = testDbPath;
+    // Create backend with explicit path for testing
+    backend = new SqliteBackend('global', testDbPath);
 
     await backend.init();
   });
@@ -102,8 +101,8 @@ describe('SqliteBackend', () => {
     });
 
     it('throws if database not initialized', async () => {
-      const uninitBackend = new SqliteBackend('global');
-      (uninitBackend as any).dbPath = join(tmpdir(), 'uninit.db');
+      const uninitPath = join(tmpdir(), `uninit-${Date.now()}.db`);
+      const uninitBackend = new SqliteBackend('global', uninitPath);
 
       const event: TelemetryEvent = {
         id: 'evt_1',
@@ -116,6 +115,15 @@ describe('SqliteBackend', () => {
       };
 
       await expect(uninitBackend.write(event)).rejects.toThrow('Database not initialized');
+
+      // Cleanup test files
+      try {
+        if (existsSync(uninitPath)) unlinkSync(uninitPath);
+        if (existsSync(`${uninitPath}-wal`)) unlinkSync(`${uninitPath}-wal`);
+        if (existsSync(`${uninitPath}-shm`)) unlinkSync(`${uninitPath}-shm`);
+      } catch {
+        // Ignore cleanup errors
+      }
     });
   });
 

@@ -18,7 +18,7 @@ export interface EventFilter {
 export interface RunSummary {
   runId: string;
   startTime: number;
-  endTime?: number;
+  endTime: number;
   eventCount: number;
   categories: TelemetryCategory[];
 }
@@ -58,7 +58,9 @@ export interface StorageBackend {
   flush(): Promise<void>;
 
   /**
-   * Prune old events (e.g., by age or count)
+   * Prune events older than specified timestamp
+   * @param olderThan - Unix timestamp in milliseconds
+   * @returns Number of events deleted
    */
   prune(olderThan: number): Promise<number>;
 
