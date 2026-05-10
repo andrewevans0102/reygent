@@ -125,26 +125,33 @@ program.hook("preAction", async () => {
     setDebug(true);
   }
 
-  const providerFlag = program.opts().provider;
-  if (providerFlag) {
-    try {
-      // Validate provider name
-      getProvider(providerFlag);
-      setProviderOverride(providerFlag);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      program.error(message);
+  try {
+    const providerFlag = program.opts().provider;
+    if (providerFlag) {
+      try {
+        // Validate provider name
+        getProvider(providerFlag);
+        setProviderOverride(providerFlag);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        program.error(message);
+      }
     }
-  }
 
-  const modelFlag = program.opts().model;
-  if (modelFlag) {
-    try {
-      const resolved = validateModel(modelFlag, providerFlag);
-      setModelOverride(resolved);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      program.error(message);
+    const modelFlag = program.opts().model;
+    if (modelFlag) {
+      try {
+        const resolved = validateModel(modelFlag, providerFlag);
+        setModelOverride(resolved);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        program.error(message);
+      }
+    }
+  } catch (err) {
+    // Unexpected error in validation - log but continue to telemetry prompt
+    if (program.opts().debug) {
+      console.error(chalk.gray("Validation error:"), err);
     }
   }
 

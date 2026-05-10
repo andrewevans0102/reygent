@@ -144,14 +144,14 @@ describe("shouldPromptForTelemetry", () => {
     expect(shouldPromptForTelemetry()).toBe(false);
   });
 
-  it("returns false when config parse fails (prevents blocking execution)", () => {
+  it("returns true when config parse fails (allows user to regenerate config)", () => {
     const configPath = join(tmpDir, "config.json");
     writeFileSync(configPath, "{ invalid json", "utf-8");
 
     findLocalConfigDirSpy.mockReturnValue(null);
     resolveGlobalConfigPathSpy.mockReturnValue(configPath);
 
-    expect(shouldPromptForTelemetry()).toBe(false);
+    expect(shouldPromptForTelemetry()).toBe(true);
   });
 });
 

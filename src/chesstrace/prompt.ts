@@ -47,11 +47,11 @@ export function shouldPromptForTelemetry(): boolean {
 
     return false;
   } catch (err) {
-    // If config parse fails, don't block execution
+    // If config parse fails, prompt user to regenerate valid config
     if (isDebug()) {
       console.error(chalk.gray(`Failed to read config at ${configPath}:`), err);
     }
-    return false;
+    return true;
   }
 }
 
@@ -150,8 +150,9 @@ async function saveTelemetryChoice(enabled: boolean): Promise<void> {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.log(chalk.red.bold("Error:"), `Failed to save telemetry config: ${message}`);
+    console.log(chalk.yellow("Warning:"), `Failed to save telemetry config: ${message}`);
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
-    throw err;
+    console.log(chalk.gray("Command will continue without saving telemetry preference."));
+    // Don't throw - allow command execution to continue
   }
 }
