@@ -6,6 +6,8 @@ import { z } from "zod";
 import type { AgentConfig } from "./agents.js";
 import { builtinAgents } from "./agents.js";
 import { discoverSkills, skillToAgentConfig } from "./skills.js";
+import type { TelemetryUserConfig } from "./chesstrace/config.js";
+import { TelemetryUserConfigSchema, DEFAULT_TELEMETRY_CONFIG } from "./chesstrace/config.js";
 
 export interface SkillsConfig {
   path?: string;
@@ -17,6 +19,7 @@ export interface ReygentConfig {
   skills?: SkillsConfig;
   model?: string;
   provider?: string;
+  telemetry?: TelemetryUserConfig;
 }
 
 const KNOWN_ROLES = ["developer", "general", "quality-engineer", "security-reviewer", "reviewer", "planner"] as const;
@@ -47,6 +50,7 @@ const ReygentConfigSchema = z.object({
     path: z.string().optional(),
     disabled: z.array(z.string()).optional(),
   }).optional(),
+  telemetry: TelemetryUserConfigSchema.optional(),
 });
 
 /**
@@ -65,6 +69,9 @@ export function loadConfig(): ReygentConfig {
         skills: config.skills ?? {},
         model: config.model,
         provider: config.provider,
+        // Apply default telemetry config when local config lacks telemetry field.
+        // This preserves partial configs — existing local config.json without telemetry field gets defaults.
+        telemetry: config.telemetry ?? DEFAULT_TELEMETRY_CONFIG,
       };
     } catch (err) {
       throw new Error(
@@ -85,6 +92,9 @@ export function loadConfig(): ReygentConfig {
         skills: config.skills ?? {},
         model: config.model,
         provider: config.provider,
+        // Apply default telemetry config when global config lacks telemetry field.
+        // This preserves partial configs — existing global config.json without telemetry field gets defaults.
+        telemetry: config.telemetry ?? DEFAULT_TELEMETRY_CONFIG,
       };
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -106,6 +116,7 @@ export function loadConfig(): ReygentConfig {
   return {
     agents: builtinAgents,
     skills: {},
+    telemetry: DEFAULT_TELEMETRY_CONFIG,
   };
 }
 
