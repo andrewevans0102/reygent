@@ -33,12 +33,14 @@ function emitStageEnd(
   stageName: string,
   stageStartTime: number,
   success: boolean,
+  metadata?: { cost?: number; outputSummary?: string },
 ): void {
   try {
     chesstrace.emit(Events.PIPELINE_STAGE_END, {
       stage: stageName,
       success,
       durationMs: Date.now() - stageStartTime,
+      ...(metadata && { metadata }),
     });
   } catch {
     // Swallow emit errors
@@ -169,8 +171,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
   }
 
   // All retries exhausted
-  console.log(chalk.red.bold(`\n${gateName} failed after ${maxRetries} retries. Exiting.`));
-  process.exit(1);
+  throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
 }
 
 async function promptLinearSpec(): Promise<string> {
@@ -262,9 +263,6 @@ export async function runCommand(options: RunOptions): Promise<void> {
     }
     const spec = await loadSpec(specSource);
 
-    // Initialize context after spec loaded
-    context = { spec, results: [] };
-
     // Skip telemetry in dry-run mode
     if (options.dryRun) {
       console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
@@ -305,6 +303,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
       console.log("");
       return;
     }
+
+    // Initialize context after dry-run check
+    context = { spec, results: [] };
 
     const threshold = options.securityThreshold.toUpperCase();
     if (!VALID_SEVERITIES.has(threshold)) {
@@ -552,7 +553,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
         unitStatus.fail(chalk.red("Unit tests FAILED"));
 
-        // If no retries configured, emit failure and exit
+        // If no retries configured, emit failure and throw
         if (maxRetries === 0) {
           context.results.push({
             stage: stage.name,
@@ -560,8 +561,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             output: gateResult.output,
           });
           emitStageEnd(chesstrace, stage.name, stageStartTime, false);
-          console.log(chalk.red.bold("\nunit tests failed with 0 retries configured. Exiting."));
-          process.exit(1);
+          throw new TaskError("unit tests failed with 0 retries configured");
         }
 
         // Retry loop — dev agent only for unit test failures
@@ -618,7 +618,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         funcStatus.fail(chalk.red("Functional tests FAILED"));
         console.log(gateResult.output);
 
-        // If no retries configured, emit failure and exit
+        // If no retries configured, emit failure and throw
         if (maxRetries === 0) {
           context.results.push({
             stage: stage.name,
@@ -626,8 +626,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             output: gateResult.output,
           });
           emitStageEnd(chesstrace, stage.name, stageStartTime, false);
-          console.log(chalk.red.bold("\nfunctional tests failed with 0 retries configured. Exiting."));
-          process.exit(1);
+          throw new TaskError("functional tests failed with 0 retries configured");
         }
 
         // Retry loop — both dev + qe agents for functional test failures
@@ -824,10 +823,6 @@ export async function runCommand(options: RunOptions): Promise<void> {
         success: allSuccess,
         totalDurationMs: Date.now() - pipelineStartTime,
         totalCost: tracker.getTotalCost(),
-        stageResults: context.results.map((r) => ({
-          stage: r.stage,
-          success: r.success,
-        })),
       });
     } catch {
       // Swallow emit errors
@@ -857,11 +852,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         chesstrace.emit(Events.PIPELINE_END, {
           success: false,
           totalDurationMs: Date.now() - pipelineStartTime,
-          totalCost: tracker.getTotalCost(),
-          stageResults: context.results.map((r) => ({
-            stage: r.stage,
-            success: r.success,
-          })),
+          totalCost: tracker?.getTotalCost() ?? 0,
         });
       }
     } catch {

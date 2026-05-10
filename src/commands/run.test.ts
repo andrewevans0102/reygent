@@ -329,16 +329,6 @@ describe("run command - Chesstrace instrumentation", () => {
         success: true,
         totalDurationMs: expect.any(Number),
         totalCost: expect.any(Number),
-        stageResults: expect.arrayContaining([
-          expect.objectContaining({
-            stage: "plan",
-            success: true,
-          }),
-          expect.objectContaining({
-            stage: "implement",
-            success: true,
-          }),
-        ]),
       });
     });
 
@@ -567,6 +557,173 @@ describe("run command - Chesstrace instrumentation", () => {
       expect(endEmit![1]).toHaveProperty("totalCost");
       expect(typeof endEmit![1].totalCost).toBe("number");
       expect(endEmit![1].totalCost).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe("partial pipeline failures", () => {
+    it("emits stage_end events for stages that ran before security gate failure", async () => {
+      // Make security review fail after unit and functional tests pass
+      vi.mocked(runSecurityReview).mockResolvedValue({
+        output: { severity: "CRITICAL", findings: [{ severity: "CRITICAL", file: "test.ts", line: 1, description: "XSS" }] },
+        passed: false,
+        usage: { costUsd: 0.01 },
+      });
+
+      // Use autoApprove to skip user prompts
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "CRITICAL",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).resolves.not.toThrow();
+
+      const stageEndEmits = vi.mocked(mockChesstrace.emit).mock.calls.filter(
+        (call) => call[0] === "pipeline.stage_end"
+      );
+
+      // Should have stage_end for plan, implement, gate-unit-tests, gate-functional-tests, security-review
+      const emittedStages = stageEndEmits.map(call => call[1]?.stage);
+      expect(emittedStages).toContain("plan");
+      expect(emittedStages).toContain("implement");
+      expect(emittedStages).toContain("gate-unit-tests");
+      expect(emittedStages).toContain("gate-functional-tests");
+      expect(emittedStages).toContain("security-review");
+
+      // Security review stage should have success=false
+      const securityStageEmit = stageEndEmits.find(
+        (call) => call[1]?.stage === "security-review"
+      );
+      expect(securityStageEmit).toBeDefined();
+      expect(securityStageEmit![1]).toMatchObject({
+        stage: "security-review",
+        success: false,
+      });
+    });
+
+    it("emits stage_end for functional tests when they fail after unit tests pass", async () => {
+      // Unit tests pass, functional tests fail
+      vi.mocked(runFunctionalTestGate).mockResolvedValue({
+        gate: { passed: false, output: "Functional tests failed" },
+        usage: { costUsd: 0.01 },
+      });
+
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "HIGH",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).rejects.toThrow();
+
+      const stageEndEmits = vi.mocked(mockChesstrace.emit).mock.calls.filter(
+        (call) => call[0] === "pipeline.stage_end"
+      );
+
+      // Should have stage_end for plan, implement, gate-unit-tests, gate-functional-tests
+      const emittedStages = stageEndEmits.map(call => call[1]?.stage);
+      expect(emittedStages).toContain("plan");
+      expect(emittedStages).toContain("implement");
+      expect(emittedStages).toContain("gate-unit-tests");
+      expect(emittedStages).toContain("gate-functional-tests");
+
+      // Unit tests should succeed
+      const unitTestStageEmit = stageEndEmits.find(
+        (call) => call[1]?.stage === "gate-unit-tests"
+      );
+      expect(unitTestStageEmit![1]).toMatchObject({
+        stage: "gate-unit-tests",
+        success: true,
+      });
+
+      // Functional tests should fail
+      const funcTestStageEmit = stageEndEmits.find(
+        (call) => call[1]?.stage === "gate-functional-tests"
+      );
+      expect(funcTestStageEmit![1]).toMatchObject({
+        stage: "gate-functional-tests",
+        success: false,
+      });
+    });
+  });
+
+  describe("pre-init error scenarios", () => {
+    it("handles spec load failure gracefully without crashing", async () => {
+      // Make spec load fail before context init
+      vi.mocked(loadSpec).mockRejectedValue(new Error("Spec not found"));
+
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "HIGH",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).rejects.toThrow();
+
+      // Should still call flush and close
+      expect(mockChesstrace.flush).toHaveBeenCalled();
+      expect(mockChesstrace.close).toHaveBeenCalled();
+
+      // Should emit pipeline.end with success=false
+      const endEmit = vi.mocked(mockChesstrace.emit).mock.calls.find(
+        (call) => call[0] === "pipeline.end"
+      );
+
+      // May or may not have endEmit depending on whether context exists
+      // If endEmit exists, it should have success=false
+      if (endEmit) {
+        expect(endEmit[1]).toMatchObject({
+          success: false,
+        });
+      }
+    });
+
+    it("handles planner failure before tracker records usage", async () => {
+      // Make planner fail immediately
+      vi.mocked(runPlanner).mockRejectedValue(new Error("Planner crashed"));
+
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "HIGH",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).rejects.toThrow();
+
+      // Should still call flush and close
+      expect(mockChesstrace.flush).toHaveBeenCalled();
+      expect(mockChesstrace.close).toHaveBeenCalled();
+
+      // Should emit pipeline.end with totalCost=0 (no usage recorded)
+      const endEmit = vi.mocked(mockChesstrace.emit).mock.calls.find(
+        (call) => call[0] === "pipeline.end"
+      );
+
+      expect(endEmit).toBeDefined();
+      expect(endEmit![1]).toMatchObject({
+        success: false,
+        totalCost: 0, // No usage tracked yet
+      });
     });
   });
 });
