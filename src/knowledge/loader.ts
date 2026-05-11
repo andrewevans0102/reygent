@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import chalk from "chalk";
 import { findLocalConfigDir } from "../config.js";
 import { marked } from "marked";
 
@@ -121,6 +122,7 @@ export function filterByAgent(markdown: string, agentName: string, source: strin
 /**
  * Filter markdown entries by recency (last N days).
  * Searches for "Last seen: YYYY-MM-DD" in entry content.
+ * Handles both bold (**Last seen**:) and plain (Last seen:) formats.
  */
 export function filterByRecency(markdown: string, source: string, days: number): string {
   const entries = parseMarkdownEntries(markdown, source);
@@ -128,7 +130,8 @@ export function filterByRecency(markdown: string, source: string, days: number):
   cutoffDate.setDate(cutoffDate.getDate() - days);
 
   const filtered = entries.filter((entry) => {
-    const match = entry.content.match(/\*\*Last seen\*\*:\s*(\d{4}-\d{2}-\d{2})/);
+    // Match both **Last seen**: and Last seen: formats
+    const match = entry.content.match(/(?:\*\*)?Last seen(?:\*\*)?:\s*(\d{4}-\d{2}-\d{2})/);
     if (!match) return false; // No date found, exclude
 
     const lastSeen = new Date(match[1]);
@@ -147,8 +150,21 @@ export function filterByRecency(markdown: string, source: string, days: number):
 export async function loadKnowledge(agentName: string, stage?: string): Promise<Knowledge> {
   const knowledgeDir = findKnowledgeDir();
 
-  // If no knowledge dir, return empty knowledge
-  if (!knowledgeDir || !existsSync(knowledgeDir)) {
+  // If no knowledge dir, return empty knowledge and suggest initialization
+  if (!knowledgeDir) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn(chalk.yellow("⚠ No knowledge directory found. Run 'reygent init' to create .reygent/knowledge/"));
+    }
+    return {
+      agentTips: "",
+      commonFailures: "",
+      successPatterns: "",
+      projectConventions: "",
+      entriesLoaded: [],
+    };
+  }
+
+  if (!existsSync(knowledgeDir)) {
     return {
       agentTips: "",
       commonFailures: "",

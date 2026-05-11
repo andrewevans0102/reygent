@@ -272,6 +272,26 @@ Reygent learns from your project over time through `.reygent/knowledge/`:
 
 Agents consult this knowledge before running, avoiding past mistakes and following proven patterns.
 
+### Initialization
+
+Knowledge directory auto-created during `reygent init`:
+
+```bash
+# Create .reygent/ structure with knowledge templates
+reygent init
+```
+
+This creates:
+- `.reygent/knowledge/` directory
+- `common-failures.md` template
+- `success-patterns.md` template
+- `project-conventions.md` template
+- `agents/*.md` templates (dev, qe, planner, pr-reviewer)
+
+Files include helpful starter content explaining each section. You can immediately populate `project-conventions.md` with your project rules.
+
+If knowledge directory missing, you'll see warning: `⚠ No knowledge directory found. Run 'reygent init' to create .reygent/knowledge/`
+
 ### Directory Structure
 
 ```
@@ -304,15 +324,24 @@ reygent knowledge search "circular import"
 
 **Add entries:**
 ```bash
-# Document a failure (manual)
+# Document a failure (with interactive prompts if options omitted)
 reygent knowledge add-failure \
   --issue "Circular import between modules" \
   --solution "Import inside function scope" \
-  --agent dev
+  --agent dev \
+  --example "def get_user(): from .models import User; return User.query.get(1)"
 
-# Document a success pattern (manual)
+# Interactive mode - prompts for all fields
+reygent knowledge add-failure
+
+# Document a success pattern (with interactive prompts if options omitted)
 reygent knowledge add-pattern \
-  --description "Dependency analysis first"
+  --description "Dependency analysis first" \
+  --approach "1. List files\n2. Identify deps\n3. Order by deps" \
+  --success-rate 95
+
+# Interactive mode - prompts for all fields
+reygent knowledge add-pattern
 
 # Edit file directly
 reygent knowledge edit common-failures

@@ -9,6 +9,7 @@ import type { ReygentConfig } from "../config.js";
 import { isDebug } from "../debug.js";
 import { DEFAULT_MODEL } from "../model.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
+import { ensureKnowledgeDir } from "../knowledge/manager.js";
 
 export async function initCommand(options: { dryRun: boolean } = { dryRun: false }): Promise<void> {
   const targetDir = join(process.cwd(), ".reygent");
@@ -82,6 +83,9 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
 
       writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2) + "\n", "utf-8");
 
+      spinner.text = "Creating knowledge directory";
+      await ensureKnowledgeDir(process.cwd());
+
       spinner.succeed(chalk.green("Initialized .reygent folder"));
 
       console.log("");
@@ -89,6 +93,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
       console.log(chalk.gray("  • Edit"), chalk.cyan(".reygent/config.json"), chalk.gray("to customize agents"));
       console.log(chalk.gray("  • Add custom agents to the"), chalk.cyan("agents"), chalk.gray("array"));
       console.log(chalk.gray("  • Add skills to"), chalk.cyan(".reygent/skills/"), chalk.gray("(each in its own folder with SKILL.md)"));
+      console.log(chalk.gray("  • Populate"), chalk.cyan(".reygent/knowledge/"), chalk.gray("with project conventions"));
       console.log(chalk.gray("  • Run"), chalk.cyan("reygent agent <name>"), chalk.gray("to use your local config"));
       console.log("");
     } catch (err) {

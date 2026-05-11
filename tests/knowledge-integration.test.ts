@@ -426,5 +426,63 @@ Old pattern`;
       // Should handle large files but may need truncation
       expect(knowledge.entriesLoaded.length).toBeGreaterThan(0);
     });
+
+    it("should inject knowledge into spawnAgentStream system prompt", async () => {
+      const mockKnowledge = {
+        agentTips: "Prefer dependency injection",
+        commonFailures: "## Missing null checks\nAlways validate inputs",
+        successPatterns: "## Use builder pattern for complex objects",
+        projectConventions: "Follow TypeScript strict mode",
+        entriesLoaded: ["dev:tip-1", "failures:null-checks", "patterns:builder"],
+      };
+
+      vi.mocked(loadKnowledge).mockResolvedValue(mockKnowledge);
+
+      // Track the options passed to the provider
+      let capturedSystemPrompt: string | undefined;
+      const mockProvider = {
+        isAvailable: vi.fn().mockResolvedValue({ available: true }),
+        stream: vi.fn().mockImplementation(async function* (options: any) {
+          capturedSystemPrompt = options.systemPrompt;
+          yield { type: "text" as const, text: "test output" };
+        }),
+      };
+
+      const { getProvider } = await import("../src/providers/index.js");
+      vi.mocked(getProvider).mockReturnValue(mockProvider as any);
+
+      // Call spawn with system prompt
+      const stream = await spawnAgentStream({
+        name: "implementer",
+        provider: "mock",
+        model: "mock-model",
+        userPrompt: "Test task",
+        messages: [],
+        systemPrompt: "Base system prompt",
+        options: { stage: "implement" },
+      });
+
+      // Consume stream to trigger provider call
+      for await (const chunk of stream) {
+        // Just consume
+      }
+
+      // Verify knowledge was loaded
+      expect(loadKnowledge).toHaveBeenCalledWith("implementer", "implement");
+
+      // Verify system prompt includes injected knowledge
+      expect(capturedSystemPrompt).toBeDefined();
+      expect(capturedSystemPrompt).toContain("Base system prompt");
+      expect(capturedSystemPrompt).toContain("## Project-Specific Knowledge");
+      expect(capturedSystemPrompt).toContain("### Common Failures to Avoid");
+      expect(capturedSystemPrompt).toContain("Missing null checks");
+      expect(capturedSystemPrompt).toContain("### Success Patterns to Follow");
+      expect(capturedSystemPrompt).toContain("Use builder pattern");
+      expect(capturedSystemPrompt).toContain("### Agent-Specific Tips (implementer)");
+      expect(capturedSystemPrompt).toContain("dependency injection");
+      expect(capturedSystemPrompt).toContain("### Project Conventions");
+      expect(capturedSystemPrompt).toContain("TypeScript strict mode");
+      expect(capturedSystemPrompt).toContain("**Important**: Review above knowledge before proceeding");
+    });
   });
 });

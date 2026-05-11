@@ -78,7 +78,7 @@ export function analyzeFailurePatterns(
 
 /**
  * Analyze telemetry for success patterns.
- * Identifies high-success-rate agent/stage combinations.
+ * Identifies high-success-rate agent/stage combinations and tool sequences.
  */
 export function analyzeSuccessPatterns(
   db: SqliteBackend,
@@ -94,23 +94,30 @@ export function analyzeSuccessPatterns(
   // Group by agent+stage
   const patterns = new Map<
     string,
-    { successes: number; failures: number; lastSeen: number }
+    { successes: number; failures: number; lastSeen: number; toolSequences: string[][] }
   >();
 
   for (const event of completeEvents) {
     const agent = event.data.agent as string;
     const stage = (event.data.stage as string) || "unknown";
     const success = event.data.success as boolean;
+    const runId = event.runId;
 
     const key = `${agent}:${stage}`;
     const existing = patterns.get(key) || {
       successes: 0,
       failures: 0,
       lastSeen: 0,
+      toolSequences: [],
     };
 
     if (success) {
       existing.successes++;
+      // Extract tool sequence for this successful run
+      const toolSequence = extractToolSequence(events, runId, agent);
+      if (toolSequence.length > 0) {
+        existing.toolSequences.push(toolSequence);
+      }
     } else {
       existing.failures++;
     }
@@ -127,12 +134,13 @@ export function analyzeSuccessPatterns(
 
     if (successRate >= minSuccessRate && total >= 3) {
       const [agent, stage] = key.split(":");
+      const commonSequence = findCommonToolSequence(stats.toolSequences);
       successPatterns.push({
         pattern: `${agent} in ${stage} stage`,
         successRate,
         observations: total,
         lastSeen: stats.lastSeen,
-        suggestedEntry: generateSuccessEntry(agent, stage, successRate, total),
+        suggestedEntry: generateSuccessEntry(agent, stage, successRate, total, commonSequence),
       });
     }
   }
@@ -232,9 +240,17 @@ function generateSuccessEntry(
   stage: string,
   successRate: number,
   observations: number,
+  commonSequence?: string[],
 ): string {
   const today = new Date().toISOString().split("T")[0];
   const pct = Math.round(successRate * 100);
+  const sequenceText = commonSequence && commonSequence.length > 0
+    ? `
+
+**Common tool sequence**:
+${commonSequence.map((tool, i) => `${i + 1}. ${tool}`).join('\n')}`
+    : '';
+
   return `
 ## ${agent} in ${stage} stage (${pct}% success)
 **Observations**: ${observations} runs
@@ -242,9 +258,75 @@ function generateSuccessEntry(
 **Success rate**: ${pct}%
 
 **Pattern**:
-[Describe what makes this approach successful]
+[Describe what makes this approach successful]${sequenceText}
 
 **Recommended approach**:
 [Add recommendation here]
 `;
+}
+
+/**
+ * Extract tool sequence from events for a given run and agent
+ */
+function extractToolSequence(events: TelemetryEvent[], runId: string, agent: string): string[] {
+  const agentEvents = events.filter(
+    (e) => e.runId === runId && e.data.agent === agent && e.event === Events.TOOL_CALL
+  );
+
+  return agentEvents
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((e) => e.data.tool as string)
+    .filter((tool): tool is string => !!tool);
+}
+
+/**
+ * Find common tool sequence across multiple runs
+ */
+function findCommonToolSequence(sequences: string[][]): string[] | undefined {
+  if (sequences.length === 0) return undefined;
+
+  // Find the most common sequence pattern
+  const sequenceMap = new Map<string, number>();
+
+  for (const seq of sequences) {
+    const key = seq.join('->');
+    sequenceMap.set(key, (sequenceMap.get(key) || 0) + 1);
+  }
+
+  // Return most common sequence if it appears in >50% of runs
+  const threshold = sequences.length * 0.5;
+  for (const [key, count] of sequenceMap.entries()) {
+    if (count >= threshold) {
+      return key.split('->');
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Suggest knowledge entries from failure patterns.
+ * Returns formatted entries ready to add to common-failures.md
+ */
+export function suggestFromFailures(
+  db: SqliteBackend,
+  sinceMs: number,
+  limit: number = 5,
+): string[] {
+  const patterns = analyzeFailurePatterns(db, sinceMs);
+  return patterns.slice(0, limit).map((p) => p.suggestedEntry);
+}
+
+/**
+ * Suggest knowledge entries from success patterns.
+ * Returns formatted entries ready to add to success-patterns.md
+ */
+export function suggestFromSuccesses(
+  db: SqliteBackend,
+  sinceMs: number,
+  minSuccessRate: number = 0.85,
+  limit: number = 5,
+): string[] {
+  const patterns = analyzeSuccessPatterns(db, sinceMs, minSuccessRate);
+  return patterns.slice(0, limit).map((p) => p.suggestedEntry);
 }

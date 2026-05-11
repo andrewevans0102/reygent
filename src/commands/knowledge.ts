@@ -5,6 +5,7 @@ import { execSync } from "node:child_process";
 import chalk from "chalk";
 import ora from "ora";
 import Table from "cli-table3";
+import { input, select, confirm } from '@inquirer/prompts';
 import {
   findKnowledgeDir,
   listKnowledgeFiles,
@@ -14,6 +15,8 @@ import {
 } from "../knowledge/loader.js";
 import { getChesstrace } from "../chesstrace/index.js";
 import { measureKnowledgeEffectiveness } from "../knowledge/analyzer.js";
+import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
+import { AgentName, builtinAgents } from "../agents.js";
 
 /**
  * Register knowledge subcommands under main CLI program
@@ -210,44 +213,69 @@ async function addFailureCommand(options: {
   issue?: string;
   solution?: string;
   agent?: string;
+  example?: string;
 }) {
   const knowledgeDir = findKnowledgeDir();
 
   if (!knowledgeDir) {
     console.log(chalk.red("No .reygent/knowledge/ directory found."));
+    console.log(chalk.gray("Run 'reygent init' to create knowledge directory."));
     process.exit(1);
   }
 
-  // TODO: Interactive prompts if options not provided
-  // TODO: Extract from run-id if provided
+  // Interactive prompts if options not provided
+  let issue = options.issue;
+  let solution = options.solution;
+  let agent = options.agent as AgentName | undefined;
+  let example = options.example;
 
-  if (!options.issue || !options.solution || !options.agent) {
-    console.log(chalk.yellow("Manual entry mode (interactive prompts not yet implemented)"));
-    console.log(chalk.gray("Usage: reygent knowledge add-failure --issue 'desc' --solution 'fix' --agent dev"));
-    process.exit(1);
+  if (!issue) {
+    issue = await input({
+      message: 'What is the issue/error?',
+      validate: (value) => value.trim() !== '' || 'Issue description required',
+    });
   }
 
-  const failuresPath = join(knowledgeDir, "common-failures.md");
-  const existingContent = readMarkdown(failuresPath);
+  if (!solution) {
+    solution = await input({
+      message: 'What is the solution/fix?',
+      validate: (value) => value.trim() !== '' || 'Solution description required',
+    });
+  }
 
-  const today = new Date().toISOString().split("T")[0];
-  const entry = `
-## ${options.issue}
-**Occurrences**: 1 run
-**Last seen**: ${today}
-**Agent**: ${options.agent}
+  if (!agent) {
+    const agentChoices = builtinAgents.map((a) => ({ value: a.name, name: a.name }));
+    agent = await select({
+      message: 'Which agent does this apply to?',
+      choices: agentChoices,
+    }) as AgentName;
+  }
 
-**Solution**: ${options.solution}
+  if (!example) {
+    const addExample = await confirm({
+      message: 'Add a code example?',
+      default: false,
+    });
 
----
-`;
+    if (addExample) {
+      example = await input({
+        message: 'Enter code example:',
+      });
+    }
+  }
 
-  const newContent = existingContent + "\n" + entry;
-  writeFileSync(failuresPath, newContent, "utf-8");
+  // Use manager to add entry
+  const baseDir = knowledgeDir.replace('/.reygent/knowledge', '');
+  await addFailureEntry(baseDir, {
+    issue,
+    solution,
+    agent,
+    example,
+  });
 
   console.log(chalk.green("✓ Failure documented"));
   console.log(chalk.gray(`  File: common-failures.md`));
-  console.log(chalk.gray(`  Agent: ${options.agent}`));
+  console.log(chalk.gray(`  Agent: ${agent}`));
 }
 
 /**
@@ -256,38 +284,67 @@ async function addFailureCommand(options: {
 async function addPatternCommand(options: {
   runId?: string;
   description?: string;
+  approach?: string;
+  successRate?: number;
 }) {
   const knowledgeDir = findKnowledgeDir();
 
   if (!knowledgeDir) {
     console.log(chalk.red("No .reygent/knowledge/ directory found."));
+    console.log(chalk.gray("Run 'reygent init' to create knowledge directory."));
     process.exit(1);
   }
 
-  // TODO: Extract from run-id if provided
-  // TODO: Interactive prompts
+  // Interactive prompts if options not provided
+  let description = options.description;
+  let approach = options.approach;
+  let successRate = options.successRate;
 
-  if (!options.description) {
-    console.log(chalk.yellow("Manual entry mode (interactive prompts not yet implemented)"));
-    console.log(chalk.gray("Usage: reygent knowledge add-pattern --description 'pattern desc'"));
-    process.exit(1);
+  if (!description) {
+    description = await input({
+      message: 'Describe the success pattern:',
+      validate: (value) => value.trim() !== '' || 'Description required',
+    });
   }
 
-  const patternsPath = join(knowledgeDir, "success-patterns.md");
-  const existingContent = readMarkdown(patternsPath);
+  if (!approach) {
+    const addApproach = await confirm({
+      message: 'Add detailed approach?',
+      default: false,
+    });
 
-  const today = new Date().toISOString().split("T")[0];
-  const entry = `
-## ${options.description}
-**Last seen**: ${today}
+    if (addApproach) {
+      approach = await input({
+        message: 'Describe the approach:',
+      });
+    }
+  }
 
-Pattern details here.
+  if (successRate === undefined) {
+    const addRate = await confirm({
+      message: 'Add success rate?',
+      default: false,
+    });
 
----
-`;
+    if (addRate) {
+      const rateStr = await input({
+        message: 'Enter success rate (0-100):',
+        validate: (value) => {
+          const num = parseFloat(value);
+          return (!isNaN(num) && num >= 0 && num <= 100) || 'Must be a number between 0 and 100';
+        },
+      });
+      successRate = parseFloat(rateStr);
+    }
+  }
 
-  const newContent = existingContent + "\n" + entry;
-  writeFileSync(patternsPath, newContent, "utf-8");
+  // Use manager to add entry
+  const baseDir = knowledgeDir.replace('/.reygent/knowledge', '');
+  await addPatternEntry(baseDir, {
+    description,
+    approach,
+    successRate,
+  });
 
   console.log(chalk.green("✓ Pattern documented"));
   console.log(chalk.gray(`  File: success-patterns.md`));
