@@ -214,6 +214,7 @@ multi.stop();
 
 Analyze Reygent runs to optimize performance and reduce costs:
 
+- `reygent last` - Show latest run details (quick summary, verbose log, output, errors, or JSON)
 - `reygent analyze failures` - Common error patterns
 - `reygent analyze success` - What works well
 - `reygent analyze costs` - Cost breakdown and savings
@@ -224,6 +225,17 @@ All analysis runs on local telemetry database. No data leaves your machine.
 ### Command Details
 
 **Duration Format:** All commands use `--since` with format `Nd` where N is number of days. Examples: `7d` (7 days), `30d` (30 days), `90d` (90 days).
+
+**Latest Run Details:**
+```bash
+reygent last [--verbose] [--output] [--errors] [--json]
+```
+Quick access to most recent run:
+- Default: Summary with status, duration, agents, cost, and top errors
+- `--verbose`: Full event log with timestamps and details
+- `--output`: Only final output from the run
+- `--errors`: Only errors with stack traces
+- `--json`: Machine-readable JSON for scripting
 
 **Failures Analysis:**
 ```bash
