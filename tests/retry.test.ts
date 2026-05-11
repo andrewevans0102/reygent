@@ -338,17 +338,16 @@ describe("retry logic telemetry instrumentation", () => {
     });
 
     it("should truncate long failure output in retry event", async () => {
-      const MAX_OUTPUT_CHARS = 8000;
-      const longOutput = "x".repeat(MAX_OUTPUT_CHARS + 5000) + "\nGATE_RESULT:FAIL\n";
+      const MAX_FAILURE_SNIPPET_CHARS = 500;
+      const longOutput = "x".repeat(MAX_FAILURE_SNIPPET_CHARS + 1000) + "\nGATE_RESULT:FAIL\n";
 
-      const truncated = longOutput.length > MAX_OUTPUT_CHARS
-        ? longOutput.slice(0, Math.floor(MAX_OUTPUT_CHARS / 2)) +
-          "\n\n... [truncated] ...\n\n" +
-          longOutput.slice(-Math.floor(MAX_OUTPUT_CHARS / 2))
+      // Failure snippet uses last N chars (tail of output)
+      const failureSnippet = longOutput.length > MAX_FAILURE_SNIPPET_CHARS
+        ? longOutput.slice(-MAX_FAILURE_SNIPPET_CHARS)
         : longOutput;
 
-      expect(truncated.length).toBeLessThan(MAX_OUTPUT_CHARS + 100);
-      expect(truncated).toContain("[truncated]");
+      expect(failureSnippet.length).toBeLessThanOrEqual(MAX_FAILURE_SNIPPET_CHARS);
+      expect(failureSnippet).toContain("GATE_RESULT:FAIL");
     });
   });
 

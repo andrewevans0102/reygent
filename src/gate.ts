@@ -12,7 +12,7 @@ import { Events } from "./chesstrace/events.js";
 export async function runGate(
   agentName: string,
   prompt: string,
-  options?: AgentSpawnOptions & { attempt?: number },
+  options?: AgentSpawnOptions & { attempt?: number; verbose?: boolean },
 ): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   const result = await spawnAgent(agentName, prompt, options);
 
@@ -30,8 +30,10 @@ export async function runGate(
         passed,
         attempt: options?.attempt ?? 1,
       });
-    } catch {
-      // Swallow emit errors
+    } catch (err) {
+      if (options?.verbose) {
+        console.error("[telemetry]", err instanceof Error ? err.message : String(err));
+      }
     }
   }
 
@@ -69,7 +71,7 @@ Do NOT emit both markers. Do NOT omit the marker.`;
 
 export async function runUnitTestGate(
   context: TaskContext,
-  options?: AgentSpawnOptions & { attempt?: number },
+  options?: AgentSpawnOptions & { attempt?: number; verbose?: boolean },
 ): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   if (!context.implement) {
     throw new TaskError(
@@ -118,7 +120,7 @@ Do NOT emit both markers. Do NOT omit the marker.`;
 
 export async function runFunctionalTestGate(
   context: TaskContext,
-  options?: AgentSpawnOptions & { attempt?: number },
+  options?: AgentSpawnOptions & { attempt?: number; verbose?: boolean },
 ): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   if (!context.implement) {
     throw new TaskError(
