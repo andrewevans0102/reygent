@@ -223,6 +223,8 @@ All analysis runs on local telemetry database. No data leaves your machine.
 
 ### Command Details
 
+**Duration Format:** All commands use `--since` with format `Nd` where N is number of days. Examples: `7d` (7 days), `30d` (30 days), `90d` (90 days).
+
 **Failures Analysis:**
 ```bash
 reygent analyze failures [--agent <name>] [--since 30d] [--limit N]

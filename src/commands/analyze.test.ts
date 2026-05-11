@@ -186,6 +186,52 @@ describe("analyze commands", () => {
       expect(events.length).toBe(2);
       expect(events.every(e => e.event === Events.ERROR_PARSE)).toBe(true);
     });
+
+    it("should verify query parameters for category filter", async () => {
+      const runId = randomUUID();
+
+      await backend.writeBatch([
+        {
+          id: randomUUID(),
+          runId,
+          timestamp: Date.now(),
+          category: "error",
+          event: Events.ERROR_PARSE,
+          minLevel: TelemetryLevel.minimal,
+          data: { message: "test" },
+        },
+      ]);
+
+      // Verify category filter works
+      const errorEvents = await backend.query({ category: "error" });
+      const agentEvents = await backend.query({ category: "agent" });
+
+      expect(errorEvents.length).toBe(1);
+      expect(agentEvents.length).toBe(0);
+    });
+
+    it("should verify query parameters for event filter", async () => {
+      const runId = randomUUID();
+
+      await backend.writeBatch([
+        {
+          id: randomUUID(),
+          runId,
+          timestamp: Date.now(),
+          category: "agent",
+          event: Events.AGENT_SPAWN,
+          minLevel: TelemetryLevel.standard,
+          data: { agent: "test" },
+        },
+      ]);
+
+      // Verify event filter works
+      const spawnEvents = await backend.query({ event: Events.AGENT_SPAWN });
+      const completeEvents = await backend.query({ event: Events.AGENT_COMPLETE });
+
+      expect(spawnEvents.length).toBe(1);
+      expect(completeEvents.length).toBe(0);
+    });
   });
 
   describe("success analysis data queries", () => {

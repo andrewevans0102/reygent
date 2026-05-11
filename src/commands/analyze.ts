@@ -7,6 +7,17 @@ import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import type { TelemetryEvent } from "../chesstrace/events.js";
 import { Events } from "../chesstrace/events.js";
 
+/**
+ * Cost estimation constants
+ */
+// Conservative estimate of retry cost as fraction of total monthly spend
+// Based on typical gate retry patterns adding ~10% overhead
+const RETRY_COST_ESTIMATE_MULTIPLIER = 0.1;
+
+// Conservative estimate of recoverable failure cost as fraction of failed spend
+// Assumes ~50% of failures preventable through config/prompt improvements
+const POTENTIAL_SAVINGS_MULTIPLIER = 0.5;
+
 interface AnalyzeOptions {
   agent?: string;
   since?: string;
@@ -84,12 +95,24 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
 }
 
 /**
+ * Filter events by category or event type
+ */
+function filterEvents(
+  events: TelemetryEvent[],
+  criteria: { category?: string; event?: string }
+): TelemetryEvent[] {
+  return events.filter(e => {
+    if (criteria.category && e.category !== criteria.category) return false;
+    if (criteria.event && e.event !== criteria.event) return false;
+    return true;
+  });
+}
+
+/**
  * Get backend instance
  */
 async function getBackend(): Promise<SqliteBackend> {
-  const config = loadConfig();
-  const backendType = config.telemetry?.backend === "sqlite" ? "local" : "local";
-  const backend = new SqliteBackend(backendType);
+  const backend = new SqliteBackend("local");
   await backend.init();
   return backend;
 }
@@ -120,8 +143,8 @@ export async function analyzeFailures(options: AnalyzeOptions): Promise<void> {
 
     // Query all error events
     const allEvents = await backend.query({ startTime: since });
-    const errorEvents = allEvents.filter(e => e.category === "error");
-    const pipelineEvents = allEvents.filter(e => e.event === Events.PIPELINE_END);
+    const errorEvents = filterEvents(allEvents, { category: "error" });
+    const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
 
     await backend.close();
 
@@ -172,7 +195,7 @@ export async function analyzeFailures(options: AnalyzeOptions): Promise<void> {
         .map(e => e.data.message as string)
         .filter(Boolean);
       if (messages.length > 0) {
-        const commonMsg = messages[0];
+        const commonMsg = messages[0] ?? "Unknown error";
         console.log(`   Common: "${commonMsg}"`);
       }
 
@@ -243,9 +266,9 @@ export async function analyzeSuccess(options: AnalyzeOptions): Promise<void> {
     const since = options.since ? parseSince(options.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
 
     const allEvents = await backend.query({ startTime: since });
-    const pipelineEvents = allEvents.filter(e => e.event === Events.PIPELINE_END);
-    const agentSpawnEvents = allEvents.filter(e => e.event === Events.AGENT_SPAWN);
-    const agentCompleteEvents = allEvents.filter(e => e.event === Events.AGENT_COMPLETE);
+    const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
+    const agentSpawnEvents = filterEvents(allEvents, { event: Events.AGENT_SPAWN });
+    const agentCompleteEvents = filterEvents(allEvents, { event: Events.AGENT_COMPLETE });
 
     await backend.close();
 
@@ -315,13 +338,24 @@ export async function analyzeSuccess(options: AnalyzeOptions): Promise<void> {
         if (successRate < minRate) continue;
       }
 
+      // Apply --stage filter if provided
+      if (options.stage) {
+        // Filter agent events by stage
+        const stageEvents = allEvents.filter(e =>
+          e.data.stage === options.stage &&
+          (e.event === Events.AGENT_SPAWN || e.event === Events.AGENT_COMPLETE)
+        );
+        const stageAgents = new Set(stageEvents.map(e => e.data.agent as string));
+        if (!stageAgents.has(agent)) continue;
+      }
+
       console.log(chalk.cyan(`${agent}:`));
       console.log(`  Runs: ${stats.completions}`);
       console.log(`  Success rate: ${formatPercent(successRate)} (${stats.successes} success, ${stats.completions - stats.successes} failures)`);
       console.log(`  Avg duration: ${formatDuration(avgDuration)}`);
 
       const modelDist = Array.from(stats.models.entries())
-        .map(([model, count]) => `${model} (${Math.round(count / stats.spawns * 100)}%)`)
+        .map(([model, count]) => `${model} (${Math.round(count / stats.completions * 100)}%)`)
         .join(", ");
       console.log(`  Model distribution: ${modelDist}`);
       console.log();
@@ -376,8 +410,8 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
     const since = options.since ? parseSince(options.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
 
     const allEvents = await backend.query({ startTime: since });
-    const costEvents = allEvents.filter(e => e.event === Events.USAGE_COST);
-    const pipelineEvents = allEvents.filter(e => e.event === Events.PIPELINE_END);
+    const costEvents = filterEvents(allEvents, { event: Events.USAGE_COST });
+    const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
 
     await backend.close();
 
@@ -444,7 +478,7 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
       const stageCosts = new Map<string, { cost: number; runs: Set<string> }>();
 
       for (const event of costEvents) {
-        const stage = event.data.stage as string || "unknown";
+        const stage = (event.data.stage as string) ?? "unknown";
         const cost = event.data.costUsd as number;
         const existing = stageCosts.get(stage) || { cost: 0, runs: new Set() };
         existing.cost += cost;
@@ -467,15 +501,25 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
     if (failedRuns > 0 && options.showRuns) {
       console.log(chalk.bold("Expensive Failures (top 3):"));
 
-      const failedRunIds = pipelineEvents
-        .filter(e => e.data.success !== true)
-        .map(e => e.runId);
+      const failedRunIds = new Set(
+        pipelineEvents
+          .filter(e => e.data.success !== true)
+          .map(e => e.runId)
+      );
 
       const failureRunCosts = new Map<string, number>();
       for (const event of costEvents) {
-        if (failedRunIds.includes(event.runId)) {
+        if (failedRunIds.has(event.runId)) {
           const existing = failureRunCosts.get(event.runId) || 0;
           failureRunCosts.set(event.runId, existing + (event.data.costUsd as number));
+        }
+      }
+
+      // Build Map for O(1) stage lookups
+      const runIdToStage = new Map<string, string>();
+      for (const event of allEvents) {
+        if (event.event === Events.PIPELINE_STAGE_END) {
+          runIdToStage.set(event.runId, (event.data.stage as string) || "unknown");
         }
       }
 
@@ -485,10 +529,7 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
 
       for (let i = 0; i < topFailures.length; i++) {
         const [runId, cost] = topFailures[i];
-        const stageEvent = allEvents.find(e =>
-          e.runId === runId && e.event === Events.PIPELINE_STAGE_END
-        );
-        const stage = stageEvent?.data.stage as string || "unknown stage";
+        const stage = runIdToStage.get(runId) || "unknown stage";
         console.log(`  ${i + 1}. run ${runId.substring(0, 8)}: ${formatCost(cost)} (${stage})`);
       }
       console.log();
@@ -506,11 +547,11 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
     const gateRetries = allEvents.filter(e => e.event === Events.GATE_RETRY);
     if (gateRetries.length > 0) {
       const monthlyCost = (totalCost / days) * 30;
-      const retryCostEst = monthlyCost * 0.1; // Rough estimate
+      const retryCostEst = monthlyCost * RETRY_COST_ESTIMATE_MULTIPLIER;
       recommendations.push(`• Gate retry loops cost ~${formatCost(retryCostEst)}/month - review gate criteria`);
     }
 
-    const potentialSavings = failedCost * 0.5; // Conservative estimate
+    const potentialSavings = failedCost * POTENTIAL_SAVINGS_MULTIPLIER;
     if (potentialSavings > 0) {
       const monthlySavings = (potentialSavings / days) * 30;
       recommendations.push(`\nPotential Savings: ${formatCost(monthlySavings)}/month (${formatPercent(potentialSavings / totalCost)})`);
@@ -545,10 +586,10 @@ export async function analyzeAgents(options: AnalyzeOptions): Promise<void> {
     const since = options.since ? parseSince(options.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
 
     const allEvents = await backend.query({ startTime: since });
-    const agentSpawnEvents = allEvents.filter(e => e.event === Events.AGENT_SPAWN);
-    const agentCompleteEvents = allEvents.filter(e => e.event === Events.AGENT_COMPLETE);
-    const errorEvents = allEvents.filter(e => e.category === "error");
-    const costEvents = allEvents.filter(e => e.event === Events.USAGE_COST);
+    const agentSpawnEvents = filterEvents(allEvents, { event: Events.AGENT_SPAWN });
+    const agentCompleteEvents = filterEvents(allEvents, { event: Events.AGENT_COMPLETE });
+    const errorEvents = filterEvents(allEvents, { category: "error" });
+    const costEvents = filterEvents(allEvents, { event: Events.USAGE_COST });
 
     await backend.close();
 
@@ -638,16 +679,21 @@ export async function analyzeAgents(options: AnalyzeOptions): Promise<void> {
     }
 
     // Filter by specific agent if provided
-    const agentsToShow = options.agent
-      ? [[options.agent, agentStats.get(options.agent)]] as [string, AgentStats][]
-      : Array.from(agentStats.entries());
+    let agentsToShow: [string, AgentStats][];
+    if (options.agent) {
+      const requestedStats = agentStats.get(options.agent);
+      if (!requestedStats) {
+        spinner.warn(chalk.yellow(`Agent "${options.agent}" not found in telemetry data`));
+        console.log(chalk.gray(`\nAvailable agents: ${Array.from(agentStats.keys()).join(", ")}`));
+        return;
+      }
+      agentsToShow = [[options.agent, requestedStats]];
+    } else {
+      agentsToShow = Array.from(agentStats.entries());
+    }
 
     // Display agent stats
     for (const [agent, stats] of agentsToShow) {
-      if (!stats) {
-        console.log(chalk.yellow(`No data found for agent: ${agent}`));
-        continue;
-      }
 
       const successRate = stats.completions > 0 ? stats.successes / stats.completions : 0;
       const avgDuration = stats.completions > 0 ? stats.totalDuration / stats.completions : 0;
@@ -666,6 +712,56 @@ export async function analyzeAgents(options: AnalyzeOptions): Promise<void> {
         .map(([model, count]) => `${model} (${Math.round(count / stats.spawns * 100)}%)`)
         .join(", ");
       console.log(`  Model distribution: ${modelDist}`);
+
+      // Compare models if requested
+      if (options.compareModels && stats.models.size > 1) {
+        console.log(`\n  Model Comparison:`);
+
+        // Build model-specific stats
+        const modelPerformance = new Map<string, { successes: number; failures: number; totalDuration: number; totalCost: number; count: number }>();
+
+        for (const complete of agentCompleteEvents) {
+          if (complete.data.agent !== agent) continue;
+
+          // Find corresponding spawn to get model
+          const spawn = agentSpawnEvents.find(s =>
+            s.runId === complete.runId &&
+            s.data.agent === agent &&
+            s.timestamp <= complete.timestamp
+          );
+
+          if (!spawn) continue;
+          const model = spawn.data.model as string;
+
+          const perf = modelPerformance.get(model) || { successes: 0, failures: 0, totalDuration: 0, totalCost: 0, count: 0 };
+          perf.count++;
+          if (complete.data.success === true) {
+            perf.successes++;
+          } else {
+            perf.failures++;
+          }
+          if (complete.data.duration) {
+            perf.totalDuration += complete.data.duration as number;
+          }
+
+          // Find costs for this completion
+          const runCosts = costEvents.filter(c => c.runId === complete.runId && c.data.agent === agent);
+          for (const costEvent of runCosts) {
+            perf.totalCost += costEvent.data.costUsd as number;
+          }
+
+          modelPerformance.set(model, perf);
+        }
+
+        for (const [model, perf] of modelPerformance) {
+          const successRate = perf.count > 0 ? perf.successes / perf.count : 0;
+          const avgDuration = perf.count > 0 ? perf.totalDuration / perf.count : 0;
+          const avgCost = perf.count > 0 ? perf.totalCost / perf.count : 0;
+
+          console.log(`    ${model}: ${formatPercent(successRate)} success, avg ${formatDuration(avgDuration)}, avg ${formatCost(avgCost)}`);
+        }
+        console.log();
+      }
 
       if (stats.errorTypes.size > 0) {
         const topErrors = Array.from(stats.errorTypes.entries())
