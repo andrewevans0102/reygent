@@ -31,6 +31,9 @@ const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 /**
  * Emit stage.end event with duration and success status
  * Also emits tool.summary if toolTracker provided
+ *
+ * Note: Empty summaries (no tool calls) emit tool.summary with empty toolCounts object.
+ * This is acceptable behavior and tested in tool-tracking-integration.test.ts
  */
 function emitStageEnd(
   chesstrace: Chesstrace | null,
@@ -99,9 +102,10 @@ function createToolTracker(): ToolTracker {
 }
 
 /**
- * Truncate string to max length
+ * Truncate string to max length for telemetry events.
+ * Exported for use in tests to ensure consistent truncation behavior.
  */
-function truncate(str: string | undefined, maxLen: number): string | undefined {
+export function truncateToolData(str: string | undefined, maxLen: number): string | undefined {
   if (!str) return undefined;
   if (str.length <= maxLen) return str;
   return str.slice(0, maxLen);
@@ -135,12 +139,13 @@ function withActivity(
               detail: event.detail,
             });
 
-            // Verbose level: tool.invoke.full with truncated input/output
-            // Since ActivityEvent doesn't carry input/output, we use detail as proxy
+            // Verbose level: tool.invoke.full with truncated detail
+            // Note: ActivityEvent doesn't carry input/output fields separately,
+            // so detail field serves as proxy for tool parameters/results
             chesstrace.emit(Events.TOOL_INVOKE_FULL, {
               agent: event.agent,
               tool: event.tool,
-              detail: truncate(event.detail, 500),
+              detail: truncateToolData(event.detail, 500),
             });
           } catch {
             // Swallow telemetry errors

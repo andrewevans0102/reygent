@@ -312,8 +312,9 @@ describe('Edge cases and validation', () => {
 
   it('all event names follow dot notation', () => {
     Object.values(Events).forEach((eventName) => {
-      // Allow single or multi-level event names (e.g., "tool.invoke" or "tool.invoke.full")
-      expect(eventName).toMatch(/^[a-z]+\.[a-z_]+(\.[a-z_]+)?$/);
+      // Enforce at least one dot with arbitrary depth (e.g., "tool.invoke" or "tool.invoke.full")
+      // Pattern requires category prefix and at least one level: ^[a-z]+(\.[a-z_]+)+$
+      expect(eventName).toMatch(/^[a-z]+(\.[a-z_]+)+$/);
     });
   });
 
