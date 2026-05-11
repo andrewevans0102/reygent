@@ -76,6 +76,12 @@ export const Events = {
   // Error events (minimal level)
   ERROR_UNHANDLED: 'error.unhandled',
   ERROR_VALIDATION: 'error.validation',
+  /** Emitted on TaskError catch - { type, message, stage, agent } */
+  ERROR_TASK: 'error.task',
+  /** Emitted on JSON parse failures - { agent, expectedFormat, received } */
+  ERROR_PARSE: 'error.parse',
+  /** Emitted when provider unavailable - { provider, reason } */
+  ERROR_PROVIDER: 'error.provider',
 
   // Performance events (verbose level)
   PERF_METRIC: 'performance.metric',
@@ -135,6 +141,9 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   // Error events - minimal
   [Events.ERROR_UNHANDLED]: TelemetryLevel.minimal,
   [Events.ERROR_VALIDATION]: TelemetryLevel.minimal,
+  [Events.ERROR_TASK]: TelemetryLevel.minimal,
+  [Events.ERROR_PARSE]: TelemetryLevel.minimal,
+  [Events.ERROR_PROVIDER]: TelemetryLevel.minimal,
 
   // Performance events - verbose
   [Events.PERF_METRIC]: TelemetryLevel.verbose,

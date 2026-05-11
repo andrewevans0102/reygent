@@ -5,6 +5,8 @@ import type { SpecPayload } from "./spec.js";
 import type { PlannerOutput, PlannerClarification, PlannerResult } from "./task.js";
 import { TaskError } from "./task.js";
 import type { UsageInfo } from "./usage.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 export function extractJSON(text: string): string {
   const trimmed = text.trim();
@@ -117,13 +119,33 @@ export async function runPlanner(
   const { stdout: raw, exitCode, usage } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true, onActivity: options?.onActivity, provider: plannerAgent?.provider, model: plannerAgent?.model });
 
   if (exitCode !== 0) {
+    // Emit error.task before throwing
+    const chesstrace = getChesstrace();
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: `Planner: agent exited with code ${exitCode}`,
+        stage: "plan",
+        agent: "planner",
+      });
+    }
     throw new TaskError(`Planner: agent exited with code ${exitCode}`);
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(extractJSON(raw));
-  } catch {
+  } catch (err) {
+    // Emit error.parse before throwing
+    const cleaned = extractJSON(raw);
+    const chesstrace = getChesstrace();
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_PARSE, {
+        agent: "planner",
+        expectedFormat: 'JSON object with valid/goals/tasks/constraints/dod or needsClarification/questions',
+        received: cleaned.slice(0, 500),
+      });
+    }
     throw new TaskError("Planner: failed to parse result as JSON");
   }
 
@@ -145,12 +167,32 @@ export async function runPlanner(
     const errors = Array.isArray(obj.errors)
       ? (obj.errors as string[]).join("\n  - ")
       : "unknown validation error";
+    // Emit error.task before throwing
+    const chesstrace = getChesstrace();
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: `Planner: spec validation failed:\n  - ${errors}`,
+        stage: "plan",
+        agent: "planner",
+      });
+    }
     throw new TaskError(
       `Planner: spec validation failed:\n  - ${errors}`,
     );
   }
 
   if (obj.valid !== true) {
+    // Emit error.task before throwing
+    const chesstrace = getChesstrace();
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Planner: unexpected response — missing 'valid' field",
+        stage: "plan",
+        agent: "planner",
+      });
+    }
     throw new TaskError(
       "Planner: unexpected response — missing 'valid' field",
     );
@@ -158,18 +200,55 @@ export async function runPlanner(
 
   const { goals, tasks, constraints, dod } = obj;
 
+  const chesstrace = getChesstrace();
   if (!isNonEmptyStringArray(goals)) {
+    // Emit error.task before throwing
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Planner: 'goals' must be a non-empty string array",
+        stage: "plan",
+        agent: "planner",
+      });
+    }
     throw new TaskError("Planner: 'goals' must be a non-empty string array");
   }
   if (!isNonEmptyStringArray(tasks)) {
+    // Emit error.task before throwing
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Planner: 'tasks' must be a non-empty string array",
+        stage: "plan",
+        agent: "planner",
+      });
+    }
     throw new TaskError("Planner: 'tasks' must be a non-empty string array");
   }
   if (!isNonEmptyStringArray(constraints)) {
+    // Emit error.task before throwing
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Planner: 'constraints' must be a non-empty string array",
+        stage: "plan",
+        agent: "planner",
+      });
+    }
     throw new TaskError(
       "Planner: 'constraints' must be a non-empty string array",
     );
   }
   if (!isNonEmptyStringArray(dod)) {
+    // Emit error.task before throwing
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Planner: 'dod' must be a non-empty string array",
+        stage: "plan",
+        agent: "planner",
+      });
+    }
     throw new TaskError("Planner: 'dod' must be a non-empty string array");
   }
 

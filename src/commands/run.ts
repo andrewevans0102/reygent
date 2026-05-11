@@ -203,6 +203,20 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
   }
 
   // All retries exhausted
+  // Emit error.task before throwing
+  const chesstrace = getChesstrace();
+  if (chesstrace) {
+    try {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: `${gateName} failed after ${maxRetries} retries`,
+        stage: stageName,
+        agent: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
+      });
+    } catch {
+      // Swallow emit errors
+    }
+  }
   throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
 }
 
@@ -460,6 +474,20 @@ export async function runCommand(options: RunOptions): Promise<void> {
           );
           if ("needsClarification" in result && result.needsClarification) {
             status.fail(chalk.red("Planner asked questions despite skip flag"));
+            // Emit error.task before throwing
+            const chesstrace = getChesstrace();
+            if (chesstrace) {
+              try {
+                chesstrace.emit(Events.ERROR_TASK, {
+                  type: "TaskError",
+                  message: "Planner: unexpected clarification request in assumption mode",
+                  stage: "plan",
+                  agent: "planner",
+                });
+              } catch {
+                // Swallow emit errors
+              }
+            }
             throw new TaskError("Planner: unexpected clarification request in assumption mode");
           }
           plan = result as PlannerOutput;
@@ -492,6 +520,20 @@ export async function runCommand(options: RunOptions): Promise<void> {
                 const answer = await pasteableInput({ message: ">" });
 
                 if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
+                  // Emit error.task before throwing
+                  const chesstrace = getChesstrace();
+                  if (chesstrace) {
+                    try {
+                      chesstrace.emit(Events.ERROR_TASK, {
+                        type: "TaskError",
+                        message: "Planner: clarification aborted by user",
+                        stage: "plan",
+                        agent: "planner",
+                      });
+                    } catch {
+                      // Swallow emit errors
+                    }
+                  }
                   throw new TaskError("Planner: clarification aborted by user");
                 }
 
@@ -507,6 +549,20 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
           if (!plan) {
             status.fail(chalk.red("Planner failed"));
+            // Emit error.task before throwing
+            const chesstrace = getChesstrace();
+            if (chesstrace) {
+              try {
+                chesstrace.emit(Events.ERROR_TASK, {
+                  type: "TaskError",
+                  message: `Planner: failed to create valid plan after ${maxAttempts} attempts`,
+                  stage: "plan",
+                  agent: "planner",
+                });
+              } catch {
+                // Swallow emit errors
+              }
+            }
             throw new TaskError(
               `Planner: failed to create valid plan after ${maxAttempts} attempts`,
             );
@@ -539,6 +595,19 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       if (stage.name === "implement") {
         if (!context.plan) {
+          // Emit error.task before throwing
+          if (chesstrace) {
+            try {
+              chesstrace.emit(Events.ERROR_TASK, {
+                type: "TaskError",
+                message: "Implement: plan stage must run before implement",
+                stage: "implement",
+                agent: "pipeline",
+              });
+            } catch {
+              // Swallow emit errors
+            }
+          }
           throw new TaskError("Implement: plan stage must run before implement");
         }
 
@@ -582,6 +651,19 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       if (stage.name === "gate-unit-tests") {
         if (!context.implement) {
+          // Emit error.task before throwing
+          if (chesstrace) {
+            try {
+              chesstrace.emit(Events.ERROR_TASK, {
+                type: "TaskError",
+                message: "gate-unit-tests: implement stage must run first",
+                stage: "gate-unit-tests",
+                agent: "pipeline",
+              });
+            } catch {
+              // Swallow emit errors
+            }
+          }
           throw new TaskError("gate-unit-tests: implement stage must run first");
         }
 
@@ -618,6 +700,19 @@ export async function runCommand(options: RunOptions): Promise<void> {
             output: gateResult.output,
           });
           emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+          // Emit error.task before throwing
+          if (chesstrace) {
+            try {
+              chesstrace.emit(Events.ERROR_TASK, {
+                type: "TaskError",
+                message: "unit tests failed with 0 retries configured",
+                stage: "gate-unit-tests",
+                agent: "gate:unit-tests",
+              });
+            } catch {
+              // Swallow emit errors
+            }
+          }
           throw new TaskError("unit tests failed with 0 retries configured");
         }
 
@@ -647,6 +742,19 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       if (stage.name === "gate-functional-tests") {
         if (!context.implement) {
+          // Emit error.task before throwing
+          if (chesstrace) {
+            try {
+              chesstrace.emit(Events.ERROR_TASK, {
+                type: "TaskError",
+                message: "gate-functional-tests: implement stage must run first",
+                stage: "gate-functional-tests",
+                agent: "pipeline",
+              });
+            } catch {
+              // Swallow emit errors
+            }
+          }
           throw new TaskError("gate-functional-tests: implement stage must run first");
         }
 
@@ -684,6 +792,19 @@ export async function runCommand(options: RunOptions): Promise<void> {
             output: gateResult.output,
           });
           emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+          // Emit error.task before throwing
+          if (chesstrace) {
+            try {
+              chesstrace.emit(Events.ERROR_TASK, {
+                type: "TaskError",
+                message: "functional tests failed with 0 retries configured",
+                stage: "gate-functional-tests",
+                agent: "gate:functional-tests",
+              });
+            } catch {
+              // Swallow emit errors
+            }
+          }
           throw new TaskError("functional tests failed with 0 retries configured");
         }
 
@@ -713,6 +834,19 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       if (stage.name === "security-review") {
         if (!context.implement) {
+          // Emit error.task before throwing
+          if (chesstrace) {
+            try {
+              chesstrace.emit(Events.ERROR_TASK, {
+                type: "TaskError",
+                message: "security-review: implement stage must run first",
+                stage: "security-review",
+                agent: "pipeline",
+              });
+            } catch {
+              // Swallow emit errors
+            }
+          }
           throw new TaskError("security-review: implement stage must run first");
         }
 
@@ -783,6 +917,19 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       if (stage.name === "pr-create") {
         if (!context.implement) {
+          // Emit error.task before throwing
+          if (chesstrace) {
+            try {
+              chesstrace.emit(Events.ERROR_TASK, {
+                type: "TaskError",
+                message: "pr-create: implement stage must run first",
+                stage: "pr-create",
+                agent: "pipeline",
+              });
+            } catch {
+              // Swallow emit errors
+            }
+          }
           throw new TaskError("pr-create: implement stage must run first");
         }
 
@@ -907,6 +1054,22 @@ export async function runCommand(options: RunOptions): Promise<void> {
       printVerboseUsage(tracker);
     }
   } catch (err) {
+    // Emit error.task telemetry for TaskError
+    if (chesstrace && err instanceof TaskError) {
+      try {
+        // Extract stage from context if available
+        const stage = context?.results[context.results.length - 1]?.stage ?? "unknown";
+        chesstrace.emit(Events.ERROR_TASK, {
+          type: "TaskError",
+          message: err.message,
+          stage,
+          agent: "pipeline",
+        });
+      } catch {
+        // Swallow emit errors
+      }
+    }
+
     // Emit pipeline.end with failure status (if context exists)
     if (chesstrace) {
       try {
