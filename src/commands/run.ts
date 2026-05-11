@@ -475,6 +475,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           if ("needsClarification" in result && result.needsClarification) {
             status.fail(chalk.red("Planner asked questions despite skip flag"));
             // Emit error.task before throwing
+            const chesstrace = getChesstrace();
             if (chesstrace) {
               try {
                 chesstrace.emit(Events.ERROR_TASK, {
@@ -520,6 +521,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
                 if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
                   // Emit error.task before throwing
+                  const chesstrace = getChesstrace();
                   if (chesstrace) {
                     try {
                       chesstrace.emit(Events.ERROR_TASK, {
@@ -548,6 +550,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           if (!plan) {
             status.fail(chalk.red("Planner failed"));
             // Emit error.task before throwing
+            const chesstrace = getChesstrace();
             if (chesstrace) {
               try {
                 chesstrace.emit(Events.ERROR_TASK, {

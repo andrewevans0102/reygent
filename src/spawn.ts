@@ -40,16 +40,18 @@ export async function spawnAgentStream(
   const { available, reason } = await adapter.isAvailable();
   if (!available) {
     // Emit error.provider and error.task before throwing
-    chesstrace.emit(Events.ERROR_PROVIDER, {
-      provider: providerName,
-      reason,
-    });
-    chesstrace.emit(Events.ERROR_TASK, {
-      type: "TaskError",
-      message: `Provider "${providerName}" is not available: ${reason}`,
-      stage: options?.stage ?? "spawn",
-      agent: name,
-    });
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_PROVIDER, {
+        provider: providerName,
+        reason,
+      });
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: `Provider "${providerName}" is not available: ${reason}`,
+        stage: options?.stage ?? "spawn",
+        agent: name,
+      });
+    }
     throw new TaskError(`Provider "${providerName}" is not available: ${reason}`);
   }
 
@@ -57,12 +59,14 @@ export async function spawnAgentStream(
   const startTime = Date.now();
 
   // Emit agent.spawn event before spawning
-  chesstrace.emit(Events.AGENT_SPAWN, {
-    agent: name,
-    provider: providerName,
-    model: modelId,
-    stage: options?.stage,
-  });
+  if (chesstrace) {
+    chesstrace.emit(Events.AGENT_SPAWN, {
+      agent: name,
+      provider: providerName,
+      model: modelId,
+      stage: options?.stage,
+    });
+  }
 
   // Track timeout state to prevent duplicate events
   let timedOut = false;
@@ -70,11 +74,13 @@ export async function spawnAgentStream(
   // Setup timeout handler
   const timeoutHandle = setTimeout(() => {
     timedOut = true;
-    chesstrace.emit(Events.AGENT_TIMEOUT, {
-      agent: name,
-      stage: options?.stage,
-      timeoutMs,
-    });
+    if (chesstrace) {
+      chesstrace.emit(Events.AGENT_TIMEOUT, {
+        agent: name,
+        stage: options?.stage,
+        timeoutMs,
+      });
+    }
   }, timeoutMs);
 
   try {
@@ -93,7 +99,7 @@ export async function spawnAgentStream(
     clearTimeout(timeoutHandle);
 
     // Only emit complete if timeout didn't fire
-    if (!timedOut) {
+    if (!timedOut && chesstrace) {
       const duration = Date.now() - startTime;
       chesstrace.emit(Events.AGENT_COMPLETE, {
         agent: name,
@@ -110,7 +116,7 @@ export async function spawnAgentStream(
     clearTimeout(timeoutHandle);
 
     // Only emit complete if timeout didn't fire
-    if (!timedOut) {
+    if (!timedOut && chesstrace) {
       const duration = Date.now() - startTime;
       chesstrace.emit(Events.AGENT_COMPLETE, {
         agent: name,

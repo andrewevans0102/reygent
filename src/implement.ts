@@ -178,11 +178,13 @@ function extractDevOutput(stdout: string): DevOutput {
     } catch (err) {
       // Emit error.parse before falling through
       const chesstrace = getChesstrace();
-      chesstrace.emit(Events.ERROR_PARSE, {
-        agent: "dev",
-        expectedFormat: '{ "files": ["..."] }',
-        received: match[0].slice(0, 200),
-      });
+      if (chesstrace) {
+        chesstrace.emit(Events.ERROR_PARSE, {
+          agent: "dev",
+          expectedFormat: '{ "files": ["..."] }',
+          received: match[0].slice(0, 500),
+        });
+      }
       // fall through
     }
   }
@@ -203,11 +205,13 @@ function extractQEOutput(stdout: string): QEOutput {
     } catch (err) {
       // Emit error.parse before falling through
       const chesstrace = getChesstrace();
-      chesstrace.emit(Events.ERROR_PARSE, {
-        agent: "qe",
-        expectedFormat: '{ "testFiles": ["..."] }',
-        received: match[0].slice(0, 200),
-      });
+      if (chesstrace) {
+        chesstrace.emit(Events.ERROR_PARSE, {
+          agent: "qe",
+          expectedFormat: '{ "testFiles": ["..."] }',
+          received: match[0].slice(0, 500),
+        });
+      }
       // fall through
     }
   }
@@ -232,12 +236,14 @@ export async function runImplement(
   if (!devAgent || !qeAgent) {
     // Emit error.task before throwing
     const chesstrace = getChesstrace();
-    chesstrace.emit(Events.ERROR_TASK, {
-      type: "TaskError",
-      message: "Implement: missing dev or qe agent config",
-      stage: options?.stage ?? "implement",
-      agent: "implement",
-    });
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Implement: missing dev or qe agent config",
+        stage: options?.stage ?? "implement",
+        agent: "implement",
+      });
+    }
     throw new TaskError("Implement: missing dev or qe agent config");
   }
 
@@ -348,32 +354,38 @@ export async function runImplement(
   const chesstrace = getChesstrace();
   if ((runDev && dev === null) && (runQE && qe === null)) {
     // Emit error.task before throwing
-    chesstrace.emit(Events.ERROR_TASK, {
-      type: "TaskError",
-      message: "Implement: all requested agents failed",
-      stage: options?.stage ?? "implement",
-      agent: "implement",
-    });
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Implement: all requested agents failed",
+        stage: options?.stage ?? "implement",
+        agent: "implement",
+      });
+    }
     throw new TaskError("Implement: all requested agents failed");
   }
   if (runDev && !runQE && dev === null) {
     // Emit error.task before throwing
-    chesstrace.emit(Events.ERROR_TASK, {
-      type: "TaskError",
-      message: "Implement: dev agent failed",
-      stage: options?.stage ?? "implement",
-      agent: "dev",
-    });
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Implement: dev agent failed",
+        stage: options?.stage ?? "implement",
+        agent: "dev",
+      });
+    }
     throw new TaskError("Implement: dev agent failed");
   }
   if (!runDev && runQE && qe === null) {
     // Emit error.task before throwing
-    chesstrace.emit(Events.ERROR_TASK, {
-      type: "TaskError",
-      message: "Implement: qe agent failed",
-      stage: options?.stage ?? "implement",
-      agent: "qe",
-    });
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: "Implement: qe agent failed",
+        stage: options?.stage ?? "implement",
+        agent: "qe",
+      });
+    }
     throw new TaskError("Implement: qe agent failed");
   }
 
