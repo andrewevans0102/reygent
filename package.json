@@ -20,6 +20,9 @@
   "keywords": [],
   "author": "",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "@inquirer/core": "^10.2.1",
     "@inquirer/prompts": "^8.4.1",

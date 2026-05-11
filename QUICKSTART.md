@@ -4,7 +4,7 @@ Get from zero to your first AI-driven pull request in minutes.
 
 ## 1. Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 22+
 - [Claude CLI](https://docs.anthropic.com/en/docs/claude-code/overview) installed and authenticated
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
 - Git configured with push access to your repo

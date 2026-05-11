@@ -8,7 +8,7 @@ Reygent reads a spec (markdown file, Jira issue, or Linear issue), then runs the
 
 ## Prerequisites
 
-- **Node.js** 18+
+- **Node.js** 22+
 - **Claude CLI** (`claude`) installed and authenticated
 - **GitHub CLI** (`gh`) installed and authenticated (for PR operations)
 - **Git** configured in your project
