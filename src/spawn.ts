@@ -35,15 +35,25 @@ export async function spawnAgentStream(
 ): Promise<SpawnResult> {
   const providerName = options?.provider ?? resolveProvider();
   const adapter = getProvider(providerName);
+  const chesstrace = getChesstrace();
 
   const { available, reason } = await adapter.isAvailable();
   if (!available) {
+    // Emit error.provider and error.task before throwing
+    chesstrace.emit(Events.ERROR_PROVIDER, {
+      provider: providerName,
+      reason,
+    });
+    chesstrace.emit(Events.ERROR_TASK, {
+      type: "TaskError",
+      message: `Provider "${providerName}" is not available: ${reason}`,
+      stage: options?.stage ?? "spawn",
+      agent: name,
+    });
     throw new TaskError(`Provider "${providerName}" is not available: ${reason}`);
   }
 
   const modelId = options?.model ?? await resolveModel(providerName);
-
-  const chesstrace = getChesstrace();
   const startTime = Date.now();
 
   // Emit agent.spawn event before spawning
