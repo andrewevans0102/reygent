@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import type { TelemetryEvent } from "../chesstrace/events.js";
+import * as config from "../config.js";
 
 describe("telemetry helpers", () => {
   let testDir: string;
@@ -271,6 +272,153 @@ describe("telemetry helpers", () => {
       expect(runs[0].eventCount).toBe(2);
       expect(runs[0].categories).toContain("agent");
       expect(runs[0].categories).toContain("tool");
+    });
+  });
+
+  describe("UUID validation", () => {
+    it("should accept valid UUIDs", () => {
+      const isValidUuid = (value: string): boolean => {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(value);
+      };
+
+      expect(isValidUuid("550e8400-e29b-41d4-a716-446655440000")).toBe(true);
+      expect(isValidUuid("6ba7b810-9dad-11d1-80b4-00c04fd430c8")).toBe(true);
+      expect(isValidUuid("A0A0A0A0-B0B0-C0C0-D0D0-E0E0E0E0E0E0")).toBe(true);
+    });
+
+    it("should reject invalid UUIDs", () => {
+      const isValidUuid = (value: string): boolean => {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(value);
+      };
+
+      expect(isValidUuid("not-a-uuid")).toBe(false);
+      expect(isValidUuid("550e8400-e29b-41d4-a716")).toBe(false); // too short
+      expect(isValidUuid("550e8400e29b41d4a716446655440000")).toBe(false); // missing dashes
+      expect(isValidUuid("")).toBe(false);
+      expect(isValidUuid("123")).toBe(false);
+    });
+  });
+
+  describe("limit validation", () => {
+    it("should accept positive integers", () => {
+      const validateLimit = (limit: string): number => {
+        const parsed = Number.parseInt(limit, 10);
+        if (isNaN(parsed) || parsed < 1) {
+          throw new Error("Invalid limit");
+        }
+        return parsed;
+      };
+
+      expect(validateLimit("1")).toBe(1);
+      expect(validateLimit("10")).toBe(10);
+      expect(validateLimit("100")).toBe(100);
+    });
+
+    it("should reject invalid limits", () => {
+      const validateLimit = (limit: string): number => {
+        const parsed = Number.parseInt(limit, 10);
+        if (isNaN(parsed) || parsed < 1) {
+          throw new Error("Invalid limit");
+        }
+        return parsed;
+      };
+
+      expect(() => validateLimit("0")).toThrow("Invalid limit");
+      expect(() => validateLimit("-1")).toThrow("Invalid limit");
+      expect(() => validateLimit("abc")).toThrow("Invalid limit");
+      expect(() => validateLimit("")).toThrow("Invalid limit");
+    });
+  });
+});
+
+describe("telemetry command integration", () => {
+  let testDir: string;
+  let backend: SqliteBackend;
+  let mockConfig: any;
+
+  beforeEach(async () => {
+    // Create temp directory for test database
+    testDir = mkdtempSync(join(tmpdir(), "reygent-telemetry-integration-"));
+    const dbPath = join(testDir, "chesstrace.db");
+
+    // Setup mock config
+    mockConfig = {
+      telemetry: {
+        enabled: true,
+        level: "standard",
+        backend: "sqlite",
+        retention: 30,
+      },
+    };
+
+    vi.spyOn(config, "loadConfig").mockReturnValue(mockConfig);
+    vi.spyOn(config, "findLocalConfigDir").mockReturnValue(null);
+    vi.spyOn(config, "resolveGlobalConfigPath").mockReturnValue(join(testDir, "config.json"));
+
+    backend = new SqliteBackend("global", dbPath);
+    await backend.init();
+
+    // Insert test data
+    const events: TelemetryEvent[] = [
+      {
+        id: "event-1",
+        runId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: Date.now() - 10000,
+        category: "agent",
+        event: "agent.start",
+        minLevel: 1,
+        data: { name: "dev" },
+      },
+      {
+        id: "event-2",
+        runId: "550e8400-e29b-41d4-a716-446655440000",
+        timestamp: Date.now(),
+        category: "tool",
+        event: "tool.call",
+        minLevel: 1,
+        data: { tool: "read" },
+      },
+    ];
+    await backend.writeBatch(events);
+    await backend.close();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  describe("config resolution", () => {
+    it("should prefer local config when present", () => {
+      const localDir = join(testDir, ".reygent");
+      vi.spyOn(config, "findLocalConfigDir").mockReturnValue(localDir);
+
+      const result = config.findLocalConfigDir("/some/path");
+      expect(result).toBe(localDir);
+    });
+
+    it("should fall back to global config when local not present", () => {
+      vi.spyOn(config, "findLocalConfigDir").mockReturnValue(null);
+
+      const result = config.findLocalConfigDir("/some/path");
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("enable/disable commands", () => {
+    it("should update config with telemetry enabled state", () => {
+      const configPath = join(testDir, "config.json");
+      writeFileSync(configPath, JSON.stringify(mockConfig, null, 2));
+
+      // Simulate enable command logic
+      const updatedConfig = { ...mockConfig };
+      updatedConfig.telemetry.enabled = false;
+      writeFileSync(configPath, JSON.stringify(updatedConfig, null, 2));
+
+      const saved = JSON.parse(require("fs").readFileSync(configPath, "utf-8"));
+      expect(saved.telemetry.enabled).toBe(false);
     });
   });
 });

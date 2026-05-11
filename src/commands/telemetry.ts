@@ -10,6 +10,14 @@ import type { TelemetryEvent } from "../chesstrace/events.js";
 import { join } from "node:path";
 
 /**
+ * Validate UUID format
+ */
+function isValidUuid(value: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(value);
+}
+
+/**
  * Parse duration string like "30d", "7d", "1d" into days
  */
 function parseDuration(duration: string): number {
@@ -83,7 +91,8 @@ async function statusCommand() {
     }
 
     // Initialize backend to get database info
-    const backend = new SqliteBackend("local");
+    const backendType = telemetryConfig.backend === "sqlite" ? "local" : "local";
+    const backend = new SqliteBackend(backendType);
     await backend.init();
 
     const runs = await backend.listRuns();
@@ -119,13 +128,23 @@ async function runsCommand(options: { limit?: string }) {
   const spinner = ora("Loading telemetry runs...").start();
 
   try {
-    const backend = new SqliteBackend("local");
+    const config = loadConfig();
+    const backendType = config.telemetry?.backend === "sqlite" ? "local" : "local";
+    const backend = new SqliteBackend(backendType);
     await backend.init();
 
     const allRuns = await backend.listRuns();
     await backend.close();
 
-    const limit = options.limit ? Number.parseInt(options.limit, 10) : allRuns.length;
+    let limit = allRuns.length;
+    if (options.limit) {
+      const parsed = Number.parseInt(options.limit, 10);
+      if (isNaN(parsed) || parsed < 1) {
+        spinner.fail(chalk.red(`Invalid limit: ${options.limit}. Must be positive integer.`));
+        process.exit(1);
+      }
+      limit = parsed;
+    }
     const runs = allRuns.slice(0, limit);
 
     spinner.succeed(chalk.green(`Loaded ${runs.length} run(s)`));
@@ -169,10 +188,17 @@ async function runsCommand(options: { limit?: string }) {
  * reygent telemetry show <runId> - detailed chronological event log
  */
 async function showCommand(runId: string) {
+  if (!isValidUuid(runId)) {
+    console.error(chalk.red(`Invalid run ID format: ${runId}. Must be valid UUID.`));
+    process.exit(1);
+  }
+
   const spinner = ora(`Loading events for run ${runId}...`).start();
 
   try {
-    const backend = new SqliteBackend("local");
+    const config = loadConfig();
+    const backendType = config.telemetry?.backend === "sqlite" ? "local" : "local";
+    const backend = new SqliteBackend(backendType);
     await backend.init();
 
     const events = await backend.query({ runId });
@@ -198,7 +224,9 @@ async function showCommand(runId: string) {
 
       console.log(`${chalk.gray(timestamp)} ${category} ${eventName}`);
       if (dataStr) {
-        console.log(chalk.gray(dataStr));
+        // Apply gray color to entire data block for visual distinction
+        const grayData = dataStr.split('\n').map(line => chalk.gray(line)).join('\n');
+        console.log(grayData);
       }
       console.log();
     }
@@ -236,17 +264,18 @@ function exportCsv(events: TelemetryEvent[]): string {
  * reygent telemetry export <runId> [--format json|csv] - export run data
  */
 async function exportCommand(runId: string, options: { format?: string; output?: string }) {
-  const format = options.format ?? "json";
-
-  if (format !== "json" && format !== "csv") {
-    console.error(chalk.red(`Invalid format: ${format}. Must be json or csv.`));
+  if (!isValidUuid(runId)) {
+    console.error(chalk.red(`Invalid run ID format: ${runId}. Must be valid UUID.`));
     process.exit(1);
   }
 
+  const format = options.format ?? "json";
   const spinner = ora(`Exporting run ${runId} as ${format.toUpperCase()}...`).start();
 
   try {
-    const backend = new SqliteBackend("local");
+    const config = loadConfig();
+    const backendType = config.telemetry?.backend === "sqlite" ? "local" : "local";
+    const backend = new SqliteBackend(backendType);
     await backend.init();
 
     const events = await backend.query({ runId });
@@ -283,7 +312,9 @@ async function pruneCommand(options: { olderThan?: string }) {
   const spinner = ora(`Pruning events older than ${days} days...`).start();
 
   try {
-    const backend = new SqliteBackend("local");
+    const config = loadConfig();
+    const backendType = config.telemetry?.backend === "sqlite" ? "local" : "local";
+    const backend = new SqliteBackend(backendType);
     await backend.init();
 
     const olderThan = Date.now() - days * 24 * 60 * 60 * 1000;
@@ -305,7 +336,12 @@ async function enableCommand() {
   const spinner = ora("Enabling telemetry...").start();
 
   try {
-    const configPath = resolveGlobalConfigPath();
+    // Check for local config first
+    const localConfigDir = findLocalConfigDir(process.cwd());
+    const configPath = localConfigDir
+      ? join(localConfigDir, "config.json")
+      : resolveGlobalConfigPath();
+
     const config = loadConfig();
 
     config.telemetry = config.telemetry ?? {
@@ -317,7 +353,8 @@ async function enableCommand() {
 
     writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 
-    spinner.succeed(chalk.green("Telemetry enabled"));
+    const scope = localConfigDir ? "local" : "global";
+    spinner.succeed(chalk.green(`Telemetry enabled (${scope} config)`));
   } catch (err) {
     spinner.fail(chalk.red(`Failed to enable telemetry: ${(err as Error).message}`));
     process.exit(1);
@@ -331,7 +368,12 @@ async function disableCommand() {
   const spinner = ora("Disabling telemetry...").start();
 
   try {
-    const configPath = resolveGlobalConfigPath();
+    // Check for local config first
+    const localConfigDir = findLocalConfigDir(process.cwd());
+    const configPath = localConfigDir
+      ? join(localConfigDir, "config.json")
+      : resolveGlobalConfigPath();
+
     const config = loadConfig();
 
     config.telemetry = config.telemetry ?? {
@@ -343,7 +385,8 @@ async function disableCommand() {
 
     writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 
-    spinner.succeed(chalk.green("Telemetry disabled"));
+    const scope = localConfigDir ? "local" : "global";
+    spinner.succeed(chalk.green(`Telemetry disabled (${scope} config)`));
   } catch (err) {
     spinner.fail(chalk.red(`Failed to disable telemetry: ${(err as Error).message}`));
     process.exit(1);
@@ -379,7 +422,12 @@ export function registerTelemetryCommand(program: Command): void {
     .command("export")
     .description("Export run data to JSON or CSV")
     .argument("<runId>", "Run ID to export")
-    .option("--format <type>", "Export format (json or csv)", "json")
+    .addOption(
+      program
+        .createOption("--format <type>", "Export format")
+        .choices(["json", "csv"])
+        .default("json")
+    )
     .option("--output <file>", "Output file path (prints to stdout if omitted)")
     .action(exportCommand);
 
