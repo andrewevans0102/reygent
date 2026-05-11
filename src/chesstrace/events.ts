@@ -19,7 +19,7 @@ export type TelemetryCategory =
   | 'error'
   | 'performance'
   | 'pipeline'
-  | 'usage';
+  | 'usage'
   | 'gate';
 
 /**
