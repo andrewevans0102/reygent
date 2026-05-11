@@ -10,6 +10,7 @@ import type { AgentConfig } from "../agents.js";
 import { builtinAgents } from "../agents.js";
 import { PROVIDER_NAMES, getProvider } from "../providers/index.js";
 import { isDebug } from "../debug.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 
 /** Agent categories for grouped display */
 const AGENT_CATEGORIES: { label: string; color: (s: string) => string; roles: string[] }[] = [
@@ -189,6 +190,7 @@ async function runConfig(): Promise<void> {
     };
   });
 
+  resetTerminalForInput();
   let selectedProvider = await select({
     message: "Default provider:",
     choices: providerChoices,
@@ -199,6 +201,7 @@ async function runConfig(): Promise<void> {
   if (!availability[selectedProvider]?.available) {
     const reason = availability[selectedProvider]?.reason ?? "unknown reason";
     console.log(chalk.yellow("⚠"), chalk.yellow(`Provider ${selectedProvider} is unavailable (${reason})`));
+    resetTerminalForInput();
     const proceed = await confirm({
       message: "Continue with this provider anyway?",
       default: false,
@@ -215,11 +218,13 @@ async function runConfig(): Promise<void> {
 
   if (provider.supportedModels.length === 0) {
     // OpenRouter or similar — free-text input
+    resetTerminalForInput();
     selectedModel = await pasteableInput({
       message: "Model ID:",
       default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
     });
   } else {
+    resetTerminalForInput();
     const modelChoices = provider.supportedModels.map((m) => ({
       name: `${m.id} — ${m.label}`,
       value: m.id,
@@ -255,6 +260,7 @@ async function runConfig(): Promise<void> {
       console.log(chalk.gray("  Model:   "), chalk.cyan(agentModel));
 
       const hasOverride = agent.provider !== undefined || agent.model !== undefined;
+      resetTerminalForInput();
       const action = await select({
         message: `Configure ${agent.name}:`,
         choices: [
@@ -275,6 +281,7 @@ async function runConfig(): Promise<void> {
       }
 
       // action === "customize"
+      resetTerminalForInput();
       const agentProviderChoice = await select({
         message: `Provider for ${agent.name}:`,
         choices: providerChoices,
@@ -285,6 +292,7 @@ async function runConfig(): Promise<void> {
       if (!availability[agentProviderChoice]?.available) {
         const reason = availability[agentProviderChoice]?.reason ?? "unknown reason";
         console.log(chalk.yellow("⚠"), chalk.yellow(`Provider ${agentProviderChoice} is unavailable (${reason})`));
+        resetTerminalForInput();
         const proceed = await confirm({
           message: "Continue with this provider anyway?",
           default: false,
@@ -298,11 +306,13 @@ async function runConfig(): Promise<void> {
       let agentModelChoice: string;
 
       if (agentProviderAdapter.supportedModels.length === 0) {
+        resetTerminalForInput();
         agentModelChoice = await pasteableInput({
           message: `Model ID for ${agent.name}:`,
           default: agent.model ?? agentProviderAdapter.defaultModel,
         });
       } else {
+        resetTerminalForInput();
         const agentModelChoices = agentProviderAdapter.supportedModels.map((m) => ({
           name: `${m.id} — ${m.label}`,
           value: m.id,

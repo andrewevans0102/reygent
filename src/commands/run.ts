@@ -326,8 +326,9 @@ async function promptLinearSpec(): Promise<string> {
     console.log(chalk.red.bold("Error:"), "LINEAR_API_KEY not set. Add it to your .env file.");
     process.exit(1);
   }
+  resetTerminalForInput();
   const value = await pasteableInput({
-    message: "Linear issue URL or ID (e.g. https://linear.app/team/ENG-123 or ENG-123):",
+    message: "Linear issue URL or ID (e.g. ENG-123):",
     validate: (v) => {
       const trimmed = v.trim();
       if (!trimmed) return "Required";
@@ -349,6 +350,7 @@ async function promptJiraSpec(): Promise<string> {
     console.log(chalk.red.bold("Error:"), `Missing env vars: ${missing.join(", ")}. Add them to your .env file.`);
     process.exit(1);
   }
+  resetTerminalForInput();
   const value = await pasteableInput({
     message: "Jira issue key (e.g. PROJ-123):",
     validate: (v) => {
@@ -362,6 +364,7 @@ async function promptJiraSpec(): Promise<string> {
 }
 
 async function promptMarkdownSpec(): Promise<string> {
+  resetTerminalForInput();
   const value = await pasteableInput({
     message: "Path to markdown spec file:",
     validate: (v) => (v.trim() ? true : "Required"),
@@ -370,6 +373,7 @@ async function promptMarkdownSpec(): Promise<string> {
 }
 
 async function promptForSpec(): Promise<string> {
+  resetTerminalForInput();
   const source = await select({
     message: "Where is the workflow spec?",
     choices: [
@@ -491,6 +495,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
     // Prompt for permission mode if not specified
     let autoApprove = options.autoApprove;
     if (!autoApprove) {
+      resetTerminalForInput();
       const rl = createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -511,6 +516,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
     // Prompt for clarification preference if not specified
     let skipClarification = options.skipClarification;
     if (!skipClarification && !options.dryRun) {
+      resetTerminalForInput();
       const rl = createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -626,6 +632,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
               for (let i = 0; i < result.questions.length; i++) {
                 const question = result.questions[i];
                 console.log(`  [${i + 1}/${result.questions.length}] ${question}`);
+                resetTerminalForInput();
                 const answer = await pasteableInput({ message: ">" });
 
                 if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
