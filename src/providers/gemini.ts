@@ -58,13 +58,23 @@ export const geminiAdapter: ProviderAdapter = {
       const child = spawn("gemini", args, {
         stdio: [stdinMode, "pipe", "pipe"],
         env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
+        detached: false, // Keep in same process group so we can kill descendants
       });
       registerChild(child);
 
       let stdout = "";
 
       const timeout = setTimeout(() => {
-        child.kill();
+        // Kill entire process group to catch spawned descendants
+        if (child.pid && process.platform !== "win32") {
+          try {
+            process.kill(-child.pid, "SIGTERM");
+          } catch {
+            child.kill();
+          }
+        } else {
+          child.kill();
+        }
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);
 
