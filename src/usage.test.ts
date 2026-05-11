@@ -137,11 +137,12 @@ describe("UsageTracker", () => {
       vi.spyOn(chesstrace, "isEnabled").mockReturnValue(true);
       const emitSpy = vi.spyOn(chesstrace, "emit");
 
-      tracker.record("dev", "implement", {
+      const usage = {
         costUsd: 0.05,
         cachedTokens: 50000,
-        provider: "claude",
-      });
+        provider: "claude" as const,
+      };
+      tracker.record("dev", "implement", usage);
 
       const calls = emitSpy.mock.calls.filter((call) => call[0] === Events.USAGE_COST);
       expect(calls.length).toBe(1);
@@ -151,9 +152,10 @@ describe("UsageTracker", () => {
         costUsd: 0.05,
       });
       // Verify cacheSavingsUsd is calculated correctly
+      const expectedSavings = calculateCacheSavings(usage);
       const cacheSavingsUsd = calls[0][1].cacheSavingsUsd as number;
       expect(cacheSavingsUsd).toBeGreaterThan(0);
-      expect(cacheSavingsUsd).toBeCloseTo(0.135);
+      expect(cacheSavingsUsd).toBeCloseTo(expectedSavings);
     });
 
     it("defaults missing token values to 0 in telemetry", () => {

@@ -30,7 +30,7 @@ export class UsageTracker {
 
     // Emit telemetry events (no-op if telemetry disabled)
     const chesstrace = getChesstrace();
-    if (!chesstrace?.isEnabled?.()) {
+    if (!chesstrace || !chesstrace.isEnabled()) {
       return;
     }
 
