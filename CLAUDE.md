@@ -210,6 +210,43 @@ multi.stop();
 - Use `chalk.gray` for timestamps and secondary metadata.
 - Keep output scannable: one concept per line, consistent indentation.
 
+## Telemetry Analysis
+
+Analyze Reygent runs to optimize performance and reduce costs:
+
+- `reygent analyze failures` - Common error patterns
+- `reygent analyze success` - What works well
+- `reygent analyze costs` - Cost breakdown and savings
+- `reygent analyze agents` - Agent performance comparison
+
+All analysis runs on local telemetry database. No data leaves your machine.
+
+### Command Details
+
+**Failures Analysis:**
+```bash
+reygent analyze failures [--agent <name>] [--since 30d] [--limit N]
+```
+Shows top failure patterns with occurrence counts, agent breakdown, and actionable recommendations.
+
+**Success Analysis:**
+```bash
+reygent analyze success [--stage <name>] [--since 30d] [--min-success-rate <pct>]
+```
+Extracts patterns from successful runs: agent performance, model distribution, optimal configurations.
+
+**Cost Analysis:**
+```bash
+reygent analyze costs [--since 30d] [--by-agent] [--show-runs]
+```
+Cost breakdown by stage/agent with optimization opportunities and potential savings.
+
+**Agent Analysis:**
+```bash
+reygent analyze agents [--agent <name>] [--since 30d] [--compare-models]
+```
+Per-agent performance: success rates, duration, costs, error types, model distribution.
+
 ## Provider Pricing Verification
 
 Provider pricing data lives in `src/pricing.ts`. To verify accuracy against current provider documentation:
