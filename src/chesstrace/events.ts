@@ -20,6 +20,7 @@ export type TelemetryCategory =
   | 'performance'
   | 'pipeline'
   | 'usage';
+  | 'gate';
 
 /**
  * Core telemetry event interface
@@ -89,6 +90,11 @@ export const Events = {
   // Usage events (verbose level)
   USAGE_TOKENS: 'usage.tokens',
   USAGE_COST: 'usage.cost',
+  // Gate events (standard level)
+  /** Emitted after each gate execution - { gateName, passed, attempt } */
+  GATE_RESULT: 'gate.result',
+  /** Emitted when gate retry triggered - { gateName, attempt, maxRetries, failureSnippet } */
+  GATE_RETRY: 'gate.retry',
 } as const;
 
 /**
@@ -143,6 +149,9 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   // Usage events - verbose
   [Events.USAGE_TOKENS]: TelemetryLevel.verbose,
   [Events.USAGE_COST]: TelemetryLevel.verbose,
+  // Gate events - standard
+  [Events.GATE_RESULT]: TelemetryLevel.standard,
+  [Events.GATE_RETRY]: TelemetryLevel.standard,
 };
 
 /**
@@ -164,6 +173,7 @@ export function categoryFromEvent(event: string): TelemetryCategory {
     'performance',
     'pipeline',
     'usage',
+    'gate',
   ];
 
   if (validCategories.includes(category as TelemetryCategory)) {
