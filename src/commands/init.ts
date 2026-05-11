@@ -8,6 +8,7 @@ import { builtinAgents } from "../agents.js";
 import type { ReygentConfig } from "../config.js";
 import { isDebug } from "../debug.js";
 import { DEFAULT_MODEL } from "../model.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 
 export async function initCommand(options: { dryRun: boolean } = { dryRun: false }): Promise<void> {
   const targetDir = join(process.cwd(), ".reygent");
@@ -40,6 +41,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
       console.log(chalk.gray(`  Path: ${targetDir}\n`));
 
       if (existsSync(configPath)) {
+        resetTerminalForInput();
         const action = await select({
           message: "Existing config found. What would you like to do?",
           choices: [

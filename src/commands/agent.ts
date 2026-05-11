@@ -7,6 +7,7 @@ import { resolveModel, resolveProvider, validateModel } from "../model.js";
 import { getProvider } from "../providers/index.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { TaskError } from "../task.js";
+import { resetTerminalForInput } from "../terminal-reset.js";
 
 interface AgentOptions {
   spec?: string;
@@ -32,6 +33,7 @@ export async function agentCommand(
       if (agents.length === 0) {
         throw new TaskError("No agents configured. Add agents to .reygent/config.json or check built-in agents.");
       }
+      resetTerminalForInput();
       agent = await select({
         message: "Select agent:",
         choices: agents.map((a) => ({

@@ -88,6 +88,7 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
         process.exit(1);
       }
 
+      resetTerminalForInput();
       provider = await select<SpecProvider>({
         message: "Which provider is this issue from?",
         choices: [
@@ -128,6 +129,7 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
         for (let i = 0; i < result.questions.length; i++) {
           const question = result.questions[i];
           console.log(`  [${i + 1}/${result.questions.length}] ${question}`);
+          resetTerminalForInput();
           const answer = await pasteableInput({ message: ">" });
 
           if (answer.toLowerCase() === "abort" || answer.toLowerCase() === "cancel") {
