@@ -600,11 +600,7 @@ describe('Chesstrace', () => {
       const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
       await chesstrace.init(backend);
 
-      backend.pruneResult = -1; // Simulate error scenario
-      backend.shouldThrow = false;
-
       // Override prune to throw
-      const originalPrune = backend.prune.bind(backend);
       backend.prune = vi.fn().mockRejectedValue(new Error('Prune error'));
 
       const count = await chesstrace.prune(30);

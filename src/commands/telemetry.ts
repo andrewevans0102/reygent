@@ -323,7 +323,6 @@ async function pruneCommand(options: { olderThan?: string }) {
     await backend.close();
 
     spinner.succeed(chalk.green(`Pruned ${deleted} event(s) older than ${days} days`));
-    console.log(chalk.gray(`Deleted ${deleted} event(s) older than ${days} days`));
   } catch (err) {
     spinner.fail(chalk.red(`Failed to prune events: ${(err as Error).message}`));
     process.exit(1);
