@@ -153,7 +153,10 @@ export const claudeAdapter: ProviderAdapter = {
       }
 
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
-      const child = spawn("claude", args, { stdio: [stdinMode, "pipe", "pipe"] });
+      const child = spawn("claude", args, {
+        stdio: [stdinMode, "pipe", "pipe"],
+        detached: false, // Keep in same process group so we can kill descendants
+      });
       registerChild(child);
 
       let resultText = "";
@@ -162,7 +165,16 @@ export const claudeAdapter: ProviderAdapter = {
       const name = options.agentName;
 
       const timeout = setTimeout(() => {
-        child.kill();
+        // Kill entire process group to catch spawned descendants
+        if (child.pid && process.platform !== "win32") {
+          try {
+            process.kill(-child.pid, "SIGTERM");
+          } catch {
+            child.kill();
+          }
+        } else {
+          child.kill();
+        }
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);
 
@@ -278,7 +290,10 @@ export const claudeAdapter: ProviderAdapter = {
       const child = spawn(
         "claude",
         ["--append-system-prompt", systemPrompt, "--model", model],
-        { stdio: "inherit" },
+        {
+          stdio: "inherit",
+          detached: false, // Keep in same process group so we can kill descendants
+        },
       );
       registerChild(child);
 

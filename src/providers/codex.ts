@@ -55,13 +55,25 @@ export const codexAdapter: ProviderAdapter = {
 
       const name = options.agentName;
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
-      const child = spawn("codex", args, { stdio: [stdinMode, "pipe", "pipe"] });
+      const child = spawn("codex", args, {
+        stdio: [stdinMode, "pipe", "pipe"],
+        detached: false, // Keep in same process group so we can kill descendants
+      });
       registerChild(child);
 
       let stdout = "";
 
       const timeout = setTimeout(() => {
-        child.kill();
+        // Kill entire process group to catch spawned descendants
+        if (child.pid && process.platform !== "win32") {
+          try {
+            process.kill(-child.pid, "SIGTERM");
+          } catch {
+            child.kill();
+          }
+        } else {
+          child.kill();
+        }
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);
 
