@@ -20,11 +20,11 @@ import { loadSpec, SpecError } from "../spec.js";
 import { PIPELINE, TaskError } from "../task.js";
 import type { Severity, StageResult, TaskContext, PlannerOutput } from "../task.js";
 import { UsageTracker, printUsageSummary, printVerboseUsage } from "../usage.js";
-import { getChesstrace } from "../chesstrace/index.js";
-import type { Chesstrace } from "../chesstrace/index.js";
+import { Chesstrace, getChesstrace } from "../chesstrace/index.js";
 import { Events, TelemetryLevel } from "../chesstrace/events.js";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import { loadConfig } from "../config.js";
+import { getTelemetryOverride } from "../telemetry-override.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -399,14 +399,22 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
   // Load config and check if telemetry is enabled
   const config = loadConfig();
-  const telemetryEnabled = config.telemetry?.enabled === true;
+  const telemetryOverride = getTelemetryOverride();
+
+  // Apply CLI flag overrides
+  const telemetryEnabled = telemetryOverride.disabled === true
+    ? false
+    : config.telemetry?.enabled === true;
+
+  const telemetryLevelStr = telemetryOverride.level ?? config.telemetry?.level ?? 'standard';
+  const telemetryLevel = TelemetryLevel[telemetryLevelStr];
+
   let chesstrace: Chesstrace | null = null;
 
   // Initialize telemetry backend only if enabled
   if (telemetryEnabled) {
     try {
-      const telemetryLevel = TelemetryLevel[config.telemetry?.level ?? 'standard'];
-      chesstrace = getChesstrace();
+      chesstrace = getChesstrace({ level: telemetryLevel });
       const backend = new SqliteBackend();
       await chesstrace.init(backend);
       await chesstrace.startRun();

@@ -7,6 +7,7 @@ import { killAllChildren } from "./child-registry.js";
 import { setDebug } from "./debug.js";
 import { setModelOverride, setProviderOverride, validateModel } from "./model.js";
 import { getProvider, PROVIDER_NAMES } from "./providers/index.js";
+import { setTelemetryOverride, isValidTelemetryLevel } from "./telemetry-override.js";
 import { agentCommand } from "./commands/agent.js";
 import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
@@ -34,7 +35,9 @@ program
   .option("--debug", "Show full stack traces on errors (or set REYGENT_DEBUG=1)")
   .option("--model <id>", "Model ID (e.g. claude-sonnet-4-5, gemini-2.5-pro, gpt-5.4)")
   .option("--provider <name>", `AI provider (${PROVIDER_NAMES.join(", ")})`)
-  .option("--no-telemetry", "Disable telemetry for this session")
+  .option("--no-telemetry", "Disable telemetry for this run")
+  .option("--telemetry-level <level>", "Override telemetry level (minimal, standard, verbose)")
+  .option("--telemetry-verbose", "Shorthand for --telemetry-level verbose")
   .addHelpText("after", `
 ${chalk.yellow("Disclaimer:")} This software is provided "as is" with no warranty. AI-generated output should be reviewed by a human. See LICENSE for full terms.`);
 
@@ -121,7 +124,7 @@ if (!isHelpOrVersion) {
   console.log(chalk.bold.cyan(`\nreygent`) + chalk.gray(` v${pkg.version}`) + "\n");
 }
 
-// Set debug flag, provider, and model override before any command action runs
+// Set debug flag, provider, model, and telemetry overrides before any command action runs
 program.hook("preAction", async () => {
   if (program.opts().debug) {
     setDebug(true);
@@ -149,6 +152,24 @@ program.hook("preAction", async () => {
         const message = error instanceof Error ? error.message : String(error);
         program.error(message);
       }
+    }
+
+    // Apply telemetry flag overrides
+    const noTelemetry = program.opts().telemetry === false;
+    const telemetryLevelFlag = program.opts().telemetryLevel;
+    const telemetryVerbose = program.opts().telemetryVerbose === true;
+
+    if (noTelemetry) {
+      setTelemetryOverride({ disabled: true });
+    } else if (telemetryVerbose) {
+      setTelemetryOverride({ level: "verbose" });
+    } else if (telemetryLevelFlag) {
+      if (!isValidTelemetryLevel(telemetryLevelFlag)) {
+        program.error(
+          `Invalid --telemetry-level "${telemetryLevelFlag}". Must be one of: minimal, standard, verbose`
+        );
+      }
+      setTelemetryOverride({ level: telemetryLevelFlag });
     }
   } catch (err) {
     // Unexpected error in validation - log but continue to telemetry prompt

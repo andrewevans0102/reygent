@@ -223,10 +223,11 @@ let instance: Chesstrace | null = null;
 
 /**
  * Get global Chesstrace singleton (creates with default config if not set)
+ * @param config - Optional config to use when creating new instance
  */
-export function getChesstrace(): Chesstrace {
+export function getChesstrace(config?: TelemetryConfig): Chesstrace {
   if (!instance) {
-    instance = new Chesstrace({ level: 0 });
+    instance = new Chesstrace(config ?? { level: 0 });
   }
   return instance;
 }
