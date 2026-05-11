@@ -21,7 +21,8 @@ export type TelemetryCategory =
   | 'pipeline'
   | 'usage'
   | 'gate'
-  | 'tool';
+  | 'tool'
+  | 'knowledge';
 
 /**
  * Core telemetry event interface
@@ -110,6 +111,14 @@ export const Events = {
   TOOL_INVOKE_FULL: 'tool.invoke.full',
   /** Emitted at stage end with aggregate tool counts - { stage, toolCounts } (minimal level) */
   TOOL_SUMMARY: 'tool.summary',
+
+  // Knowledge events (standard level)
+  /** Emitted when knowledge consulted before agent spawn - { agent, stage?, entries, entryCount } */
+  KNOWLEDGE_CONSULTED: 'knowledge.consulted',
+  /** Emitted when knowledge prevents failure - { entry, agent, evidence } (minimal level) */
+  KNOWLEDGE_PREVENTED_FAILURE: 'knowledge.prevented_failure',
+  /** Emitted when knowledge-based run succeeds - { entries_used, agent, stage } (standard level) */
+  KNOWLEDGE_SUCCESS: 'knowledge.success',
 } as const;
 
 /**
@@ -175,6 +184,11 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   [Events.TOOL_INVOKE]: TelemetryLevel.standard,
   [Events.TOOL_INVOKE_FULL]: TelemetryLevel.verbose,
   [Events.TOOL_SUMMARY]: TelemetryLevel.minimal,
+
+  // Knowledge events
+  [Events.KNOWLEDGE_CONSULTED]: TelemetryLevel.standard,
+  [Events.KNOWLEDGE_PREVENTED_FAILURE]: TelemetryLevel.minimal,
+  [Events.KNOWLEDGE_SUCCESS]: TelemetryLevel.standard,
 };
 
 /**
@@ -198,6 +212,7 @@ export function categoryFromEvent(event: string): TelemetryCategory {
     'usage',
     'gate',
     'tool',
+    'knowledge',
   ];
 
   if (validCategories.includes(category as TelemetryCategory)) {

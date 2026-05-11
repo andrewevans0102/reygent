@@ -261,6 +261,180 @@ reygent analyze agents [--agent <name>] [--since 30d] [--compare-models]
 ```
 Per-agent performance: success rates, duration, costs, error types, model distribution.
 
+## Living Documentation
+
+Reygent learns from your project over time through `.reygent/knowledge/`:
+
+- **common-failures.md** - Documented errors and solutions
+- **success-patterns.md** - Proven approaches that work
+- **project-conventions.md** - User-written project rules
+- **agents/*.md** - Agent-specific tips (dev.md, qe.md, planner.md, pr-reviewer.md)
+
+Agents consult this knowledge before running, avoiding past mistakes and following proven patterns.
+
+### Directory Structure
+
+```
+.reygent/
+  knowledge/
+    common-failures.md        # Auto-generated from error patterns
+    success-patterns.md       # Extracted from successful runs
+    project-conventions.md    # User-written project rules
+    agents/
+      dev.md                  # Dev agent tips
+      qe.md                   # QE agent tips
+      planner.md              # Planner agent tips
+      pr-reviewer.md          # PR reviewer agent tips
+```
+
+### Managing Knowledge
+
+**View knowledge:**
+```bash
+# List all files
+reygent knowledge list
+
+# Show specific file
+reygent knowledge show common-failures
+reygent knowledge show agents/dev
+
+# Search across all files
+reygent knowledge search "circular import"
+```
+
+**Add entries:**
+```bash
+# Document a failure (manual)
+reygent knowledge add-failure \
+  --issue "Circular import between modules" \
+  --solution "Import inside function scope" \
+  --agent dev
+
+# Document a success pattern (manual)
+reygent knowledge add-pattern \
+  --description "Dependency analysis first"
+
+# Edit file directly
+reygent knowledge edit common-failures
+reygent knowledge edit agents/dev
+```
+
+**View statistics:**
+```bash
+# Show effectiveness metrics
+reygent knowledge stats
+
+# Output:
+# Files: 7
+# Total entries: 15
+#
+# Usage (last 30 days):
+#   Consulted runs: 12
+#   Baseline runs: 8
+#
+# Effectiveness:
+#   Success rate with knowledge: 92%
+#   Baseline success rate: 75%
+#   Improvement: +17%
+```
+
+### Knowledge Format
+
+**common-failures.md:**
+```markdown
+## Circular imports between auth.py and models.py
+**Occurrences**: 5 runs
+**Last seen**: 2026-05-08
+**Agent**: dev
+
+**Solution**: Import User model inside function scope, not module-level.
+
+**Example**:
+\`\`\`python
+# Bad - causes circular import
+from .models import User
+
+def get_current_user():
+    return User.objects.get(...)
+
+# Good - deferred import
+def get_current_user():
+    from .models import User
+    return User.objects.get(...)
+\`\`\`
+
+---
+```
+
+**success-patterns.md:**
+```markdown
+## Dependency analysis first
+**Last seen**: 2026-05-10
+**Success rate**: 95%
+
+**Pattern**: Specs that start with dependency analysis have higher success rates.
+
+**Approach**:
+1. List files that will be modified
+2. Identify dependencies between them
+3. Determine modification order
+4. Write spec with order preserved
+
+---
+```
+
+**agents/dev.md:**
+```markdown
+# Dev Agent Tips
+
+## Common Failures
+
+### Missing database migrations
+**Issue**: Model changes without migrations cause runtime errors.
+**Fix**: Always run makemigrations after model changes.
+
+## Success Patterns
+
+### Reference similar features
+**Observation**: Specs referencing existing similar code have 91% success rate.
+
+---
+```
+
+### How It Works
+
+1. **Knowledge injection**: Before spawning an agent, Reygent loads relevant knowledge from `.reygent/knowledge/` and injects it into the agent's system prompt.
+
+2. **Smart filtering**: Only relevant knowledge is injected:
+   - Agent-specific tips for the current agent
+   - Common failures filtered by agent name
+   - Recent success patterns (last 30 days)
+   - Project conventions (always included)
+
+3. **Telemetry tracking**: Knowledge consultation is tracked via telemetry events:
+   - `knowledge.consulted` - When knowledge loaded before agent spawn
+   - `knowledge.prevented_failure` - When knowledge helps avoid documented failure
+   - `knowledge.success` - When knowledge-based run succeeds
+
+4. **Effectiveness measurement**: Compare success rates between runs that consulted knowledge vs baseline runs without knowledge.
+
+### File Structure
+
+**New files:**
+- `src/knowledge/loader.ts` - Load and parse knowledge files
+- `src/knowledge/analyzer.ts` - Analyze telemetry for patterns
+- `src/commands/knowledge.ts` - CLI commands
+
+**Modified files:**
+- `src/spawn.ts` - Inject knowledge into agent prompts
+- `src/chesstrace/events.ts` - Add knowledge.* telemetry events
+
+### Dependencies
+
+- Uses `marked` for markdown parsing
+- Integrates with existing Chesstrace telemetry system
+- Knowledge files stored locally in `.reygent/knowledge/`
+
 ## Provider Pricing Verification
 
 Provider pricing data lives in `src/pricing.ts`. To verify accuracy against current provider documentation:

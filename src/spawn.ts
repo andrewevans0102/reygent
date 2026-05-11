@@ -5,6 +5,7 @@ import type { ActivityEvent } from "./providers/types.js";
 import type { UsageInfo } from "./usage.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
+import { loadKnowledge } from "./knowledge/loader.js";
 
 export interface SpawnResult {
   stdout: string;
@@ -68,6 +69,43 @@ export async function spawnAgentStream(
     });
   }
 
+  // Load knowledge for agent
+  const knowledge = await loadKnowledge(name, options?.stage);
+
+  // Inject knowledge into system prompt if any exists
+  let enhancedSystemPrompt = options?.systemPrompt;
+  if (knowledge.entriesLoaded.length > 0) {
+    const knowledgeSections: string[] = [];
+
+    if (knowledge.commonFailures) {
+      knowledgeSections.push(`### Common Failures to Avoid\n${knowledge.commonFailures}`);
+    }
+    if (knowledge.successPatterns) {
+      knowledgeSections.push(`### Success Patterns to Follow\n${knowledge.successPatterns}`);
+    }
+    if (knowledge.agentTips) {
+      knowledgeSections.push(`### Agent-Specific Tips (${name})\n${knowledge.agentTips}`);
+    }
+    if (knowledge.projectConventions) {
+      knowledgeSections.push(`### Project Conventions\n${knowledge.projectConventions}`);
+    }
+
+    if (knowledgeSections.length > 0) {
+      const knowledgeBlock = `\n\n## Project-Specific Knowledge\n\n${knowledgeSections.join("\n\n")}\n\n---\n\n**Important**: Review above knowledge before proceeding. Avoid documented pitfalls.`;
+      enhancedSystemPrompt = (enhancedSystemPrompt || "") + knowledgeBlock;
+    }
+
+    // Emit knowledge consultation event
+    if (chesstrace) {
+      chesstrace.emit(Events.KNOWLEDGE_CONSULTED, {
+        agent: name,
+        stage: options?.stage,
+        entries: knowledge.entriesLoaded,
+        entryCount: knowledge.entriesLoaded.length,
+      });
+    }
+  }
+
   // Track timeout state to prevent duplicate events
   let timedOut = false;
 
@@ -86,7 +124,7 @@ export async function spawnAgentStream(
   try {
     const result = await adapter.spawn({
       prompt,
-      systemPrompt: options?.systemPrompt,
+      systemPrompt: enhancedSystemPrompt,
       model: modelId,
       autoApprove: options?.autoApprove,
       quiet: options?.quiet,

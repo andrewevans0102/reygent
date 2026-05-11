@@ -82,16 +82,14 @@ describe("SpawnOptions interface", () => {
 
       await spawnAgentStream("dev", "do stuff", 30_000, options);
 
-      expect(mockSpawn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          agentName: "dev",
-          prompt: "do stuff",
-          quiet: true,
-          autoApprove: true,
-          model: "claude-opus-4-6",
-          systemPrompt: "You are a dev agent",
-        }),
-      );
+      const call = mockSpawn.mock.calls[0][0];
+      expect(call.agentName).toBe("dev");
+      expect(call.prompt).toBe("do stuff");
+      expect(call.quiet).toBe(true);
+      expect(call.autoApprove).toBe(true);
+      expect(call.model).toBe("claude-opus-4-6");
+      // Knowledge may be appended, so check it contains the original
+      expect(call.systemPrompt).toContain("You are a dev agent");
     });
   });
 
@@ -155,11 +153,9 @@ describe("SpawnOptions interface", () => {
 
       await spawnAgentStream("dev", "do stuff", 30_000, options);
 
-      expect(mockSpawn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          systemPrompt: "You are a coding agent",
-        }),
-      );
+      // Knowledge injection may append to systemPrompt, so check it starts with the original
+      const call = mockSpawn.mock.calls[0][0];
+      expect(call.systemPrompt).toContain("You are a coding agent");
     });
 
     it("onActivity callback option", async () => {
