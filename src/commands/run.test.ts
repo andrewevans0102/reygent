@@ -797,4 +797,94 @@ describe("run command - Chesstrace instrumentation", () => {
       expect(mockChesstrace.close).not.toHaveBeenCalled();
     });
   });
+
+  describe("gate telemetry", () => {
+
+    it("emits gate.retry event when retry is triggered", async () => {
+      // Make unit tests fail initially, then pass on retry
+      let unitTestCallCount = 0;
+      vi.mocked(runUnitTestGate).mockImplementation(async () => {
+        unitTestCallCount++;
+        if (unitTestCallCount === 1) {
+          return {
+            gate: { passed: false, output: "Test failed: expected 2 to equal 3" },
+            usage: { costUsd: 0.01 },
+          };
+        }
+        return {
+          gate: { passed: true, output: "All tests passed" },
+          usage: { costUsd: 0.01 },
+        };
+      });
+
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "2",
+        verbose: false,
+      });
+
+      // Check for gate.retry emission
+      const gateRetryEmits = vi.mocked(mockChesstrace.emit).mock.calls.filter(
+        (call) => call[0] === "gate.retry"
+      );
+
+      expect(gateRetryEmits.length).toBeGreaterThanOrEqual(1);
+
+      const unitTestRetryEmit = gateRetryEmits.find(
+        (call) => call[1]?.gateName === "unit tests"
+      );
+      expect(unitTestRetryEmit).toBeDefined();
+      expect(unitTestRetryEmit![1]).toMatchObject({
+        gateName: "unit tests",
+        attempt: 1,
+        maxRetries: 2,
+        failureSnippet: expect.stringContaining("expected 2 to equal 3"),
+      });
+    });
+
+    it("truncates failure snippet to 500 chars in gate.retry event", async () => {
+      const longOutput = "Test output: " + "x".repeat(1000);
+
+      let funcTestCallCount = 0;
+      vi.mocked(runFunctionalTestGate).mockImplementation(async () => {
+        funcTestCallCount++;
+        if (funcTestCallCount === 1) {
+          return {
+            gate: { passed: false, output: longOutput },
+            usage: { costUsd: 0.01 },
+          };
+        }
+        return {
+          gate: { passed: true, output: "All tests passed" },
+          usage: { costUsd: 0.01 },
+        };
+      });
+
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "1",
+        verbose: false,
+      });
+
+      const gateRetryEmits = vi.mocked(mockChesstrace.emit).mock.calls.filter(
+        (call) => call[0] === "gate.retry"
+      );
+
+      const funcRetryEmit = gateRetryEmits.find(
+        (call) => call[1]?.gateName === "functional tests"
+      );
+      expect(funcRetryEmit).toBeDefined();
+      expect(funcRetryEmit![1].failureSnippet.length).toBeLessThanOrEqual(500);
+    });
+  });
 });

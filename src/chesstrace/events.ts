@@ -18,7 +18,8 @@ export type TelemetryCategory =
   | 'spec'
   | 'error'
   | 'performance'
-  | 'pipeline';
+  | 'pipeline'
+  | 'gate';
 
 /**
  * Core telemetry event interface
@@ -84,6 +85,12 @@ export const Events = {
   PIPELINE_END: 'pipeline.end',
   PIPELINE_STAGE_START: 'pipeline.stage_start',
   PIPELINE_STAGE_END: 'pipeline.stage_end',
+
+  // Gate events (standard level)
+  /** Emitted after each gate execution - { gateName, passed, attempt } */
+  GATE_RESULT: 'gate.result',
+  /** Emitted when gate retry triggered - { gateName, attempt, maxRetries, failureSnippet } */
+  GATE_RETRY: 'gate.retry',
 } as const;
 
 /**
@@ -134,6 +141,10 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   [Events.PIPELINE_END]: TelemetryLevel.standard,
   [Events.PIPELINE_STAGE_START]: TelemetryLevel.standard,
   [Events.PIPELINE_STAGE_END]: TelemetryLevel.standard,
+
+  // Gate events - standard
+  [Events.GATE_RESULT]: TelemetryLevel.standard,
+  [Events.GATE_RETRY]: TelemetryLevel.standard,
 };
 
 /**
@@ -154,6 +165,7 @@ export function categoryFromEvent(event: string): TelemetryCategory {
     'error',
     'performance',
     'pipeline',
+    'gate',
   ];
 
   if (validCategories.includes(category as TelemetryCategory)) {

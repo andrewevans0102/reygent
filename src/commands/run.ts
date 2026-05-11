@@ -88,7 +88,7 @@ function truncateForPrompt(output: string): string {
 
 interface RetryGateOptions {
   gateName: string;
-  gateRunner: () => Promise<{ gate: import("../task.js").GateResult; usage?: import("../usage.js").UsageInfo }>;
+  gateRunner: (attempt: number) => Promise<{ gate: import("../task.js").GateResult; usage?: import("../usage.js").UsageInfo }>;
   agentsToRun: Array<"dev" | "qe">;
   context: TaskContext;
   agentOptions: { autoApprove: boolean };
@@ -103,6 +103,24 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
+
+    // Emit gate.retry telemetry
+    const chesstrace = getChesstrace();
+    if (chesstrace) {
+      try {
+        const failureSnippet = lastOutput.length > 500
+          ? lastOutput.slice(-500)
+          : lastOutput;
+        chesstrace.emit(Events.GATE_RETRY, {
+          gateName,
+          attempt,
+          maxRetries,
+          failureSnippet,
+        });
+      } catch {
+        // Swallow emit errors
+      }
+    }
 
     if (!autoApprove) {
       resetTerminalForInput();
@@ -153,7 +171,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
 
     // Re-run gate
     const retryStatus = createLiveStatus(`re-running ${gateName}...`);
-    const { gate: gateResult, usage: gateUsage } = await gateRunner();
+    const { gate: gateResult, usage: gateUsage } = await gateRunner(attempt + 1);
 
     const gateAgentName =
       gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests";
@@ -560,7 +578,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const unitStatus = createLiveStatus("running unit tests...");
         const { gate: unitGateResult, usage: unitGateUsage } = await runUnitTestGate(
           context,
-          withActivity(agentOptions, unitStatus),
+          { ...withActivity(agentOptions, unitStatus), attempt: 1 },
         );
         let gateResult = unitGateResult;
 
@@ -596,7 +614,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         // Retry loop — dev agent only for unit test failures
         gateResult = await retryGate({
           gateName: "unit tests",
-          gateRunner: () => runUnitTestGate(context, agentOptions),
+          gateRunner: (attempt) => runUnitTestGate(context, { ...agentOptions, attempt }),
           agentsToRun: ["dev"],
           context,
           agentOptions,
@@ -624,7 +642,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const funcStatus = createLiveStatus("running functional tests...");
         const { gate: funcGateResult, usage: funcGateUsage } = await runFunctionalTestGate(
           context,
-          withActivity(agentOptions, funcStatus),
+          { ...withActivity(agentOptions, funcStatus), attempt: 1 },
         );
         let gateResult = funcGateResult;
 
@@ -661,7 +679,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         // Retry loop — both dev + qe agents for functional test failures
         gateResult = await retryGate({
           gateName: "functional tests",
-          gateRunner: () => runFunctionalTestGate(context, agentOptions),
+          gateRunner: (attempt) => runFunctionalTestGate(context, { ...agentOptions, attempt }),
           agentsToRun: ["dev", "qe"],
           context,
           agentOptions,

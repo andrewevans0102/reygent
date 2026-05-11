@@ -4,6 +4,11 @@ vi.mock("@inquirer/prompts", () => ({ select: vi.fn() }));
 vi.mock("./config.js", () => ({ getAgents: vi.fn(() => []) }));
 vi.mock("./spawn.js", () => ({ spawnAgentStream: vi.fn() }));
 
+const mockChesstrace = { emit: vi.fn() };
+vi.mock("./chesstrace/index.js", () => ({
+  getChesstrace: vi.fn(() => mockChesstrace),
+}));
+
 const mockSpawnAgent = vi.fn();
 vi.mock("./implement.js", () => ({
   spawnAgent: (...args: unknown[]) => mockSpawnAgent(...args),
@@ -12,10 +17,12 @@ vi.mock("./implement.js", () => ({
 import { runGate, runUnitTestGate, runFunctionalTestGate } from "./gate.js";
 import { TaskError } from "./task.js";
 import type { TaskContext } from "./task.js";
+import { Events } from "./chesstrace/events.js";
 
 describe("runGate", () => {
   beforeEach(() => {
     mockSpawnAgent.mockReset();
+    mockChesstrace.emit.mockReset();
   });
 
   it("returns passed=true when GATE_RESULT:PASS and exit 0", async () => {
@@ -83,6 +90,50 @@ describe("runGate", () => {
 
     const { usage } = await runGate("test-gate", "prompt");
     expect(usage?.costUsd).toBe(0.05);
+  });
+
+  it("emits gate.result telemetry with default attempt 1", async () => {
+    mockSpawnAgent.mockResolvedValue({
+      stdout: "GATE_RESULT:PASS",
+      exitCode: 0,
+      usage: {},
+    });
+
+    await runGate("test-gate", "prompt");
+    expect(mockChesstrace.emit).toHaveBeenCalledWith(Events.GATE_RESULT, {
+      gateName: "test-gate",
+      passed: true,
+      attempt: 1,
+    });
+  });
+
+  it("emits gate.result telemetry with custom attempt", async () => {
+    mockSpawnAgent.mockResolvedValue({
+      stdout: "GATE_RESULT:FAIL",
+      exitCode: 0,
+      usage: {},
+    });
+
+    await runGate("test-gate", "prompt", { attempt: 3 });
+    expect(mockChesstrace.emit).toHaveBeenCalledWith(Events.GATE_RESULT, {
+      gateName: "test-gate",
+      passed: false,
+      attempt: 3,
+    });
+  });
+
+  it("swallows telemetry emit errors", async () => {
+    mockSpawnAgent.mockResolvedValue({
+      stdout: "GATE_RESULT:PASS",
+      exitCode: 0,
+      usage: {},
+    });
+    mockChesstrace.emit.mockImplementation(() => {
+      throw new Error("Telemetry error");
+    });
+
+    const { gate } = await runGate("test-gate", "prompt");
+    expect(gate.passed).toBe(true);
   });
 });
 
