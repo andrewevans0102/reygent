@@ -5,7 +5,7 @@
 - TypeScript
 - tsup (bundling)
 - commander (CLI framework)
-- Node.js
+- Node.js 22+
 
 ## Development
 
