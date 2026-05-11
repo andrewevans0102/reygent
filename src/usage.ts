@@ -1,6 +1,8 @@
 import chalk from "chalk";
 import { wrapText } from "./format.js";
 import { PROVIDER_PRICING, type ProviderName } from "./pricing.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 export interface UsageInfo {
   costUsd?: number;
@@ -25,6 +27,32 @@ export class UsageTracker {
 
   record(agent: string, stage: string, usage: UsageInfo): void {
     this.entries.push({ agent, stage, usage });
+
+    // Emit telemetry events (no-op if telemetry disabled)
+    const chesstrace = getChesstrace();
+    if (!chesstrace || !chesstrace.isEnabled()) {
+      return;
+    }
+
+    // Emit usage.tokens event
+    chesstrace.emit(Events.USAGE_TOKENS, {
+      agent,
+      stage,
+      inputTokens: usage.inputTokens ?? 0,
+      outputTokens: usage.outputTokens ?? 0,
+      cachedTokens: usage.cachedTokens ?? 0,
+      cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+      provider: usage.provider,
+    });
+
+    // Calculate cache savings and emit usage.cost event
+    const cacheSavingsUsd = calculateCacheSavings(usage);
+    chesstrace.emit(Events.USAGE_COST, {
+      agent,
+      stage,
+      costUsd: usage.costUsd,
+      cacheSavingsUsd,
+    });
   }
 
   getTotalCost(): number {

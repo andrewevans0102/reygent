@@ -19,6 +19,7 @@ export type TelemetryCategory =
   | 'error'
   | 'performance'
   | 'pipeline'
+  | 'usage'
   | 'gate';
 
 /**
@@ -86,6 +87,9 @@ export const Events = {
   PIPELINE_STAGE_START: 'pipeline.stage_start',
   PIPELINE_STAGE_END: 'pipeline.stage_end',
 
+  // Usage events (verbose level)
+  USAGE_TOKENS: 'usage.tokens',
+  USAGE_COST: 'usage.cost',
   // Gate events (standard level)
   /** Emitted after each gate execution - { gateName, passed, attempt } */
   GATE_RESULT: 'gate.result',
@@ -142,6 +146,9 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   [Events.PIPELINE_STAGE_START]: TelemetryLevel.standard,
   [Events.PIPELINE_STAGE_END]: TelemetryLevel.standard,
 
+  // Usage events - verbose
+  [Events.USAGE_TOKENS]: TelemetryLevel.verbose,
+  [Events.USAGE_COST]: TelemetryLevel.verbose,
   // Gate events - standard
   [Events.GATE_RESULT]: TelemetryLevel.standard,
   [Events.GATE_RETRY]: TelemetryLevel.standard,
@@ -165,6 +172,7 @@ export function categoryFromEvent(event: string): TelemetryCategory {
     'error',
     'performance',
     'pipeline',
+    'usage',
     'gate',
   ];
 
