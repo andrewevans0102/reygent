@@ -218,15 +218,46 @@ export class Chesstrace {
   }
 }
 
-// Singleton instance
+// Singleton instance and config tracking
 let instance: Chesstrace | null = null;
+let instanceConfig: TelemetryConfig | undefined = undefined;
 
 /**
- * Get global Chesstrace singleton (creates with default config if not set)
+ * Get global Chesstrace singleton.
+ *
+ * **Singleton behavior:** First call creates instance with provided config (or default `{ level: 0 }`).
+ * Subsequent calls return same instance and ignore config parameter.
+ *
+ * **Config mismatch warning:** If called with different config after initialization, logs warning
+ * to stderr. Caller must call `resetChesstrace()` first to reinitialize with new config.
+ *
+ * @param config - Config to use when creating new instance (only used on first call)
+ * @returns Chesstrace singleton instance
+ *
+ * @example
+ * ```ts
+ * // First call creates instance
+ * const trace1 = getChesstrace({ level: TelemetryLevel.standard });
+ *
+ * // Subsequent calls return same instance, config ignored
+ * const trace2 = getChesstrace({ level: TelemetryLevel.verbose }); // Warns!
+ *
+ * // Reset to reinitialize with different config
+ * resetChesstrace();
+ * const trace3 = getChesstrace({ level: TelemetryLevel.verbose }); // OK
+ * ```
  */
-export function getChesstrace(): Chesstrace {
+export function getChesstrace(config?: TelemetryConfig): Chesstrace {
   if (!instance) {
-    instance = new Chesstrace({ level: 0 });
+    const finalConfig = config ?? { level: 0 };
+    instance = new Chesstrace(finalConfig);
+    instanceConfig = finalConfig;
+  } else if (config && JSON.stringify(config) !== JSON.stringify(instanceConfig)) {
+    // Config mismatch detected
+    console.warn(
+      '[Chesstrace] Warning: getChesstrace() called with different config after initialization. ' +
+      'Existing instance returned; new config ignored. Call resetChesstrace() first to reinitialize.'
+    );
   }
   return instance;
 }
@@ -236,4 +267,5 @@ export function getChesstrace(): Chesstrace {
  */
 export function resetChesstrace(): void {
   instance = null;
+  instanceConfig = undefined;
 }
