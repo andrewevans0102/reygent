@@ -18,7 +18,8 @@ export type TelemetryCategory =
   | 'spec'
   | 'error'
   | 'performance'
-  | 'pipeline';
+  | 'pipeline'
+  | 'usage';
 
 /**
  * Core telemetry event interface
@@ -84,6 +85,10 @@ export const Events = {
   PIPELINE_END: 'pipeline.end',
   PIPELINE_STAGE_START: 'pipeline.stage_start',
   PIPELINE_STAGE_END: 'pipeline.stage_end',
+
+  // Usage events (verbose level)
+  USAGE_TOKENS: 'usage.tokens',
+  USAGE_COST: 'usage.cost',
 } as const;
 
 /**
@@ -134,6 +139,10 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   [Events.PIPELINE_END]: TelemetryLevel.standard,
   [Events.PIPELINE_STAGE_START]: TelemetryLevel.standard,
   [Events.PIPELINE_STAGE_END]: TelemetryLevel.standard,
+
+  // Usage events - verbose
+  [Events.USAGE_TOKENS]: TelemetryLevel.verbose,
+  [Events.USAGE_COST]: TelemetryLevel.verbose,
 };
 
 /**
@@ -154,6 +163,7 @@ export function categoryFromEvent(event: string): TelemetryCategory {
     'error',
     'performance',
     'pipeline',
+    'usage',
   ];
 
   if (validCategories.includes(category as TelemetryCategory)) {

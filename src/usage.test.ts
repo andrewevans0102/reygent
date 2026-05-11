@@ -1,8 +1,18 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { UsageTracker, formatDuration, printUsageSummary, calculateCacheSavings, printCacheWarnings } from "./usage.js";
 import { PROVIDER_PRICING } from "./pricing.js";
+import { getChesstrace, resetChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 describe("UsageTracker", () => {
+  beforeEach(() => {
+    resetChesstrace();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("starts with zero cost", () => {
     const tracker = new UsageTracker();
     expect(tracker.getTotalCost()).toBe(0);
@@ -93,6 +103,111 @@ describe("UsageTracker", () => {
     const entries = tracker.getEntries();
     entries.pop();
     expect(tracker.getEntries().length).toBe(1);
+  });
+
+  describe("telemetry emission", () => {
+    it("emits usage.tokens event when recording", () => {
+      const tracker = new UsageTracker();
+      const chesstrace = getChesstrace();
+      vi.spyOn(chesstrace, "isEnabled").mockReturnValue(true);
+      const emitSpy = vi.spyOn(chesstrace, "emit");
+
+      tracker.record("dev", "implement", {
+        inputTokens: 1000,
+        outputTokens: 500,
+        cachedTokens: 200,
+        cacheWriteTokens: 100,
+        provider: "claude",
+      });
+
+      expect(emitSpy).toHaveBeenCalledWith(Events.USAGE_TOKENS, {
+        agent: "dev",
+        stage: "implement",
+        inputTokens: 1000,
+        outputTokens: 500,
+        cachedTokens: 200,
+        cacheWriteTokens: 100,
+        provider: "claude",
+      });
+    });
+
+    it("emits usage.cost event when recording", () => {
+      const tracker = new UsageTracker();
+      const chesstrace = getChesstrace();
+      vi.spyOn(chesstrace, "isEnabled").mockReturnValue(true);
+      const emitSpy = vi.spyOn(chesstrace, "emit");
+
+      tracker.record("dev", "implement", {
+        costUsd: 0.05,
+        cachedTokens: 50000,
+        provider: "claude",
+      });
+
+      const calls = emitSpy.mock.calls.filter((call) => call[0] === Events.USAGE_COST);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toMatchObject({
+        agent: "dev",
+        stage: "implement",
+        costUsd: 0.05,
+      });
+      // Verify cacheSavingsUsd is calculated correctly
+      const cacheSavingsUsd = calls[0][1].cacheSavingsUsd as number;
+      expect(cacheSavingsUsd).toBeGreaterThan(0);
+      expect(cacheSavingsUsd).toBeCloseTo(0.135);
+    });
+
+    it("defaults missing token values to 0 in telemetry", () => {
+      const tracker = new UsageTracker();
+      const chesstrace = getChesstrace();
+      vi.spyOn(chesstrace, "isEnabled").mockReturnValue(true);
+      const emitSpy = vi.spyOn(chesstrace, "emit");
+
+      tracker.record("dev", "implement", { costUsd: 0.02 });
+
+      expect(emitSpy).toHaveBeenCalledWith(Events.USAGE_TOKENS, {
+        agent: "dev",
+        stage: "implement",
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedTokens: 0,
+        cacheWriteTokens: 0,
+        provider: undefined,
+      });
+    });
+
+    it("calculates zero cache savings when no cached tokens", () => {
+      const tracker = new UsageTracker();
+      const chesstrace = getChesstrace();
+      vi.spyOn(chesstrace, "isEnabled").mockReturnValue(true);
+      const emitSpy = vi.spyOn(chesstrace, "emit");
+
+      tracker.record("dev", "implement", {
+        costUsd: 0.03,
+        inputTokens: 1000,
+        outputTokens: 500,
+        provider: "claude",
+      });
+
+      const calls = emitSpy.mock.calls.filter((call) => call[0] === Events.USAGE_COST);
+      expect(calls[0][1].cacheSavingsUsd).toBe(0);
+    });
+
+    it("emits both events for single record call", () => {
+      const tracker = new UsageTracker();
+      const chesstrace = getChesstrace();
+      vi.spyOn(chesstrace, "isEnabled").mockReturnValue(true);
+      const emitSpy = vi.spyOn(chesstrace, "emit");
+
+      tracker.record("qe", "test", {
+        costUsd: 0.01,
+        inputTokens: 500,
+        outputTokens: 250,
+      });
+
+      expect(emitSpy).toHaveBeenCalledTimes(2);
+      expect(emitSpy).toHaveBeenNthCalledWith(1, Events.USAGE_TOKENS, expect.any(Object));
+      expect(emitSpy).toHaveBeenNthCalledWith(2, Events.USAGE_COST, expect.any(Object));
+    });
   });
 });
 
