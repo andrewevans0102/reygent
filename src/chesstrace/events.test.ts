@@ -59,6 +59,12 @@ describe('Events constants', () => {
     expect(Events.PERF_METRIC).toBe('performance.metric');
     expect(Events.PERF_DURATION).toBe('performance.duration');
   });
+
+  it('defines tool events', () => {
+    expect(Events.TOOL_INVOKE).toBe('tool.invoke');
+    expect(Events.TOOL_INVOKE_FULL).toBe('tool.invoke.full');
+    expect(Events.TOOL_SUMMARY).toBe('tool.summary');
+  });
 });
 
 describe('EVENT_LEVELS', () => {
@@ -105,6 +111,12 @@ describe('EVENT_LEVELS', () => {
     expect(EVENT_LEVELS[Events.PERF_DURATION]).toBe(TelemetryLevel.verbose);
   });
 
+  it('assigns correct levels to tool events', () => {
+    expect(EVENT_LEVELS[Events.TOOL_INVOKE]).toBe(TelemetryLevel.standard);
+    expect(EVENT_LEVELS[Events.TOOL_INVOKE_FULL]).toBe(TelemetryLevel.verbose);
+    expect(EVENT_LEVELS[Events.TOOL_SUMMARY]).toBe(TelemetryLevel.minimal);
+  });
+
   it('covers all event constants', () => {
     const eventValues = Object.values(Events);
     const levelKeys = Object.keys(EVENT_LEVELS);
@@ -143,6 +155,10 @@ describe('categoryFromEvent', () => {
 
   it('extracts performance category', () => {
     expect(categoryFromEvent('performance.metric')).toBe('performance');
+  });
+
+  it('extracts tool category', () => {
+    expect(categoryFromEvent('tool.invoke')).toBe('tool');
   });
 
   it('throws on invalid category', () => {
@@ -239,6 +255,7 @@ describe('Type exports', () => {
       'spec',
       'error',
       'performance',
+      'tool',
     ];
 
     categories.forEach((cat) => {
@@ -295,7 +312,8 @@ describe('Edge cases and validation', () => {
 
   it('all event names follow dot notation', () => {
     Object.values(Events).forEach((eventName) => {
-      expect(eventName).toMatch(/^[a-z]+\.[a-z_]+$/);
+      // Allow single or multi-level event names (e.g., "tool.invoke" or "tool.invoke.full")
+      expect(eventName).toMatch(/^[a-z]+\.[a-z_]+(\.[a-z_]+)?$/);
     });
   });
 

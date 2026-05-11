@@ -20,7 +20,8 @@ export type TelemetryCategory =
   | 'performance'
   | 'pipeline'
   | 'usage'
-  | 'gate';
+  | 'gate'
+  | 'tool';
 
 /**
  * Core telemetry event interface
@@ -101,6 +102,14 @@ export const Events = {
   GATE_RESULT: 'gate.result',
   /** Emitted when gate retry triggered - { gateName, attempt, maxRetries, failureSnippet } */
   GATE_RETRY: 'gate.retry',
+
+  // Tool events
+  /** Emitted on each tool invocation - { agent, tool, detail? } (standard level) */
+  TOOL_INVOKE: 'tool.invoke',
+  /** Emitted on each tool invocation with full input/output - { agent, tool, input?, output? } (verbose level) */
+  TOOL_INVOKE_FULL: 'tool.invoke.full',
+  /** Emitted at stage end with aggregate tool counts - { stage, toolCounts } (minimal level) */
+  TOOL_SUMMARY: 'tool.summary',
 } as const;
 
 /**
@@ -161,6 +170,11 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   // Gate events - standard
   [Events.GATE_RESULT]: TelemetryLevel.standard,
   [Events.GATE_RETRY]: TelemetryLevel.standard,
+
+  // Tool events
+  [Events.TOOL_INVOKE]: TelemetryLevel.standard,
+  [Events.TOOL_INVOKE_FULL]: TelemetryLevel.verbose,
+  [Events.TOOL_SUMMARY]: TelemetryLevel.minimal,
 };
 
 /**
@@ -183,6 +197,7 @@ export function categoryFromEvent(event: string): TelemetryCategory {
     'pipeline',
     'usage',
     'gate',
+    'tool',
   ];
 
   if (validCategories.includes(category as TelemetryCategory)) {
