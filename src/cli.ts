@@ -18,6 +18,8 @@ import { reviewWorkCommand } from "./commands/review-work.js";
 import { reviewCommentsCommand } from "./commands/review-comments.js";
 import { configCommand } from "./commands/config.js";
 import { registerTelemetryCommand } from "./commands/telemetry.js";
+import { registerAnalyzeCommand } from "./commands/analyze.js";
+import { registerLastCommand } from "./commands/last.js";
 import { isValidType, VALID_BRANCH_TYPES } from "./branch-type.js";
 import { shouldPromptForTelemetry, promptForTelemetryOptIn } from "./chesstrace/prompt.js";
 
@@ -111,6 +113,8 @@ program
   .action(configCommand);
 
 registerTelemetryCommand(program);
+registerAnalyzeCommand(program);
+registerLastCommand(program);
 registerSkillsCommand(program);
 
 // Show header on commands that do actual work (not --help or --version)
