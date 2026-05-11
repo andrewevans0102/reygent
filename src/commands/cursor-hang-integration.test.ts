@@ -72,7 +72,7 @@ describe("Interactive command cursor hang prevention", () => {
       // Multiple calls expected in run.ts (permission, clarification, retry, security, planner questions, pr-create)
       const matches = sourceCode.match(/resetTerminalForInput/g);
       expect(matches).toBeDefined();
-      expect(matches!.length).toBeGreaterThanOrEqual(6);
+      expect(matches!.length).toBe(12);
     });
   });
 

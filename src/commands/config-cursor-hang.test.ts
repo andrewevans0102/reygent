@@ -52,25 +52,15 @@ describe("Config command cursor hang issue", () => {
     expect(asyncIndex).toBeLessThan(providerPromptIndex);
   });
 
-  it("should document missing resetTerminalForInput call", async () => {
-    // Current state: config.ts does NOT call resetTerminalForInput
-    // before first prompt at line 192.
-    //
-    // Expected fix location: after line 170 (provider checks complete)
-    // and before line 192 (first select prompt).
+  it("should have resetTerminalForInput call after provider checks", async () => {
+    // Fix applied: config.ts calls resetTerminalForInput
+    // after provider availability checks (line 171)
+    // and before first select prompt (line 194).
 
     const sourceCode = readFileSync(join(__dirname, "config.ts"), "utf-8");
 
     const hasResetCall = sourceCode.match(/resetTerminalForInput/);
-
-    if (hasResetCall) {
-      // Fix has been applied
-      expect(hasResetCall).toBeDefined();
-    } else {
-      // Current state - no reset call
-      // This is the cursor hang issue root cause
-      expect(hasResetCall).toBeNull();
-    }
+    expect(hasResetCall).toBeDefined();
   });
 
   it("should have prompts throughout config flow", async () => {

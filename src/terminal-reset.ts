@@ -23,7 +23,7 @@ export function resetTerminalForInput(): void {
   // Ensure stdin is not stuck in raw mode — readline/inquirer manage their own
   // raw mode and will break if stdin is already raw when they start.
   // Only disable raw mode if stdin is paused (not actively managed by readline).
-  if (process.stdin.isTTY && process.stdin.isRaw && typeof process.stdin.isPaused === 'function' && process.stdin.isPaused()) {
+  if (process.stdin.isTTY && process.stdin.isRaw && process.stdin.isPaused()) {
     process.stdin.setRawMode(false);
   }
 

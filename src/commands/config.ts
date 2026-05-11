@@ -104,7 +104,6 @@ export async function configCommand(): Promise<void> {
 
 async function runConfig(): Promise<void> {
   // 1. Scope selection
-  resetTerminalForInput();
   const scope = await select({
     message: "Configuration scope:",
     choices: [

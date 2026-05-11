@@ -152,18 +152,10 @@ describe("All interactive commands terminal state management", () => {
       expect(totalPrompts).toBeGreaterThanOrEqual(5);
     });
 
-    it("should document missing resetTerminalForInput", () => {
-      // Current state: config.ts does NOT use resetTerminalForInput
-      // This is the cursor hang issue.
+    it("should call resetTerminalForInput before provider selection", () => {
+      // Fix applied: config.ts now uses resetTerminalForInput
       const hasReset = source.match(/resetTerminalForInput/);
-
-      if (hasReset) {
-        // Fix applied
-        expect(hasReset).toBeDefined();
-      } else {
-        // Current broken state
-        expect(hasReset).toBeNull();
-      }
+      expect(hasReset).toBeDefined();
     });
 
     it("should have async work before first prompt", () => {
