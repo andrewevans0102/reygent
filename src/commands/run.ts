@@ -30,6 +30,10 @@ const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
 /**
  * Emit stage.end event with duration and success status
+ * Also emits tool.summary if toolTracker provided
+ *
+ * Note: Empty summaries (no tool calls) emit tool.summary with empty toolCounts object.
+ * This is acceptable behavior and tested in tool-tracking-integration.test.ts
  */
 function emitStageEnd(
   chesstrace: Chesstrace | null,
@@ -37,9 +41,21 @@ function emitStageEnd(
   stageStartTime: number,
   success: boolean,
   metadata?: { cost?: number; outputSummary?: string },
+  toolTracker?: ToolTracker,
 ): void {
   if (!chesstrace) return;
   try {
+    // Emit tool.summary before stage end
+    if (toolTracker) {
+      const summary = toolTracker.getSummary();
+      if (Object.keys(summary).length > 0) {
+        chesstrace.emit(Events.TOOL_SUMMARY, {
+          stage: stageName,
+          toolCounts: summary,
+        });
+      }
+    }
+
     chesstrace.emit(Events.PIPELINE_STAGE_END, {
       stage: stageName,
       success,
@@ -52,14 +68,97 @@ function emitStageEnd(
 }
 
 /**
+ * Tool call tracking data structure
+ */
+interface ToolTracker {
+  /** Map of agent -> tool -> count */
+  counts: Map<string, Map<string, number>>;
+  /** Record a tool invocation */
+  record(agent: string, tool: string): void;
+  /** Get summary of tool counts per agent */
+  getSummary(): Record<string, Record<string, number>>;
+}
+
+function createToolTracker(): ToolTracker {
+  const counts = new Map<string, Map<string, number>>();
+
+  return {
+    counts,
+    record(agent: string, tool: string) {
+      if (!counts.has(agent)) {
+        counts.set(agent, new Map());
+      }
+      const agentMap = counts.get(agent)!;
+      agentMap.set(tool, (agentMap.get(tool) ?? 0) + 1);
+    },
+    getSummary() {
+      const summary: Record<string, Record<string, number>> = {};
+      for (const [agent, toolMap] of counts) {
+        summary[agent] = Object.fromEntries(toolMap);
+      }
+      return summary;
+    },
+  };
+}
+
+/**
+ * Truncate string to max length for telemetry events.
+ * Exported for use in tests to ensure consistent truncation behavior.
+ */
+export function truncateToolData(str: string | undefined, maxLen: number): string | undefined {
+  if (!str) return undefined;
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen);
+}
+
+/**
  * Helper to merge agentOptions with onActivity callback from a LiveStatus instance.
  * Reduces boilerplate from repeated `{ ...agentOptions, onActivity: status.onActivity }` pattern.
+ * Also wires tool invocation telemetry.
  */
 function withActivity(
   agentOptions: { autoApprove: boolean },
   status: { onActivity: (event: import("../live-status.js").ActivityEvent) => void },
+  toolTracker?: ToolTracker,
 ): { autoApprove: boolean; onActivity: (event: import("../live-status.js").ActivityEvent) => void } {
-  return { ...agentOptions, onActivity: status.onActivity };
+  return {
+    ...agentOptions,
+    onActivity: (event) => {
+      // Call original live status handler
+      status.onActivity(event);
+
+      // Emit tool telemetry if tool present
+      if (event.tool) {
+        const chesstrace = getChesstrace();
+        if (chesstrace) {
+          try {
+            // Standard level: tool.invoke with agent, tool, detail
+            chesstrace.emit(Events.TOOL_INVOKE, {
+              agent: event.agent,
+              tool: event.tool,
+              detail: event.detail,
+            });
+
+            // Verbose level: tool.invoke.full with truncated detail
+            // Note: ActivityEvent doesn't carry input/output fields separately,
+            // so detail field serves as proxy for tool parameters/results
+            chesstrace.emit(Events.TOOL_INVOKE_FULL, {
+              agent: event.agent,
+              tool: event.tool,
+              detail: truncateToolData(event.detail, 500),
+            });
+          } catch {
+            // Swallow telemetry errors
+          }
+        }
+
+        // Track tool count if tracker provided
+        if (toolTracker) {
+          toolTracker.record(event.agent, event.tool);
+        }
+      }
+    },
+  };
 }
 
 interface RunOptions {
@@ -97,10 +196,11 @@ interface RetryGateOptions {
   stageName: string;
   tracker: UsageTracker;
   verbose: boolean;
+  toolTracker: ToolTracker;
 }
 
 async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").GateResult> {
-  const { gateName, gateRunner, agentsToRun, context, agentOptions, maxRetries, autoApprove, stageName, tracker, verbose } = opts;
+  const { gateName, gateRunner, agentsToRun, context, agentOptions, maxRetries, autoApprove, stageName, tracker, verbose, toolTracker } = opts;
 
   // Retry attempt numbering:
   // - Initial gate run uses attempt=1 (before entering this loop)
@@ -161,7 +261,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     const { implement: retryResult, usages: retryUsages } = await runImplement(
       context.spec,
       context.plan!,
-      withActivity(agentOptions, status),
+      withActivity(agentOptions, status, toolTracker),
       { failureContext, agentsToRun },
     );
 
@@ -447,6 +547,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
     for (const stage of PIPELINE) {
       const stageStartTime = Date.now();
+      const toolTracker = createToolTracker();
 
       // Emit pipeline.stage.start
       if (chesstrace) {
@@ -470,7 +571,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           const { result, usage: planUsage } = await runPlanner(
             context.spec,
             undefined,
-            { makeAssumptions: true, onActivity: status.onActivity },
+            { makeAssumptions: true, ...withActivity(agentOptions, status, toolTracker) },
           );
           if ("needsClarification" in result && result.needsClarification) {
             status.fail(chalk.red("Planner asked questions despite skip flag"));
@@ -503,7 +604,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             const { result, usage: planUsage } = await runPlanner(
               context.spec,
               clarificationAnswers,
-              { onActivity: status.onActivity },
+              withActivity(agentOptions, status, toolTracker),
             );
             if (planUsage) tracker.record("planner", "plan", planUsage);
 
@@ -589,7 +690,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(plan),
         });
 
-        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
         continue;
       }
 
@@ -615,7 +716,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const { implement: impl, usages: implUsages } = await runImplement(
           context.spec,
           context.plan,
-          withActivity(agentOptions, implStatus),
+          withActivity(agentOptions, implStatus, toolTracker),
         );
         context.implement = impl;
 
@@ -645,7 +746,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(impl),
         });
 
-        emitStageEnd(chesstrace, stage.name, stageStartTime, devSuccess && qeSuccess);
+        emitStageEnd(chesstrace, stage.name, stageStartTime, devSuccess && qeSuccess, undefined, toolTracker);
         continue;
       }
 
@@ -670,7 +771,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const unitStatus = createLiveStatus("running unit tests...");
         const { gate: unitGateResult, usage: unitGateUsage } = await runUnitTestGate(
           context,
-          { ...withActivity(agentOptions, unitStatus), attempt: 1, verbose: options.verbose },
+          { ...withActivity(agentOptions, unitStatus, toolTracker), attempt: 1, verbose: options.verbose },
         );
         let gateResult = unitGateResult;
 
@@ -686,7 +787,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: gateResult.output,
           });
-          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
           continue;
         }
 
@@ -699,7 +800,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: false,
             output: gateResult.output,
           });
-          emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+          emitStageEnd(chesstrace, stage.name, stageStartTime, false, undefined, toolTracker);
           // Emit error.task before throwing
           if (chesstrace) {
             try {
@@ -728,6 +829,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           stageName: stage.name,
           tracker,
           verbose: options.verbose,
+          toolTracker,
         });
 
         context.results.push({
@@ -736,7 +838,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: gateResult.output,
         });
 
-        emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed);
+        emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed, undefined, toolTracker);
         continue;
       }
 
@@ -761,7 +863,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const funcStatus = createLiveStatus("running functional tests...");
         const { gate: funcGateResult, usage: funcGateUsage } = await runFunctionalTestGate(
           context,
-          { ...withActivity(agentOptions, funcStatus), attempt: 1, verbose: options.verbose },
+          { ...withActivity(agentOptions, funcStatus, toolTracker), attempt: 1, verbose: options.verbose },
         );
         let gateResult = funcGateResult;
 
@@ -777,7 +879,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: gateResult.output,
           });
-          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
           continue;
         }
 
@@ -791,7 +893,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: false,
             output: gateResult.output,
           });
-          emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+          emitStageEnd(chesstrace, stage.name, stageStartTime, false, undefined, toolTracker);
           // Emit error.task before throwing
           if (chesstrace) {
             try {
@@ -820,6 +922,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           stageName: stage.name,
           tracker,
           verbose: options.verbose,
+          toolTracker,
         });
 
         context.results.push({
@@ -828,7 +931,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: gateResult.output,
         });
 
-        emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed);
+        emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed, undefined, toolTracker);
         continue;
       }
 
@@ -854,7 +957,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const { output, passed, usage: secUsage } = await runSecurityReview(
           context,
           threshold as Severity,
-          withActivity(agentOptions, secStatus),
+          withActivity(agentOptions, secStatus, toolTracker),
         );
         if (secUsage) tracker.record("security-review", stage.name, secUsage);
         context.securityReview = output;
@@ -876,7 +979,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             success: true,
             output: JSON.stringify(output),
           });
-          emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
           continue;
         }
 
@@ -887,7 +990,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(output),
         });
 
-        emitStageEnd(chesstrace, stage.name, stageStartTime, false);
+        emitStageEnd(chesstrace, stage.name, stageStartTime, false, undefined, toolTracker);
 
         if (autoApprove) {
           console.log(chalk.yellow("Auto-approved — bypassing security gate..."));
@@ -977,7 +1080,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(prResult),
         });
 
-        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
         continue;
       }
 
@@ -985,7 +1088,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const prStatus = createLiveStatus("reviewing pull request...");
         const { output: reviewOutput, usage: prUsage } = await runPRReview(
           context,
-          withActivity(agentOptions, prStatus),
+          withActivity(agentOptions, prStatus, toolTracker),
         );
         context.prReview = reviewOutput;
         if (prUsage) tracker.record("pr-review", stage.name, prUsage);
@@ -1008,7 +1111,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           output: JSON.stringify(reviewOutput),
         });
 
-        emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+        emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
         continue;
       }
 
@@ -1019,7 +1122,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
       };
       console.log(chalk.gray(`[${stage.name}] skipped`));
       context.results.push(result);
-      emitStageEnd(chesstrace, stage.name, stageStartTime, true);
+      emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
     }
 
     // Emit pipeline.end
