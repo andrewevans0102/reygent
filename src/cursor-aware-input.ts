@@ -1,14 +1,22 @@
 /**
  * Custom input prompt based on @inquirer/input v5.0.11.
  *
- * Fixes a cursor-tracking bug in @inquirer/core's ScreenManager:
- * `checkCursorPos()` only corrects the column on keypress, never the row.
- * When arrow keys / Home / End don't change `rl.line`, `useState` skips
- * the re-render and the cursor stays on the wrong visual row.
+ * Fixes two cursor-tracking bugs in @inquirer/core's ScreenManager:
  *
- * Fix: track `rl.cursor` in a separate `useState`. When cursor position
- * changes, `useState` sees a new value → triggers `handleChange()` →
- * full `render()` → correct row+column positioning.
+ * 1. `checkCursorPos()` only corrects the column on keypress, never the row.
+ *    When arrow keys / Home / End don't change `rl.line`, `useState` skips
+ *    the re-render and the cursor stays on the wrong visual row.
+ *    Fix: track `rl.cursor` in a separate `useState`. When cursor position
+ *    changes, `useState` sees a new value → triggers `handleChange()` →
+ *    full `render()` → correct row+column positioning.
+ *
+ * 2. When prompt + input exceeds terminal width, `breakLines()` inserts `\n`
+ *    at the width boundary. `screen.render()` then calculates the prompt via
+ *    `lastLine(content)`, but if `rl.line` spans across the inserted `\n`,
+ *    the prompt becomes shorter than `rl.line`, the `setPrompt()` call uses
+ *    an empty string, and `getCursorPos()` returns wrong column values.
+ *    Fix: render user input on a separate line from the prompt message during
+ *    active editing, so `breakLines` never splits `rl.line` across lines.
  *
  * Also handles paste injection: when pasteState.pending is true,
  * the accumulated text is inserted directly into rl.line (bypassing
@@ -155,10 +163,24 @@ export default createPrompt<string, InputConfig>((config, done) => {
     error = theme.style.error(errorMsg);
   }
 
-  return [
-    [prefix, message, defaultStr, formattedValue]
-      .filter((v) => v !== undefined)
-      .join(" "),
-    error,
-  ];
+  // When status is "done", render everything on one line (standard @inquirer
+  // completion display — no cursor interaction, so wrapping is harmless).
+  if (status === "done") {
+    return [
+      [prefix, message, defaultStr, formattedValue]
+        .filter((v) => v !== undefined)
+        .join(" "),
+      error,
+    ];
+  }
+
+  // During active editing, render input on its own line.  This prevents
+  // @inquirer/core's breakLines() from splitting rl.line across visual
+  // lines, which would break screen.render()'s cursor positioning math
+  // (see bug #2 in the file header).
+  const promptLine = [prefix, message, defaultStr]
+    .filter((v) => v !== undefined)
+    .join(" ");
+
+  return [promptLine + "\n" + formattedValue, error];
 });

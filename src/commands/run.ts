@@ -328,7 +328,7 @@ async function promptLinearSpec(): Promise<string> {
   }
   resetTerminalForInput();
   const value = await pasteableInput({
-    message: "Linear issue URL or ID (e.g. https://linear.app/team/ENG-123 or ENG-123):",
+    message: "Linear issue URL or ID (e.g. ENG-123):",
     validate: (v) => {
       const trimmed = v.trim();
       if (!trimmed) return "Required";
