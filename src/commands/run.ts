@@ -413,7 +413,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
   // Initialize telemetry backend only if enabled
   if (telemetryEnabled) {
     try {
-      chesstrace = getChesstrace({ level: telemetryLevel });
+      const retentionDays = config.telemetry?.retention ?? 30;
+      chesstrace = getChesstrace({ level: telemetryLevel, retentionDays });
       const backend = new SqliteBackend();
       await chesstrace.init(backend);
       await chesstrace.startRun();
