@@ -2,6 +2,8 @@ import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { TaskError } from "./task.js";
 import type { GateResult, TaskContext } from "./task.js";
 import type { UsageInfo } from "./usage.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 /* ------------------------------------------------------------------ */
 /*  Shared gate utility                                               */
@@ -10,7 +12,7 @@ import type { UsageInfo } from "./usage.js";
 export async function runGate(
   agentName: string,
   prompt: string,
-  options?: AgentSpawnOptions,
+  options?: AgentSpawnOptions & { attempt?: number; verbose?: boolean },
 ): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   const result = await spawnAgent(agentName, prompt, options);
 
@@ -18,6 +20,22 @@ export async function runGate(
   const hasFail = result.stdout.includes("GATE_RESULT:FAIL");
 
   const passed = result.exitCode === 0 && hasPass && !hasFail;
+
+  // Emit gate.result telemetry
+  const chesstrace = getChesstrace();
+  if (chesstrace) {
+    try {
+      chesstrace.emit(Events.GATE_RESULT, {
+        gateName: agentName,
+        passed,
+        attempt: options?.attempt ?? 1,
+      });
+    } catch (err) {
+      if (options?.verbose) {
+        console.error("[telemetry]", err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
 
   return { gate: { passed, output: result.stdout }, usage: result.usage };
 }
@@ -53,7 +71,7 @@ Do NOT emit both markers. Do NOT omit the marker.`;
 
 export async function runUnitTestGate(
   context: TaskContext,
-  options?: AgentSpawnOptions,
+  options?: AgentSpawnOptions & { attempt?: number; verbose?: boolean },
 ): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   if (!context.implement) {
     throw new TaskError(
@@ -102,7 +120,7 @@ Do NOT emit both markers. Do NOT omit the marker.`;
 
 export async function runFunctionalTestGate(
   context: TaskContext,
-  options?: AgentSpawnOptions,
+  options?: AgentSpawnOptions & { attempt?: number; verbose?: boolean },
 ): Promise<{ gate: GateResult; usage?: UsageInfo }> {
   if (!context.implement) {
     throw new TaskError(
