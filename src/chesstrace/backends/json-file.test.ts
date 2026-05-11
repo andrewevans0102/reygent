@@ -524,8 +524,9 @@ describe('JsonFileBackend', () => {
       await backend.prune(cutoff);
 
       const remaining = await backend.query({});
-      // Should have evt_old_3 and evt_new
-      expect(remaining.length).toBeGreaterThanOrEqual(1);
+      // Should have evt_old_3 and evt_new (evt_old_1 and evt_old_2 pruned)
+      expect(remaining.length).toBeGreaterThanOrEqual(2);
+      expect(remaining.some((e) => e.id === 'evt_old_3')).toBe(true);
       expect(remaining.some((e) => e.id === 'evt_new')).toBe(true);
     });
   });

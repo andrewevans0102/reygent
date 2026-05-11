@@ -1,5 +1,5 @@
 import { join, dirname } from 'node:path';
-import { existsSync, mkdirSync, appendFileSync, readdirSync, readFileSync, unlinkSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, appendFileSync, readdirSync, readFileSync, unlinkSync, statSync, renameSync } from 'node:fs';
 import type { StorageBackend, EventFilter, RunSummary } from './types.js';
 import type { TelemetryEvent, TelemetryCategory } from '../events.js';
 import { findLocalConfigDir, resolveGlobalConfigDir } from '../../config.js';
@@ -275,7 +275,8 @@ export class JsonFileBackend implements StorageBackend {
           continue;
         }
       } catch (error) {
-        // Skip files we can't stat/delete
+        // Log warning and skip files we can't stat/delete
+        console.warn(`Failed to stat/delete ${file}: ${(error as Error).message}`);
         continue;
       }
 
@@ -292,19 +293,20 @@ export class JsonFileBackend implements StorageBackend {
           try {
             unlinkSync(file);
           } catch (error) {
-            // Skip files we can't delete
+            // Log warning and skip files we can't delete
+            console.warn(`Failed to delete ${file}: ${(error as Error).message}`);
           }
         } else {
-          // Rewrite file with only newer events
+          // Rewrite file with only newer events using atomic rename
           try {
             const lines = newer.map((e) => JSON.stringify(e)).join('\n') + '\n';
             const tempFile = file + '.tmp';
             appendFileSync(tempFile, lines, 'utf-8');
-            unlinkSync(file);
-            // Rename temp file to original
-            require('fs').renameSync(tempFile, file);
+            // Atomic rename: temp file replaces original in single operation
+            renameSync(tempFile, file);
           } catch (error) {
-            // Skip files we can't rewrite
+            // Log warning and skip files we can't rewrite
+            console.warn(`Failed to rewrite ${file}: ${(error as Error).message}`);
           }
         }
       }
