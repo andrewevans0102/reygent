@@ -4,6 +4,7 @@ import {
   getTelemetryOverride,
   resetTelemetryOverride,
   isValidTelemetryLevel,
+  resolveTelemetryEnabled,
 } from "./telemetry-override.js";
 
 describe("telemetry-override", () => {
@@ -75,6 +76,74 @@ describe("telemetry-override", () => {
     it("case sensitive", () => {
       expect(isValidTelemetryLevel("VERBOSE")).toBe(false);
       expect(isValidTelemetryLevel("Minimal")).toBe(false);
+    });
+  });
+
+  describe("resolveTelemetryEnabled", () => {
+    it("disables when override.disabled=true, ignores config", () => {
+      const result = resolveTelemetryEnabled(
+        { disabled: true },
+        { telemetry: { enabled: true, level: "standard" } }
+      );
+      expect(result.enabled).toBe(false);
+      expect(result.level).toBe("standard");
+    });
+
+    it("uses config.enabled when no override.disabled", () => {
+      const result = resolveTelemetryEnabled(
+        {},
+        { telemetry: { enabled: true, level: "minimal" } }
+      );
+      expect(result.enabled).toBe(true);
+      expect(result.level).toBe("minimal");
+    });
+
+    it("defaults enabled=false when config.enabled undefined", () => {
+      const result = resolveTelemetryEnabled(
+        {},
+        { telemetry: { level: "standard" } }
+      );
+      expect(result.enabled).toBe(false);
+      expect(result.level).toBe("standard");
+    });
+
+    it("override.level takes precedence over config.level", () => {
+      const result = resolveTelemetryEnabled(
+        { level: "verbose" },
+        { telemetry: { enabled: true, level: "minimal" } }
+      );
+      expect(result.enabled).toBe(true);
+      expect(result.level).toBe("verbose");
+    });
+
+    it("uses DEFAULT_TELEMETRY_CONFIG.level when neither override nor config provide level", () => {
+      const result = resolveTelemetryEnabled(
+        {},
+        { telemetry: { enabled: true } }
+      );
+      expect(result.enabled).toBe(true);
+      expect(result.level).toBe("standard"); // DEFAULT_TELEMETRY_CONFIG.level
+    });
+
+    it("override.disabled=true and override.level both applied", () => {
+      const result = resolveTelemetryEnabled(
+        { disabled: true, level: "verbose" },
+        { telemetry: { enabled: true, level: "minimal" } }
+      );
+      expect(result.enabled).toBe(false);
+      expect(result.level).toBe("verbose"); // level still resolved even when disabled
+    });
+
+    it("handles empty config gracefully", () => {
+      const result = resolveTelemetryEnabled({}, {});
+      expect(result.enabled).toBe(false);
+      expect(result.level).toBe("standard");
+    });
+
+    it("handles config with no telemetry key", () => {
+      const result = resolveTelemetryEnabled({ level: "minimal" }, {});
+      expect(result.enabled).toBe(false);
+      expect(result.level).toBe("minimal");
     });
   });
 });

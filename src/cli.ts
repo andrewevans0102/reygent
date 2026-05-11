@@ -143,18 +143,7 @@ program.hook("preAction", async () => {
       }
     }
 
-    const modelFlag = program.opts().model;
-    if (modelFlag) {
-      try {
-        const resolved = validateModel(modelFlag, providerFlag);
-        setModelOverride(resolved);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        program.error(message);
-      }
-    }
-
-    // Apply telemetry flag overrides
+    // Apply telemetry flag overrides (validate before model to avoid partial execution)
     const noTelemetry = program.opts().telemetry === false;
     const telemetryLevelFlag = program.opts().telemetryLevel;
     const telemetryVerbose = program.opts().telemetryVerbose === true;
@@ -170,6 +159,17 @@ program.hook("preAction", async () => {
         );
       }
       setTelemetryOverride({ level: telemetryLevelFlag });
+    }
+
+    const modelFlag = program.opts().model;
+    if (modelFlag) {
+      try {
+        const resolved = validateModel(modelFlag, providerFlag);
+        setModelOverride(resolved);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        program.error(message);
+      }
     }
   } catch (err) {
     // Unexpected error in validation - log but continue to telemetry prompt

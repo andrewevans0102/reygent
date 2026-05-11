@@ -24,7 +24,7 @@ import { Chesstrace, getChesstrace } from "../chesstrace/index.js";
 import { Events, TelemetryLevel } from "../chesstrace/events.js";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import { loadConfig } from "../config.js";
-import { getTelemetryOverride } from "../telemetry-override.js";
+import { getTelemetryOverride, resolveTelemetryEnabled } from "../telemetry-override.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -402,11 +402,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
   const telemetryOverride = getTelemetryOverride();
 
   // Apply CLI flag overrides
-  const telemetryEnabled = telemetryOverride.disabled === true
-    ? false
-    : config.telemetry?.enabled === true;
-
-  const telemetryLevelStr = telemetryOverride.level ?? config.telemetry?.level ?? 'standard';
+  const { enabled: telemetryEnabled, level: telemetryLevelStr } = resolveTelemetryEnabled(
+    telemetryOverride,
+    config
+  );
   const telemetryLevel = TelemetryLevel[telemetryLevelStr];
 
   let chesstrace: Chesstrace | null = null;

@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { Chesstrace } from "./chesstrace/index.js";
+import { Chesstrace, getChesstrace, resetChesstrace } from "./chesstrace/index.js";
 import { SqliteBackend } from "./chesstrace/backends/sqlite.js";
+import { TelemetryLevel } from "./chesstrace/events.js";
+import { resolveTelemetryEnabled, setTelemetryOverride, resetTelemetryOverride } from "./telemetry-override.js";
 
 describe("telemetry override integration", () => {
   let testDir: string;
@@ -14,6 +16,8 @@ describe("telemetry override integration", () => {
 
   afterEach(() => {
     rmSync(testDir, { recursive: true, force: true });
+    resetTelemetryOverride();
+    resetChesstrace();
   });
 
   describe("Chesstrace level override", () => {
@@ -395,6 +399,144 @@ describe("telemetry override integration", () => {
       expect(resolveLevelWithFallback("invalid")).toBe("standard");
       expect(resolveLevelWithFallback(undefined)).toBe("standard");
       expect(resolveLevelWithFallback("verbose")).toBe("verbose");
+    });
+  });
+
+  describe("CLI override to Chesstrace instance integration", () => {
+    it("verifies Chesstrace instance receives correct level from CLI --telemetry-level", async () => {
+      // Simulate CLI parsing --telemetry-level=verbose
+      setTelemetryOverride({ level: "verbose" });
+
+      // Simulate run.ts loading config and resolving level
+      const config = { telemetry: { enabled: true, level: "standard" as const } };
+      const { enabled, level } = resolveTelemetryEnabled(
+        { level: "verbose" },
+        config
+      );
+
+      expect(enabled).toBe(true);
+      expect(level).toBe("verbose");
+
+      // Verify Chesstrace instance created with correct numeric level
+      const telemetryLevel = TelemetryLevel[level];
+      expect(telemetryLevel).toBe(TelemetryLevel.verbose);
+      expect(telemetryLevel).toBe(2);
+
+      // Initialize Chesstrace with resolved level
+      const dbPath = join(testDir, "chesstrace.db");
+      const backend = new SqliteBackend("global", dbPath);
+      const chesstrace = getChesstrace({ level: telemetryLevel });
+
+      await chesstrace.init(backend);
+      await chesstrace.startRun();
+
+      // Verify verbose event captured (level 2)
+      chesstrace.emit("llm.request", { model: "claude" });
+      await chesstrace.flush();
+
+      const events = await backend.query({});
+      const llmEvents = events.filter((e) => e.event === "llm.request");
+      expect(llmEvents.length).toBeGreaterThan(0);
+
+      await chesstrace.close();
+    });
+
+    it("verifies Chesstrace instance respects CLI --no-telemetry", () => {
+      // Simulate CLI parsing --no-telemetry
+      setTelemetryOverride({ disabled: true });
+
+      // Simulate run.ts loading config and resolving level
+      const config = { telemetry: { enabled: true, level: "standard" as const } };
+      const { enabled, level } = resolveTelemetryEnabled(
+        { disabled: true },
+        config
+      );
+
+      expect(enabled).toBe(false);
+      expect(level).toBe("standard"); // level still resolved but not used
+
+      // In actual run.ts, telemetry not initialized when disabled
+      // No Chesstrace instance created
+    });
+
+    it("verifies Chesstrace instance uses config level when no CLI override", async () => {
+      // No CLI override
+      resetTelemetryOverride();
+
+      // Simulate run.ts loading config and resolving level
+      const config = { telemetry: { enabled: true, level: "minimal" as const } };
+      const { enabled, level } = resolveTelemetryEnabled(
+        {},
+        config
+      );
+
+      expect(enabled).toBe(true);
+      expect(level).toBe("minimal");
+
+      // Verify Chesstrace instance created with minimal level (0)
+      const telemetryLevel = TelemetryLevel[level];
+      expect(telemetryLevel).toBe(TelemetryLevel.minimal);
+      expect(telemetryLevel).toBe(0);
+
+      const dbPath = join(testDir, "chesstrace-minimal.db");
+      const backend = new SqliteBackend("global", dbPath);
+      const chesstrace = getChesstrace({ level: telemetryLevel });
+
+      await chesstrace.init(backend);
+      await chesstrace.startRun();
+
+      // Standard level event should be filtered out
+      chesstrace.emit("agent.start", { name: "dev" }); // level 1 - filtered
+      chesstrace.emit("error.unhandled", { error: "test" }); // level 0 - captured
+      await chesstrace.flush();
+
+      const events = await backend.query({});
+      const errorEvents = events.filter((e) => e.event === "error.unhandled");
+      const agentEvents = events.filter((e) => e.event === "agent.start");
+
+      expect(errorEvents.length).toBeGreaterThan(0);
+      expect(agentEvents.length).toBe(0);
+
+      await chesstrace.close();
+    });
+
+    it("verifies CLI override takes precedence over config level", async () => {
+      // CLI override: minimal
+      setTelemetryOverride({ level: "minimal" });
+
+      // Config: verbose
+      const config = { telemetry: { enabled: true, level: "verbose" as const } };
+      const { enabled, level } = resolveTelemetryEnabled(
+        { level: "minimal" },
+        config
+      );
+
+      expect(enabled).toBe(true);
+      expect(level).toBe("minimal"); // CLI wins
+
+      const telemetryLevel = TelemetryLevel[level];
+      expect(telemetryLevel).toBe(TelemetryLevel.minimal);
+
+      const dbPath = join(testDir, "chesstrace-override.db");
+      const backend = new SqliteBackend("global", dbPath);
+      const chesstrace = getChesstrace({ level: telemetryLevel });
+
+      await chesstrace.init(backend);
+      await chesstrace.startRun();
+
+      // Verbose event filtered out
+      chesstrace.emit("llm.request", { model: "claude" }); // level 2 - filtered
+      chesstrace.emit("command.start", { command: "run" }); // level 0 - captured
+      await chesstrace.flush();
+
+      const events = await backend.query({});
+      const llmEvents = events.filter((e) => e.event === "llm.request");
+      const cmdEvents = events.filter((e) => e.event === "command.start");
+
+      expect(llmEvents.length).toBe(0);
+      expect(cmdEvents.length).toBeGreaterThan(0);
+
+      await chesstrace.close();
     });
   });
 });
