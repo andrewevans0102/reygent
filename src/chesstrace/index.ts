@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import chalk from 'chalk';
 import type { StorageBackend, EventFilter, RunSummary } from './backends/types.js';
 import type { TelemetryEvent, TelemetryLevel } from './events.js';
 import { EVENT_LEVELS, categoryFromEvent } from './events.js';
@@ -11,6 +12,11 @@ export interface TelemetryConfig {
    * Telemetry level to capture (0=minimal, 1=standard, 2=verbose)
    */
   level: TelemetryLevel;
+
+  /**
+   * Retention period in days (default: 30)
+   */
+  retentionDays?: number;
 
   /**
    * Optional callback for swallowed errors (for debugging)
@@ -46,6 +52,18 @@ export class Chesstrace {
     this.initPromise = (async () => {
       this.backend = backend;
       await backend.init();
+
+      // Auto-prune old events based on retention config
+      const retentionDays = this.config.retentionDays ?? 30;
+      const olderThan = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+      try {
+        const deleted = await backend.prune(olderThan);
+        if (deleted > 0) {
+          console.log(chalk.gray(`Pruned ${deleted} event(s) older than ${retentionDays} days`));
+        }
+      } catch (err) {
+        this.config.onError?.(err, 'auto-prune');
+      }
     })();
 
     return this.initPromise;

@@ -236,6 +236,217 @@ describe("telemetry helpers", () => {
       expect(remaining).toHaveLength(1);
       expect(remaining[0].id).toBe("recent-1");
     });
+
+    it("should return count of deleted events", async () => {
+      const now = Date.now();
+      const events: TelemetryEvent[] = [
+        {
+          id: "old-1",
+          runId: "run-1",
+          timestamp: now - 40 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+        {
+          id: "old-2",
+          runId: "run-1",
+          timestamp: now - 50 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.end",
+          minLevel: 1,
+          data: {},
+        },
+        {
+          id: "old-3",
+          runId: "run-1",
+          timestamp: now - 60 * 24 * 60 * 60 * 1000,
+          category: "tool",
+          event: "tool.call",
+          minLevel: 1,
+          data: {},
+        },
+      ];
+
+      await backend.writeBatch(events);
+
+      // Prune events older than 30 days
+      const olderThan = now - 30 * 24 * 60 * 60 * 1000;
+      const deleted = await backend.prune(olderThan);
+
+      expect(deleted).toBe(3);
+    });
+
+    it("should return 0 when no events to prune", async () => {
+      const now = Date.now();
+      const events: TelemetryEvent[] = [
+        {
+          id: "recent-1",
+          runId: "run-1",
+          timestamp: now - 10 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+      ];
+
+      await backend.writeBatch(events);
+
+      // Prune events older than 30 days
+      const olderThan = now - 30 * 24 * 60 * 60 * 1000;
+      const deleted = await backend.prune(olderThan);
+
+      expect(deleted).toBe(0);
+    });
+
+    it("should prune events from multiple runs", async () => {
+      const now = Date.now();
+      const events: TelemetryEvent[] = [
+        {
+          id: "old-run1",
+          runId: "run-1",
+          timestamp: now - 40 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+        {
+          id: "old-run2",
+          runId: "run-2",
+          timestamp: now - 50 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+        {
+          id: "recent-run3",
+          runId: "run-3",
+          timestamp: now - 10 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+      ];
+
+      await backend.writeBatch(events);
+
+      const olderThan = now - 30 * 24 * 60 * 60 * 1000;
+      const deleted = await backend.prune(olderThan);
+
+      expect(deleted).toBe(2);
+
+      const remaining = await backend.query({});
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].runId).toBe("run-3");
+    });
+
+    it("should update runs summary after pruning", async () => {
+      const now = Date.now();
+      const events: TelemetryEvent[] = [
+        {
+          id: "old-1",
+          runId: "old-run",
+          timestamp: now - 40 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+        {
+          id: "recent-1",
+          runId: "recent-run",
+          timestamp: now - 10 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+      ];
+
+      await backend.writeBatch(events);
+
+      const runsBefore = await backend.listRuns();
+      expect(runsBefore).toHaveLength(2);
+
+      // Prune old events
+      const olderThan = now - 30 * 24 * 60 * 60 * 1000;
+      await backend.prune(olderThan);
+
+      const runsAfter = await backend.listRuns();
+      expect(runsAfter).toHaveLength(1);
+      expect(runsAfter[0].runId).toBe("recent-run");
+    });
+
+    it("should handle default retention of 30 days", async () => {
+      const now = Date.now();
+      const defaultRetention = 30;
+
+      const events: TelemetryEvent[] = [
+        {
+          id: "old-1",
+          runId: "run-1",
+          timestamp: now - 31 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+        {
+          id: "recent-1",
+          runId: "run-2",
+          timestamp: now - 29 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+      ];
+
+      await backend.writeBatch(events);
+
+      const olderThan = now - defaultRetention * 24 * 60 * 60 * 1000;
+      const deleted = await backend.prune(olderThan);
+
+      expect(deleted).toBe(1);
+    });
+
+    it("should handle custom retention periods", async () => {
+      const now = Date.now();
+      const customRetention = 7;
+
+      const events: TelemetryEvent[] = [
+        {
+          id: "old-1",
+          runId: "run-1",
+          timestamp: now - 8 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+        {
+          id: "recent-1",
+          runId: "run-2",
+          timestamp: now - 6 * 24 * 60 * 60 * 1000,
+          category: "agent",
+          event: "agent.start",
+          minLevel: 1,
+          data: {},
+        },
+      ];
+
+      await backend.writeBatch(events);
+
+      const olderThan = now - customRetention * 24 * 60 * 60 * 1000;
+      const deleted = await backend.prune(olderThan);
+
+      expect(deleted).toBe(1);
+    });
   });
 
   describe("runs listing", () => {

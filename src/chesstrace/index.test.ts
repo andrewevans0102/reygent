@@ -95,6 +95,50 @@ describe('Chesstrace', () => {
       expect(backend.initCalled).toBe(true);
     });
 
+    it('auto-prunes old events on init with default retention', async () => {
+      const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
+      await chesstrace.init(backend);
+
+      expect(backend.pruneCalls.length).toBe(1);
+      const olderThan = backend.pruneCalls[0];
+      const expected = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      expect(olderThan).toBeGreaterThanOrEqual(expected - 100);
+      expect(olderThan).toBeLessThanOrEqual(expected + 100);
+    });
+
+    it('auto-prunes old events with custom retention days', async () => {
+      const chesstrace = new Chesstrace({
+        level: TelemetryLevel.minimal,
+        retentionDays: 7,
+      });
+      await chesstrace.init(backend);
+
+      expect(backend.pruneCalls.length).toBe(1);
+      const olderThan = backend.pruneCalls[0];
+      const expected = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      expect(olderThan).toBeGreaterThanOrEqual(expected - 100);
+      expect(olderThan).toBeLessThanOrEqual(expected + 100);
+    });
+
+    it('handles auto-prune errors silently', async () => {
+      const errors: Array<{ err: unknown; op: string }> = [];
+      const chesstrace = new Chesstrace({
+        level: TelemetryLevel.minimal,
+        onError: (err, op) => errors.push({ err, op }),
+      });
+
+      // Make prune throw error
+      backend.prune = async () => {
+        throw new Error('Mock prune error');
+      };
+
+      await chesstrace.init(backend);
+
+      expect(errors.length).toBe(1);
+      expect(errors[0].op).toBe('auto-prune');
+      expect((errors[0].err as Error).message).toBe('Mock prune error');
+    });
+
     it('processes buffered events after init and startRun', async () => {
       const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
 
@@ -477,24 +521,24 @@ describe('Chesstrace', () => {
   describe('prune', () => {
     it('delegates to backend', async () => {
       const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
-      await chesstrace.init(backend);
+      await chesstrace.init(backend); // This calls auto-prune once
 
       const days = 30;
-      await chesstrace.prune(days);
+      await chesstrace.prune(days); // Manual prune
 
-      expect(backend.pruneCalls.length).toBe(1);
+      expect(backend.pruneCalls.length).toBe(2); // auto-prune + manual
     });
 
     it('converts days to timestamp', async () => {
       const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
-      await chesstrace.init(backend);
+      await chesstrace.init(backend); // auto-prune
 
       const days = 30;
       const before = Date.now() - days * 24 * 60 * 60 * 1000;
-      await chesstrace.prune(days);
+      await chesstrace.prune(days); // manual prune
       const after = Date.now() - days * 24 * 60 * 60 * 1000;
 
-      const timestamp = backend.pruneCalls[0];
+      const timestamp = backend.pruneCalls[1]; // Second call (manual)
       expect(timestamp).toBeGreaterThanOrEqual(before);
       expect(timestamp).toBeLessThanOrEqual(after);
     });
@@ -510,11 +554,61 @@ describe('Chesstrace', () => {
 
     it('handles zero days', async () => {
       const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
+      await chesstrace.init(backend); // auto-prune
+
+      await chesstrace.prune(0); // manual prune
+      const timestamp = backend.pruneCalls[1]; // Second call (manual)
+      expect(timestamp).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('returns 0 when backend not initialized', async () => {
+      const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
+      const count = await chesstrace.prune(30);
+      expect(count).toBe(0);
+      expect(backend.pruneCalls.length).toBe(0);
+    });
+
+    it('uses default retention of 30 days', async () => {
+      const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
+      await chesstrace.init(backend); // auto-prune with default 30 days
+
+      const defaultRetention = 30;
+      await chesstrace.prune(defaultRetention); // manual prune
+
+      const expectedOlderThan = Date.now() - defaultRetention * 24 * 60 * 60 * 1000;
+      const actualOlderThan = backend.pruneCalls[1]; // Second call (manual)
+
+      // Allow 100ms tolerance for test execution time
+      expect(Math.abs(actualOlderThan - expectedOlderThan)).toBeLessThan(100);
+    });
+
+    it('accepts custom retention days', async () => {
+      const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
+      await chesstrace.init(backend); // auto-prune with default 30 days
+
+      const customRetention = 7;
+      await chesstrace.prune(customRetention); // manual prune with 7 days
+
+      const expectedOlderThan = Date.now() - customRetention * 24 * 60 * 60 * 1000;
+      const actualOlderThan = backend.pruneCalls[1]; // Second call (manual)
+
+      // Allow 100ms tolerance
+      expect(Math.abs(actualOlderThan - expectedOlderThan)).toBeLessThan(100);
+    });
+
+    it('swallows errors and returns 0', async () => {
+      const chesstrace = new Chesstrace({ level: TelemetryLevel.minimal });
       await chesstrace.init(backend);
 
-      await chesstrace.prune(0);
-      const timestamp = backend.pruneCalls[0];
-      expect(timestamp).toBeLessThanOrEqual(Date.now());
+      backend.pruneResult = -1; // Simulate error scenario
+      backend.shouldThrow = false;
+
+      // Override prune to throw
+      const originalPrune = backend.prune.bind(backend);
+      backend.prune = vi.fn().mockRejectedValue(new Error('Prune error'));
+
+      const count = await chesstrace.prune(30);
+      expect(count).toBe(0);
     });
   });
 

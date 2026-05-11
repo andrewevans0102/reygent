@@ -443,6 +443,82 @@ describe('SqliteBackend', () => {
       const remaining = await backend.query({});
       expect(remaining).toHaveLength(0);
     });
+
+    it('updates runs summary after pruning events', async () => {
+      const runsBefore = await backend.listRuns();
+      expect(runsBefore).toHaveLength(2);
+
+      // Prune old events
+      await backend.prune(3000);
+
+      const runsAfter = await backend.listRuns();
+      expect(runsAfter).toHaveLength(1);
+      expect(runsAfter[0].runId).toBe('run_new');
+    });
+
+    it('returns accurate count of deleted events', async () => {
+      const deleted = await backend.prune(3000);
+      expect(deleted).toBe(2);
+
+      const allEvents = await backend.query({});
+      expect(allEvents).toHaveLength(1);
+    });
+
+    it('handles prune with default retention period', async () => {
+      const now = Date.now();
+      const retentionDays = 30;
+      const olderThan = now - retentionDays * 24 * 60 * 60 * 1000;
+
+      // All test events are much older than 30 days
+      const deleted = await backend.prune(olderThan);
+      expect(deleted).toBe(3);
+    });
+
+    it('handles prune with custom retention period', async () => {
+      const now = Date.now();
+      const customRetentionDays = 7;
+      const olderThan = now - customRetentionDays * 24 * 60 * 60 * 1000;
+
+      // All test events are much older than 7 days
+      const deleted = await backend.prune(olderThan);
+      expect(deleted).toBe(3);
+    });
+
+    it('removes entire runs when all events pruned', async () => {
+      // Prune all events from run_old
+      const deleted = await backend.prune(3000);
+      expect(deleted).toBe(2);
+
+      const runs = await backend.listRuns();
+      expect(runs).toHaveLength(1);
+      expect(runs.some((r) => r.runId === 'run_old')).toBe(false);
+    });
+
+    it('preserves runs with remaining events', async () => {
+      const moreEvents: TelemetryEvent[] = [
+        {
+          id: 'evt_old_3',
+          runId: 'run_old',
+          timestamp: 4000,
+          category: 'agent',
+          event: 'agent.end',
+          minLevel: TelemetryLevel.standard,
+          data: {},
+        },
+      ];
+      await backend.writeBatch(moreEvents);
+
+      // Prune events older than 3000
+      const deleted = await backend.prune(3000);
+      expect(deleted).toBe(2);
+
+      const runs = await backend.listRuns();
+      expect(runs).toHaveLength(2);
+
+      const oldRun = runs.find((r) => r.runId === 'run_old');
+      expect(oldRun).toBeDefined();
+      expect(oldRun!.eventCount).toBe(1);
+    });
   });
 
   describe('flush', () => {
