@@ -138,8 +138,8 @@ describe("spawn telemetry", () => {
       );
       const [_event, data] = completeCalls[0];
 
-      // Allow 5ms buffer for timer precision
-      expect(data.duration).toBeGreaterThanOrEqual(100);
+      // Timer may fire 1-2ms early due to scheduling variance
+      expect(data.duration).toBeGreaterThanOrEqual(98);
       expect(data.duration).toBeLessThan(Date.now() - startTime + 50);
     });
 
