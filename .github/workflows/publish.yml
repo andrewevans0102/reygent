@@ -31,7 +31,7 @@ jobs:
         run: npm test
 
       - name: Validate package with dry-run
-        run: npm publish --dry-run
+        run: npm publish --dry-run --access public
 
       - name: Publish to npm
-        run: npm publish
+        run: npm publish --access public
