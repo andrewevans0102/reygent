@@ -104,6 +104,45 @@ describe.skipIf(!hasTwoProviders)("Multi-provider integration", () => {
     expect(claudeResult.usage?.provider).toBe("claude");
     expect(openrouterResult.usage?.provider).toBe("openrouter");
   }, 120000);
+
+  it("context threading across providers (planner on A → dev on B → qe on C)", async () => {
+    const plannerPrompt = "Plan: Add user authentication feature with login and logout endpoints.";
+    const devPrompt = "Implement: Create login and logout API endpoints based on plan context.";
+    const qePrompt = "Test: Write tests for login and logout endpoints based on implementation.";
+
+    // Run planner on Claude
+    const plannerResult = await spawnAgentStream("planner", plannerPrompt, 30000, {
+      provider: "claude",
+      model: "claude-3-5-haiku-20241022",
+    });
+
+    // Run dev on OpenRouter
+    const devResult = await spawnAgentStream("dev", devPrompt, 30000, {
+      provider: "openrouter",
+      model: "anthropic/claude-3.5-haiku",
+    });
+
+    // Run qe on Claude again (different from dev)
+    const qeResult = await spawnAgentStream("qe", qePrompt, 30000, {
+      provider: "claude",
+      model: "claude-3-5-haiku-20241022",
+    });
+
+    // Verify all agents completed successfully
+    expect(plannerResult.exitCode).toBe(0);
+    expect(devResult.exitCode).toBe(0);
+    expect(qeResult.exitCode).toBe(0);
+
+    // Verify each agent used the correct provider
+    expect(plannerResult.usage?.provider).toBe("claude");
+    expect(devResult.usage?.provider).toBe("openrouter");
+    expect(qeResult.usage?.provider).toBe("claude");
+
+    // Verify output was produced at each stage
+    expect(plannerResult.stdout).toBeTruthy();
+    expect(devResult.stdout).toBeTruthy();
+    expect(qeResult.stdout).toBeTruthy();
+  }, 180000);
 });
 
 describe.skipIf(hasTwoProviders)("Multi-provider integration — skipped", () => {

@@ -7,7 +7,7 @@ export default defineConfig({
     include: ["test/integration/**/*.integration.test.ts"],
     restoreMocks: true,
     mockReset: true,
-    testTimeout: 60000, // 60s — provider calls can be slow
-    hookTimeout: 60000,
+    testTimeout: 120000, // 120s — provider calls can be slow
+    hookTimeout: 120000,
   },
 });

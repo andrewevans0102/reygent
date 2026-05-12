@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { spawnAgentStream } from "../../src/spawn.js";
 import { UsageTracker, printUsageSummary, printVerboseUsage, calculateCacheSavings } from "../../src/usage.js";
 
