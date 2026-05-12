@@ -22,5 +22,8 @@ Thumbs.db
 # Claude Code local settings
 .claude/settings.local.json
 
+# Pack artifacts
+*.tgz
+
 # Reygent config (for testing/development only - not shipped)
 .reygent/
