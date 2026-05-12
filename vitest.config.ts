@@ -7,6 +7,16 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "test/smoke/**/*.test.ts"],
     restoreMocks: true,
     mockReset: true,
+    // Limit parallelism to prevent resource exhaustion
+    pool: "forks",
+    poolOptions: {
+      forks: {
+        singleFork: false,
+        maxForks: 4, // Limit concurrent workers
+      },
+    },
+    fileParallelism: true,
+    maxConcurrency: 5, // Limit concurrent tests per file
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

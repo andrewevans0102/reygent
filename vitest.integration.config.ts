@@ -9,5 +9,15 @@ export default defineConfig({
     mockReset: true,
     testTimeout: 120000, // 120s — provider calls can be slow
     hookTimeout: 120000,
+    // Limit parallelism for integration tests
+    pool: "forks",
+    poolOptions: {
+      forks: {
+        singleFork: false,
+        maxForks: 2, // Integration tests are heavier, use fewer workers
+      },
+    },
+    fileParallelism: true,
+    maxConcurrency: 3,
   },
 });
