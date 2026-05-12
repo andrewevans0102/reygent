@@ -28,6 +28,64 @@ async function pathExists(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Parse markdown to extract entries with metadata
+ */
+interface ParsedEntry {
+  title: string;
+  occurrences?: number;
+  lastSeen: string;
+  agent?: string;
+  successRate?: number;
+  fullContent: string;
+}
+
+function parseEntries(markdown: string): ParsedEntry[] {
+  const entries: ParsedEntry[] = [];
+  const sections = markdown.split(/^## /m).filter(s => s.trim());
+
+  for (const section of sections) {
+    const lines = section.split('\n');
+    const title = lines[0].trim();
+
+    const occurrenceMatch = section.match(/\*\*Occurrences\*\*:\s*(\d+)/);
+    const lastSeenMatch = section.match(/\*\*Last seen\*\*:\s*(\d{4}-\d{2}-\d{2})/);
+    const agentMatch = section.match(/\*\*Agent\*\*:\s*(\w+)/);
+    const successRateMatch = section.match(/\*\*Success rate\*\*:\s*(\d+)%/);
+
+    entries.push({
+      title,
+      occurrences: occurrenceMatch ? parseInt(occurrenceMatch[1]) : undefined,
+      lastSeen: lastSeenMatch ? lastSeenMatch[1] : new Date().toISOString().split('T')[0],
+      agent: agentMatch ? agentMatch[1] : undefined,
+      successRate: successRateMatch ? parseInt(successRateMatch[1]) : undefined,
+      fullContent: '## ' + section,
+    });
+  }
+
+  return entries;
+}
+
+/**
+ * Prune old entries that haven't been seen in days
+ */
+function pruneOldEntries(entries: ParsedEntry[], maxAgeDays: number): ParsedEntry[] {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - maxAgeDays);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  return entries.filter(entry => entry.lastSeen >= cutoffStr);
+}
+
+/**
+ * Limit entries to max count, keeping most recent
+ */
+function limitEntries(entries: ParsedEntry[], maxEntries: number): ParsedEntry[] {
+  return entries
+    .sort((a, b) => b.lastSeen.localeCompare(a.lastSeen))
+    .slice(0, maxEntries);
+}
+
+/**
  * Ensures the knowledge directory structure exists.
  * Creates .reygent/knowledge/ and subdirectories if missing.
  */
@@ -143,7 +201,9 @@ Document review approaches that work well.
 }
 
 /**
- * Adds a failure entry to common-failures.md
+ * Adds a failure entry to common-failures.md.
+ * Updates existing entry if duplicate found, otherwise adds new.
+ * Prunes entries older than 90 days and limits to 50 entries.
  */
 export async function addFailureEntry(
   baseDir: string,
@@ -159,7 +219,48 @@ export async function addFailureEntry(
   const content = await fs.readFile(filePath, 'utf8');
   const timestamp = new Date().toISOString().split('T')[0];
 
-  const entry = `
+  // Parse existing entries
+  const entries = parseEntries(content);
+
+  // Check for duplicate (same title and agent)
+  const existingIndex = entries.findIndex(
+    e => e.title === options.issue && e.agent === options.agent
+  );
+
+  if (existingIndex !== -1) {
+    // Update existing entry
+    const existing = entries[existingIndex];
+    const newOccurrences = (existing.occurrences || 1) + 1;
+
+    entries[existingIndex].fullContent = `
+## ${options.issue}
+**Occurrences**: ${newOccurrences} runs
+**Last seen**: ${timestamp}
+**Agent**: ${options.agent}
+
+**Solution**: ${options.solution}
+${
+  options.example
+    ? `
+**Example**:
+\`\`\`
+${options.example}
+\`\`\`
+`
+    : ''
+}
+---
+`;
+    entries[existingIndex].lastSeen = timestamp;
+    entries[existingIndex].occurrences = newOccurrences;
+  } else {
+    // Add new entry
+    entries.push({
+      title: options.issue,
+      occurrences: 1,
+      lastSeen: timestamp,
+      agent: options.agent,
+      fullContent: `
 ## ${options.issue}
 **Occurrences**: 1 run
 **Last seen**: ${timestamp}
@@ -177,14 +278,25 @@ ${options.example}
     : ''
 }
 ---
-`;
+`,
+    });
+  }
 
-  // Append to end of file
-  await fs.writeFile(filePath, content + entry, 'utf8');
+  // Prune old entries (90 days) and limit to 50
+  let managedEntries = pruneOldEntries(entries, 90);
+  managedEntries = limitEntries(managedEntries, 50);
+
+  // Rebuild file
+  const header = '# Common Failures\n\nThis file documents recurring errors and their solutions.\n\n---\n';
+  const newContent = header + managedEntries.map(e => e.fullContent).join('\n');
+
+  await fs.writeFile(filePath, newContent, 'utf8');
 }
 
 /**
- * Adds a success pattern entry to success-patterns.md
+ * Adds a success pattern entry to success-patterns.md.
+ * Updates existing entry if duplicate found, otherwise adds new.
+ * Prunes entries older than 60 days and limits to 30 entries.
  */
 export async function addPatternEntry(
   baseDir: string,
@@ -200,7 +312,15 @@ export async function addPatternEntry(
   const content = await fs.readFile(filePath, 'utf8');
   const timestamp = new Date().toISOString().split('T')[0];
 
-  const entry = `
+  // Parse existing entries
+  const entries = parseEntries(content);
+
+  // Check for duplicate (same title)
+  const existingIndex = entries.findIndex(e => e.title === options.description);
+
+  if (existingIndex !== -1) {
+    // Update existing entry
+    entries[existingIndex].fullContent = `
 ## ${options.description}
 **Last seen**: ${timestamp}
 ${options.successRate ? `**Success rate**: ${options.successRate}%` : ''}
@@ -214,7 +334,40 @@ ${options.approach}
 }
 ---
 `;
+    entries[existingIndex].lastSeen = timestamp;
+    if (options.successRate) {
+      entries[existingIndex].successRate = options.successRate;
+    }
+  } else {
+    // Add new entry
+    entries.push({
+      title: options.description,
+      lastSeen: timestamp,
+      successRate: options.successRate,
+      fullContent: `
+## ${options.description}
+**Last seen**: ${timestamp}
+${options.successRate ? `**Success rate**: ${options.successRate}%` : ''}
 
-  // Append to end of file
-  await fs.writeFile(filePath, content + entry, 'utf8');
+${
+  options.approach
+    ? `**Approach**:
+${options.approach}
+`
+    : ''
+}
+---
+`,
+    });
+  }
+
+  // Prune old entries (60 days) and limit to 30
+  let managedEntries = pruneOldEntries(entries, 60);
+  managedEntries = limitEntries(managedEntries, 30);
+
+  // Rebuild file
+  const header = '# Success Patterns\n\nThis file captures proven approaches that work well.\n\n---\n';
+  const newContent = header + managedEntries.map(e => e.fullContent).join('\n');
+
+  await fs.writeFile(filePath, newContent, 'utf8');
 }

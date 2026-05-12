@@ -86,6 +86,20 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
       spinner.text = "Creating knowledge directory";
       await ensureKnowledgeDir(process.cwd());
 
+      // Create .gitignore for auto-generated files
+      const gitignorePath = join(targetDir, ".gitignore");
+      const gitignoreContent = `# Auto-generated knowledge files (generated from local telemetry)
+knowledge/common-failures.md
+knowledge/success-patterns.md
+
+# Keep these files in source control:
+# - config.json (shared agent config)
+# - skills/ (custom team skills)
+# - knowledge/project-conventions.md (user-written rules)
+# - knowledge/agents/*.md (curated agent tips)
+`;
+      writeFileSync(gitignorePath, gitignoreContent, "utf-8");
+
       spinner.succeed(chalk.green("Initialized .reygent folder"));
 
       console.log("");

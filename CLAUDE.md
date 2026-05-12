@@ -287,10 +287,27 @@ This creates:
 - `success-patterns.md` template
 - `project-conventions.md` template
 - `agents/*.md` templates (dev, qe, planner, pr-reviewer)
+- `.reygent/.gitignore` - Ignores auto-generated files
 
 Files include helpful starter content explaining each section. You can immediately populate `project-conventions.md` with your project rules.
 
 If knowledge directory missing, you'll see warning: `⚠ No knowledge directory found. Run 'reygent init' to create .reygent/knowledge/`
+
+### Source Control
+
+`.reygent/` is partially committed:
+
+**Committed (shared with team):**
+- `config.json` - Agent configurations
+- `skills/` - Custom team skills
+- `knowledge/project-conventions.md` - User-written project rules
+- `knowledge/agents/*.md` - Curated agent tips
+
+**Ignored (local only):**
+- `knowledge/common-failures.md` - Auto-generated from local telemetry
+- `knowledge/success-patterns.md` - Auto-generated from local telemetry
+
+`.reygent/.gitignore` auto-created during init handles this automatically.
 
 ### Directory Structure
 
@@ -346,6 +363,30 @@ reygent knowledge add-pattern
 # Edit file directly
 reygent knowledge edit common-failures
 reygent knowledge edit agents/dev
+```
+
+**Auto-update from telemetry:**
+
+Knowledge base updates **automatically after every run**:
+- Extracts top 3 failure patterns from last 7 days
+- Extracts top 3 success patterns (85%+ success rate)
+- Writes to knowledge files silently
+- No user interaction required
+
+**Automatic file management:**
+- **Deduplication**: Updates existing entries instead of creating duplicates
+- **Occurrence tracking**: Increments occurrence count when pattern repeats
+- **Auto-pruning**: Removes stale entries (failures >90 days, patterns >60 days)
+- **Size limits**: Max 50 failures, 30 patterns (keeps most recent)
+
+Manual analysis (for review):
+```bash
+# View patterns without updating
+reygent analyze failures --since 30d
+reygent analyze success --min-success-rate 85
+
+# Force update from specific time window
+reygent analyze failures --update-knowledge --since 90d
 ```
 
 **View statistics:**
@@ -446,6 +487,8 @@ def get_current_user():
    - `knowledge.success` - When knowledge-based run succeeds
 
 4. **Effectiveness measurement**: Compare success rates between runs that consulted knowledge vs baseline runs without knowledge.
+
+5. **Auto-learning**: After every run, system automatically extracts top patterns from last 7 days and updates knowledge files. Runs silently without interrupting workflow.
 
 ### File Structure
 

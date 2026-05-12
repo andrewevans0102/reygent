@@ -25,6 +25,8 @@ import { Events, TelemetryLevel } from "../chesstrace/events.js";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import { loadConfig } from "../config.js";
 import { getTelemetryOverride, resolveTelemetryEnabled } from "../telemetry-override.js";
+import { analyzeFailurePatterns, analyzeSuccessPatterns } from "../knowledge/analyzer.js";
+import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -64,6 +66,57 @@ function emitStageEnd(
     });
   } catch {
     // Swallow emit errors
+  }
+}
+
+/**
+ * Update knowledge base from recent telemetry data.
+ * Extracts patterns from last 7 days and adds to knowledge files.
+ * Runs silently - no output unless errors occur.
+ */
+async function updateKnowledgeFromTelemetry(): Promise<void> {
+  try {
+    const backend = new SqliteBackend("local");
+    await backend.init();
+
+    const since = Date.now() - 7 * 24 * 60 * 60 * 1000; // Last 7 days
+
+    // Extract failure patterns
+    const failurePatterns = analyzeFailurePatterns(backend, since);
+    const topFailures = failurePatterns.slice(0, 3); // Top 3 only
+
+    for (const pattern of topFailures) {
+      for (const agent of pattern.agents) {
+        try {
+          await addFailureEntry(process.cwd(), {
+            issue: pattern.pattern,
+            solution: "Review telemetry for details",
+            agent: agent as any,
+          });
+        } catch {
+          // Ignore duplicate entries
+        }
+      }
+    }
+
+    // Extract success patterns
+    const successPatterns = analyzeSuccessPatterns(backend, since, 0.85);
+    const topSuccess = successPatterns.slice(0, 3); // Top 3 only
+
+    for (const pattern of topSuccess) {
+      try {
+        await addPatternEntry(process.cwd(), {
+          description: pattern.pattern,
+          successRate: Math.round(pattern.successRate * 100),
+        });
+      } catch {
+        // Ignore duplicate entries
+      }
+    }
+
+    await backend.close();
+  } catch {
+    // Silently fail - don't interrupt user workflow
   }
 }
 
@@ -1159,6 +1212,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
       } catch {
         // Swallow flush errors
       }
+
+      // Update knowledge base from telemetry
+      await updateKnowledgeFromTelemetry();
+
       try {
         await chesstrace.close();
       } catch {
@@ -1208,6 +1265,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
       } catch {
         // Swallow flush errors
       }
+
+      // Update knowledge base from telemetry
+      await updateKnowledgeFromTelemetry();
+
       try {
         await chesstrace.close();
       } catch {

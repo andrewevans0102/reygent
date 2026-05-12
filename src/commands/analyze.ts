@@ -6,6 +6,8 @@ import { loadConfig } from "../config.js";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import type { TelemetryEvent } from "../chesstrace/events.js";
 import { Events } from "../chesstrace/events.js";
+import { analyzeFailurePatterns, analyzeSuccessPatterns } from "../knowledge/analyzer.js";
+import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
 
 /**
  * Cost estimation constants
@@ -27,6 +29,7 @@ interface AnalyzeOptions {
   byAgent?: boolean;
   showRuns?: boolean;
   compareModels?: boolean;
+  updateKnowledge?: boolean;
 }
 
 /**
@@ -246,6 +249,41 @@ export async function analyzeFailures(options: AnalyzeOptions): Promise<void> {
     }
     console.log();
 
+    // Update knowledge if requested
+    if (options.updateKnowledge) {
+      const updateSpinner = ora("Updating knowledge base...").start();
+
+      try {
+        // Use analyzer to extract structured patterns
+        const patterns = analyzeFailurePatterns(backend, since);
+
+        if (patterns.length === 0) {
+          updateSpinner.info(chalk.yellow("No recurring patterns to add"));
+        } else {
+          let addedCount = 0;
+          const limit = options.limit ? Number.parseInt(options.limit, 10) : 5;
+
+          for (const pattern of patterns.slice(0, limit)) {
+            // Add entry for each agent affected
+            for (const agent of pattern.agents) {
+              await addFailureEntry(process.cwd(), {
+                issue: pattern.pattern,
+                solution: "Review telemetry for details",
+                agent: agent as any,
+              });
+              addedCount++;
+            }
+          }
+
+          updateSpinner.succeed(chalk.green(`Added ${addedCount} failure pattern(s) to knowledge base`));
+          console.log(chalk.gray(`  See .reygent/knowledge/common-failures.md`));
+          console.log();
+        }
+      } catch (err) {
+        updateSpinner.fail(chalk.red(`Failed to update knowledge: ${(err as Error).message}`));
+      }
+    }
+
   } catch (err) {
     spinner.fail(chalk.red(`Failed to analyze failures: ${(err as Error).message}`));
     process.exit(1);
@@ -389,6 +427,38 @@ export async function analyzeSuccess(options: AnalyzeOptions): Promise<void> {
       }
     }
     console.log();
+
+    // Update knowledge if requested
+    if (options.updateKnowledge) {
+      const updateSpinner = ora("Updating knowledge base...").start();
+
+      try {
+        // Use analyzer to extract structured patterns
+        const minRate = options.minSuccessRate ? Number.parseFloat(options.minSuccessRate) / 100 : 0.8;
+        const patterns = analyzeSuccessPatterns(backend, since, minRate);
+
+        if (patterns.length === 0) {
+          updateSpinner.info(chalk.yellow("No high-success patterns to add"));
+        } else {
+          let addedCount = 0;
+          const limit = 5; // Top 5 patterns
+
+          for (const pattern of patterns.slice(0, limit)) {
+            await addPatternEntry(process.cwd(), {
+              description: pattern.pattern,
+              successRate: Math.round(pattern.successRate * 100),
+            });
+            addedCount++;
+          }
+
+          updateSpinner.succeed(chalk.green(`Added ${addedCount} success pattern(s) to knowledge base`));
+          console.log(chalk.gray(`  See .reygent/knowledge/success-patterns.md`));
+          console.log();
+        }
+      } catch (err) {
+        updateSpinner.fail(chalk.red(`Failed to update knowledge: ${(err as Error).message}`));
+      }
+    }
 
   } catch (err) {
     spinner.fail(chalk.red(`Failed to analyze success: ${(err as Error).message}`));
@@ -833,6 +903,7 @@ export function registerAnalyzeCommand(program: Command): void {
     .option("--agent <name>", "Filter by specific agent")
     .option("--since <duration>", "Time window (e.g., 7d, 30d)", "30d")
     .option("--limit <n>", "Show top N patterns")
+    .option("--update-knowledge", "Add patterns to .reygent/knowledge/common-failures.md")
     .action(analyzeFailures);
 
   analyze
@@ -841,6 +912,7 @@ export function registerAnalyzeCommand(program: Command): void {
     .option("--stage <name>", "Filter by pipeline stage")
     .option("--since <duration>", "Time window (e.g., 7d, 30d)", "30d")
     .option("--min-success-rate <pct>", "Only show patterns above threshold (e.g., 85)")
+    .option("--update-knowledge", "Add patterns to .reygent/knowledge/success-patterns.md")
     .action(analyzeSuccess);
 
   analyze
