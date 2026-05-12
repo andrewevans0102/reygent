@@ -28,6 +28,10 @@
     "release:prepare": "./scripts/release.sh prepare",
     "release:tag": "./scripts/release.sh tag"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andrewevans0102/reygent.git"
+  },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
