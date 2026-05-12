@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import { join } from "node:path";
 import chalk from "chalk";
 import ora from "ora";
 import { select } from "@inquirer/prompts";
@@ -27,6 +28,9 @@ import { loadConfig } from "../config.js";
 import { getTelemetryOverride, resolveTelemetryEnabled } from "../telemetry-override.js";
 import { analyzeFailurePatterns, analyzeSuccessPatterns } from "../knowledge/analyzer.js";
 import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
+import { findProjectRoot } from "../project-detection.js";
+import { DualBackend } from "../chesstrace/backends/dual.js";
+import { existsSync, mkdirSync } from "node:fs";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -73,10 +77,20 @@ function emitStageEnd(
  * Update knowledge base from recent telemetry data.
  * Extracts patterns from last 7 days and adds to knowledge files.
  * Runs silently - no output unless errors occur.
+ *
+ * Only updates if in a project (has .git, package.json, etc.).
+ * Uses project root directory for knowledge files.
  */
 async function updateKnowledgeFromTelemetry(): Promise<void> {
   try {
-    const backend = new SqliteBackend("local");
+    // Check if in a project - skip if not
+    const projectRoot = findProjectRoot(process.cwd());
+    if (!projectRoot) {
+      // Not in a project - skip knowledge update
+      return;
+    }
+
+    const backend = new SqliteBackend("local", `${projectRoot}/.reygent/telemetry.db`);
     await backend.init();
 
     const since = Date.now() - 7 * 24 * 60 * 60 * 1000; // Last 7 days
@@ -88,7 +102,7 @@ async function updateKnowledgeFromTelemetry(): Promise<void> {
     for (const pattern of topFailures) {
       for (const agent of pattern.agents) {
         try {
-          await addFailureEntry(process.cwd(), {
+          await addFailureEntry(projectRoot, {
             issue: pattern.pattern,
             solution: "Review telemetry for details",
             agent: agent as any,
@@ -105,7 +119,7 @@ async function updateKnowledgeFromTelemetry(): Promise<void> {
 
     for (const pattern of topSuccess) {
       try {
-        await addPatternEntry(process.cwd(), {
+        await addPatternEntry(projectRoot, {
           description: pattern.pattern,
           successRate: Math.round(pattern.successRate * 100),
         });
@@ -467,14 +481,44 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
   let chesstrace: Chesstrace | null = null;
 
+  // Detect if in a project and auto-create .reygent/ if needed
+  const projectRoot = findProjectRoot(process.cwd());
+  let createdReygentDir = false;
+
+  if (projectRoot) {
+    const reygentDir = join(projectRoot, '.reygent');
+    if (!existsSync(reygentDir)) {
+      try {
+        mkdirSync(reygentDir, { recursive: true });
+        createdReygentDir = true;
+      } catch (err) {
+        // Failed to create - will fall back to global
+        if (isDebug()) {
+          console.error(chalk.gray("Failed to create .reygent:"), err);
+        }
+      }
+    }
+  }
+
   // Initialize telemetry backend only if enabled
   if (telemetryEnabled) {
     try {
       const retentionDays = config.telemetry?.retention ?? 30;
       chesstrace = getChesstrace({ level: telemetryLevel, retentionDays });
-      const backend = new SqliteBackend();
+
+      // Use dual backend if in project, otherwise global
+      const backend = projectRoot
+        ? new DualBackend(projectRoot)
+        : new SqliteBackend('global');
+
       await chesstrace.init(backend);
       await chesstrace.startRun();
+
+      // Show message if created .reygent/ for first time
+      if (createdReygentDir) {
+        console.log(chalk.green("✓"), chalk.gray("Created .reygent/ for local knowledge learning"));
+        console.log("");
+      }
     } catch (err) {
       // Telemetry init failed - continue without telemetry
       if (isDebug()) {

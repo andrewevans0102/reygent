@@ -293,6 +293,41 @@ Files include helpful starter content explaining each section. You can immediate
 
 If knowledge directory missing, you'll see warning: `⚠ No knowledge directory found. Run 'reygent init' to create .reygent/knowledge/`
 
+### Project Detection & Auto-Initialization
+
+Reygent detects projects by searching upward for markers (`.git`, `package.json`, etc.):
+
+**In a project** (has `.git`, `package.json`, `pyproject.toml`, `Cargo.toml`, etc.):
+- **First run**: Auto-creates `.reygent/` with message `✓ Created .reygent/ for local knowledge learning`
+- **Telemetry**: Writes to BOTH:
+  - Local: `./.reygent/telemetry.db` (project-specific runs)
+  - Global: `~/.reygent/telemetry.db` (aggregate across all projects)
+- **Knowledge**: `./.reygent/knowledge/` (auto-updated after each run)
+- **Config**: Uses `./.reygent/config.json` if exists, otherwise built-in agents
+
+**Outside project** (no markers found):
+- **Telemetry**: `~/.reygent/telemetry.db` (global only)
+- **Knowledge**: Skipped (no project context)
+- **Config**: Built-in agents only
+
+**Works from subdirectories:**
+```bash
+/my-project/
+  ├── .git/
+  └── src/
+      └── components/
+
+$ cd /my-project/src/components
+$ reygent run ...
+# Finds .git in parent, creates .reygent/ in /my-project/
+```
+
+**Optional: `reygent init` for customization**
+- Pre-create `.reygent/` before first run
+- Customize agents in `config.json`
+- Add custom skills to `skills/`
+- Not required for basic usage - auto-initialization works
+
 ### Source Control
 
 `.reygent/` is partially committed:
@@ -367,11 +402,13 @@ reygent knowledge edit agents/dev
 
 **Auto-update from telemetry:**
 
-Knowledge base updates **automatically after every run**:
+Knowledge base updates **automatically after every run** (when in a project):
 - Extracts top 3 failure patterns from last 7 days
 - Extracts top 3 success patterns (85%+ success rate)
 - Writes to knowledge files silently
 - No user interaction required
+- Works from any subdirectory in project
+- **Auto-enabled** - just run `reygent` in your project
 
 **Automatic file management:**
 - **Deduplication**: Updates existing entries instead of creating duplicates
