@@ -209,7 +209,7 @@ export REYGENT_GLOBAL_TELEMETRY=false  # Disable global DB only (security)
 export REYGENT_KNOWLEDGE=false         # Disable knowledge learning
 ```
 
-See [Telemetry Guide](./docs/telemetry.md) and [Living Documentation Guide](./docs/knowledge.md) for full details.
+See [Telemetry Guide](./docs/telemetry.md), [Chesstrace Internals](./docs/chesstrace.md), and [Living Documentation Guide](./docs/knowledge.md) for full details.
 
 ## Documentation
 
@@ -221,6 +221,7 @@ See [Telemetry Guide](./docs/telemetry.md) and [Living Documentation Guide](./do
 | [Providers Guide](./docs/providers.md) | Multi-provider setup and configuration |
 | [Skills Guide](./docs/skills.md) | Extend reygent with custom skills |
 | [Telemetry](./docs/telemetry.md) | Telemetry analysis, privacy, and troubleshooting |
+| [Chesstrace](./docs/chesstrace.md) | Telemetry engine internals, backends, event system |
 | [Living Documentation](./docs/knowledge.md) | Auto-learning knowledge system from past runs |
 | [Security](./SECURITY.md) | Security measures, threat model, and developer guidelines |
 | [Workflows](./docs/workflows.md) | Visual diagrams of pipeline and retry logic |

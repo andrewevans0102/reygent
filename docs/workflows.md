@@ -186,13 +186,32 @@ flowchart TD
 
 ## Branch Naming Convention
 
+Branch names use conventional commit prefixes. Type is auto-detected from issue metadata or prompted interactively.
+
 ```mermaid
-flowchart LR
-    A[Spec Source] --> B{Type?}
-    B -->|Jira| C["reygent/PROJ-123"]
-    B -->|Linear| D["reygent/ENG-456"]
-    B -->|Markdown| E["reygent/slugified-title"]
+flowchart TD
+    A[Spec Source] --> B{Type detection}
+
+    B -->|CLI --type flag| C[Use provided type]
+    B -->|Jira issue type| D[Map issue type to branch type]
+    B -->|Linear labels| E[Map labels to branch type]
+    B -->|No detection| F[Prompt user]
+
+    C --> G{Source?}
+    D --> G
+    E --> G
+    F --> G
+
+    G -->|Jira| H["feat/PROJ-123"]
+    G -->|Linear| I["fix/ENG-456"]
+    G -->|Markdown| J["feat/add-user-auth"]
+
+    style H fill:#22c55e,color:#fff
+    style I fill:#22c55e,color:#fff
+    style J fill:#22c55e,color:#fff
 ```
+
+**Valid branch types:** `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `style`, `perf`
 
 ## Agent Spawning Internals
 
