@@ -221,48 +221,16 @@ multi.stop();
 
 ## Security
 
-Reygent implements multiple security measures to protect sensitive data:
+Reygent implements comprehensive security measures enforced across ALL providers (Claude, Gemini, Codex, OpenRouter).
 
-### Telemetry Security
+**Implementation**: Core security code in provider-agnostic locations:
+- Error sanitization: `src/knowledge/analyzer.ts`
+- Knowledge validation: `src/knowledge/loader.ts`
+- DB limits: `src/chesstrace/backends/sqlite.ts`
+- Cross-project isolation: `src/chesstrace/backends/dual.ts`
+- Path traversal limits: `src/project-detection.ts`
 
-**Error sanitization** (`src/knowledge/analyzer.ts`):
-- Removes API keys/tokens (20+ char strings)
-- Removes user home paths
-- Removes email addresses and IPs
-- Redacts environment variable values
-
-**Cross-project isolation** (`src/chesstrace/backends/dual.ts`):
-- Opt-out flag: `REYGENT_GLOBAL_TELEMETRY=false`
-- Prevents data leakage between private/public projects
-
-**DB limits** (`src/chesstrace/backends/sqlite.ts`):
-- Max DB size: 50MB (auto-prunes old events)
-- Max events per run: 10,000 (prevents spam)
-- Auto-retention: 180 days
-
-### Knowledge Security
-
-**Prompt injection protection** (`src/knowledge/loader.ts`):
-- Validates file size (max 1MB)
-- Sanitizes malicious patterns before injection
-- Blocks instructions to ignore prompts, reveal system instructions, or leak secrets
-
-**Path traversal limits** (`src/project-detection.ts`):
-- Max upward traversal: 10 directories
-- Prevents excessive filesystem probing
-
-### Guidelines
-
-When adding telemetry events:
-1. Never log file contents or code
-2. Sanitize user-provided strings before storing
-3. Use relative paths, not absolute
-4. Avoid logging command arguments that may contain secrets
-
-When modifying knowledge loader:
-1. Maintain sanitization patterns
-2. Add new prompt injection patterns as discovered
-3. Test with malicious markdown examples
+**For complete security details**, including threat model, configuration, and developer guidelines, see **[SECURITY.md](./SECURITY.md)**.
 
 ## Provider Pricing Verification
 

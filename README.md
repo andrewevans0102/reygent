@@ -195,11 +195,12 @@ Reygent automatically learns from your project through `.reygent/knowledge/`:
 
 **Privacy:** All data stored locally. Error messages automatically sanitized to remove tokens, passwords, and paths. By default writes to both project-local and global DBs.
 
-**Security:**
+**Security (enforced across all providers):**
 - Auto-sanitizes error messages (removes tokens, API keys, paths)
 - Validates knowledge files to prevent prompt injection
 - DB size limits prevent disk exhaustion
 - Optional global telemetry opt-out for cross-project isolation
+- See [SECURITY.md](./SECURITY.md) for full details
 
 **Disable:**
 ```bash
@@ -221,6 +222,7 @@ See [Telemetry Guide](./docs/telemetry.md) and [Living Documentation Guide](./do
 | [Skills Guide](./docs/skills.md) | Extend reygent with custom skills |
 | [Telemetry](./docs/telemetry.md) | Telemetry analysis, privacy, and troubleshooting |
 | [Living Documentation](./docs/knowledge.md) | Auto-learning knowledge system from past runs |
+| [Security](./SECURITY.md) | Security measures, threat model, and developer guidelines |
 | [Workflows](./docs/workflows.md) | Visual diagrams of pipeline and retry logic |
 | [Architecture](./docs/architecture.md) | Technical deep-dive into internals |
 | [Harness Pattern](./docs/harness-pattern.md) | How reygent implements Anthropic's harness pattern |
