@@ -1,4 +1,4 @@
-import fs from 'fs-extra';
+import { promises as fs } from 'fs';
 import path from 'path';
 import { AgentName } from '../agents.js';
 
@@ -16,6 +16,18 @@ export interface PatternEntryOptions {
 }
 
 /**
+ * Check if path exists
+ */
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ensures the knowledge directory structure exists.
  * Creates .reygent/knowledge/ and subdirectories if missing.
  */
@@ -23,8 +35,8 @@ export async function ensureKnowledgeDir(baseDir: string): Promise<void> {
   const knowledgeDir = path.join(baseDir, '.reygent', 'knowledge');
   const agentsDir = path.join(knowledgeDir, 'agents');
 
-  await fs.ensureDir(knowledgeDir);
-  await fs.ensureDir(agentsDir);
+  await fs.mkdir(knowledgeDir, { recursive: true });
+  await fs.mkdir(agentsDir, { recursive: true });
 
   // Create initial template files if they don't exist
   const templates = [
@@ -124,7 +136,7 @@ Document review approaches that work well.
   ];
 
   for (const { file, content } of templates) {
-    if (!(await fs.pathExists(file))) {
+    if (!(await pathExists(file))) {
       await fs.writeFile(file, content, 'utf8');
     }
   }
@@ -140,7 +152,7 @@ export async function addFailureEntry(
   const filePath = path.join(baseDir, '.reygent', 'knowledge', 'common-failures.md');
 
   // Ensure file exists
-  if (!(await fs.pathExists(filePath))) {
+  if (!(await pathExists(filePath))) {
     await ensureKnowledgeDir(baseDir);
   }
 
@@ -181,7 +193,7 @@ export async function addPatternEntry(
   const filePath = path.join(baseDir, '.reygent', 'knowledge', 'success-patterns.md');
 
   // Ensure file exists
-  if (!(await fs.pathExists(filePath))) {
+  if (!(await pathExists(filePath))) {
     await ensureKnowledgeDir(baseDir);
   }
 
