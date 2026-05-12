@@ -26,7 +26,8 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "verify:publish": "npm pack && npm link",
-    "publish:manual": "npm version patch && npm run build && npm publish --access=public"
+    "release:prepare": "./scripts/release.sh prepare",
+    "release:tag": "./scripts/release.sh tag"
   },
   "keywords": [],
   "author": "",
