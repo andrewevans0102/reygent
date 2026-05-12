@@ -42,18 +42,13 @@ describe("CLI smoke tests", () => {
     }
   }, 10000);
 
-  it("reygent config without .reygent directory shows appropriate message", async () => {
-    const tempDir = path.join(projectRoot, "tmp-smoke-test");
-    await mkdir(tempDir, { recursive: true });
-
+  it("reygent config in non-interactive mode exits non-zero", async () => {
     try {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "config"], {
-        cwd: tempDir,
-      });
-
-      expect(stdout + stderr).toMatch(/config|\.reygent|not found/i);
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await execFileAsync("node", [cliPath, "config"]);
+      expect.fail("Expected command to fail");
+    } catch (err: any) {
+      expect(err.code).toBeGreaterThan(0);
+      expect(err.stderr || err.stdout).toMatch(/interactive|config/i);
     }
   }, 10000);
 

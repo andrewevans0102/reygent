@@ -33,6 +33,11 @@ export async function agentCommand(
       if (agents.length === 0) {
         throw new TaskError("No agents configured. Add agents to .reygent/config.json or check built-in agents.");
       }
+      if (!process.stdin.isTTY) {
+        const validNames = agents.map((a) => a.name).join(", ");
+        console.log(chalk.red.bold("Error:"), `Agent name required in non-interactive mode. Valid agents: ${validNames}`);
+        process.exit(1);
+      }
       resetTerminalForInput();
       agent = await select({
         message: "Select agent:",

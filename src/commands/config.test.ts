@@ -127,6 +127,8 @@ describe("configCommand", () => {
     mockLstatSync.mockReturnValue({
       isSymbolicLink: () => false,
     } as ReturnType<typeof lstatSync>);
+    // Default: TTY available
+    Object.defineProperty(process.stdin, "isTTY", { value: true, writable: true, configurable: true });
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit");
