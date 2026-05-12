@@ -1324,17 +1324,23 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
     }
 
+    // In test env, re-throw instead of process.exit to allow test assertions
+    const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
+
     if (err instanceof Error && err.name === "ExitPromptError") {
+      if (isTest) throw err;
       process.exit(0);
     }
     if (err instanceof SpecError || err instanceof TaskError) {
       console.log(chalk.red.bold("Error:"), err.message);
       if (isDebug()) console.error(err.stack);
+      if (isTest) throw err;
       process.exit(1);
     }
     const message = err instanceof Error ? err.message : String(err);
     console.log(chalk.red.bold("Internal error:"), message);
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
+    if (isTest) throw err;
     process.exit(2);
   }
 }
