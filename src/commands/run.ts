@@ -282,7 +282,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
 
     // Check maxRetries boundary before prompting user or continuing
-    if (autoApprove && maxRetries > 0 && attempt > maxRetries) {
+    if (autoApprove && attempt > maxRetries) {
       // All retries exhausted in auto mode
       const chesstrace = getChesstrace();
       if (chesstrace) {
