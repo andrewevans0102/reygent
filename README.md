@@ -193,12 +193,19 @@ Reygent automatically learns from your project through `.reygent/knowledge/`:
 - Success patterns extracted from high-performing runs
 - Agent-specific tips that prevent repeated mistakes
 
-**Privacy:** All data stored locally in `.reygent/telemetry.db`. Nothing transmitted to external servers.
+**Privacy:** All data stored locally. Error messages automatically sanitized to remove tokens, passwords, and paths. By default writes to both project-local and global DBs.
+
+**Security:**
+- Auto-sanitizes error messages (removes tokens, API keys, paths)
+- Validates knowledge files to prevent prompt injection
+- DB size limits prevent disk exhaustion
+- Optional global telemetry opt-out for cross-project isolation
 
 **Disable:**
 ```bash
-export REYGENT_TELEMETRY=false  # Disable telemetry
-export REYGENT_KNOWLEDGE=false  # Disable knowledge learning
+export REYGENT_TELEMETRY=false         # Disable all telemetry
+export REYGENT_GLOBAL_TELEMETRY=false  # Disable global DB only (security)
+export REYGENT_KNOWLEDGE=false         # Disable knowledge learning
 ```
 
 See [Telemetry Guide](./docs/telemetry.md) and [Living Documentation Guide](./docs/knowledge.md) for full details.

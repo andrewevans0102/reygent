@@ -206,10 +206,30 @@ export function measureKnowledgeEffectiveness(db: SqliteBackend, sinceMs: number
 }
 
 /**
- * Normalize error message to pattern (first 100 chars, trimmed)
+ * Sanitize error message to remove sensitive data (tokens, paths, emails)
+ */
+function sanitizeErrorMessage(message: string): string {
+  return message
+    // API keys, tokens, secrets (20+ alphanumeric chars)
+    .replace(/[A-Za-z0-9+/=_-]{20,}/g, '[REDACTED_TOKEN]')
+    // User home paths
+    .replace(/\/Users\/[^/\s]+/g, '/Users/***')
+    .replace(/\/home\/[^/\s]+/g, '/home/***')
+    .replace(/C:\\Users\\[^\\]+/g, 'C:\\Users\\***')
+    // Email addresses
+    .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '***@***.***')
+    // IP addresses
+    .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '***.***.***.**')
+    // Common env var patterns
+    .replace(/(password|secret|key|token|api[_-]?key)=[^\s]+/gi, '$1=[REDACTED]');
+}
+
+/**
+ * Normalize error message to pattern (first 100 chars, trimmed, sanitized)
  */
 function normalizeErrorPattern(message: string): string {
-  return message.slice(0, 100).trim();
+  const sanitized = sanitizeErrorMessage(message);
+  return sanitized.slice(0, 100).trim();
 }
 
 /**

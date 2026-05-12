@@ -19,17 +19,24 @@ const PROJECT_MARKERS = [
 ];
 
 /**
+ * Max number of directories to traverse upward (security limit)
+ */
+const MAX_TRAVERSAL_DEPTH = 10;
+
+/**
  * Search upward from startDir to find project root.
  * Returns project root directory if found, null otherwise.
  *
  * Searches for common project markers (.git, package.json, etc.)
  * starting from startDir and walking up the directory tree.
+ * Limited to MAX_TRAVERSAL_DEPTH levels to prevent excessive filesystem traversal.
  */
 export function findProjectRoot(startDir: string): string | null {
   let currentDir = startDir;
   const root = parse(currentDir).root;
+  let depth = 0;
 
-  while (currentDir !== root) {
+  while (currentDir !== root && depth < MAX_TRAVERSAL_DEPTH) {
     // Check if any project marker exists in current directory
     for (const marker of PROJECT_MARKERS) {
       if (existsSync(join(currentDir, marker))) {
@@ -39,6 +46,7 @@ export function findProjectRoot(startDir: string): string | null {
 
     // Move up one directory
     currentDir = dirname(currentDir);
+    depth++;
   }
 
   return null;

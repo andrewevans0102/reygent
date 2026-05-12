@@ -54,7 +54,7 @@ Per-agent performance: success rates, duration, costs, error types, model distri
 **What data is collected:**
 - Run timestamps and duration
 - Agent names and execution stages
-- Error messages and stack traces
+- Error messages (sanitized - see below)
 - API costs (tokens, provider, model)
 - Success/failure status
 - File paths modified (relative to project root)
@@ -65,6 +65,28 @@ Per-agent performance: success rates, duration, costs, error types, model distri
 - Environment variables or secrets
 - Command arguments with sensitive data
 - Network requests or API keys
+
+**Security measures:**
+
+*Error sanitization:*
+All error messages automatically sanitized before storage to remove:
+- API keys and tokens (20+ character strings)
+- User home paths (`/Users/name`, `/home/name`, `C:\Users\name`)
+- Email addresses
+- IP addresses
+- Environment variable values (`password=secret` → `password=[REDACTED]`)
+
+*Cross-project isolation:*
+By default, telemetry writes to BOTH:
+- Local: `.reygent/telemetry.db` (project-specific)
+- Global: `~/.reygent/telemetry.db` (aggregate across all projects)
+
+**Warning:** Global DB contains data from all projects. If you work on private and public repos, consider disabling global telemetry to prevent cross-project data leakage.
+
+*DB size limits:*
+- Max DB size: 50MB (auto-prunes old events if exceeded)
+- Max events per run: 10,000 (prevents spam attacks)
+- Auto-retention: 180 days (older events pruned automatically)
 
 **Disable telemetry:**
 ```bash
@@ -95,11 +117,13 @@ reygent knowledge export --output knowledge-backup.tar.gz
 {
   "telemetry": {
     "enabled": true,
-    "dual_write": true,           // Write to both local + global DBs
+    "global_enabled": true,        // Write to global DB (set false for security)
     "retention_days": 180,         // Event retention (default 180)
     "error_retention_days": 90,    // Error log retention (default 90)
     "auto_prune": true,            // Auto-prune on analyze commands
-    "debug": false                 // Enable verbose logging
+    "debug": false,                // Enable verbose logging
+    "max_db_size_mb": 50,          // Max DB size before pruning (default 50)
+    "max_events_per_run": 10000    // Max events per run (prevents spam)
   }
 }
 ```
@@ -108,6 +132,9 @@ reygent knowledge export --output knowledge-backup.tar.gz
 ```bash
 # Disable all telemetry
 export REYGENT_TELEMETRY=false
+
+# Disable global telemetry only (security - prevent cross-project data)
+export REYGENT_GLOBAL_TELEMETRY=false
 
 # Debug mode
 export REYGENT_DEBUG=telemetry       # Telemetry events

@@ -6,39 +6,46 @@ import { SqliteBackend } from './sqlite.js';
  * Dual backend that writes to both local and global storage.
  * Used when running in a project - writes telemetry to both
  * project-specific db and global aggregate db.
+ *
+ * Set REYGENT_GLOBAL_TELEMETRY=false to disable global writes (security).
  */
 export class DualBackend implements StorageBackend {
   private localBackend: SqliteBackend;
-  private globalBackend: SqliteBackend;
+  private globalBackend: SqliteBackend | null;
+  private globalEnabled: boolean;
 
   constructor(projectRoot: string) {
     // Local backend in project
     this.localBackend = new SqliteBackend('local', `${projectRoot}/.reygent/telemetry.db`);
 
-    // Global backend in home directory
-    this.globalBackend = new SqliteBackend('global');
+    // Global backend opt-out for security (prevent cross-project data leakage)
+    this.globalEnabled = process.env.REYGENT_GLOBAL_TELEMETRY !== 'false';
+    this.globalBackend = this.globalEnabled ? new SqliteBackend('global') : null;
   }
 
   async init(): Promise<void> {
-    await Promise.all([
-      this.localBackend.init(),
-      this.globalBackend.init(),
-    ]);
+    const tasks = [this.localBackend.init()];
+    if (this.globalBackend) {
+      tasks.push(this.globalBackend.init());
+    }
+    await Promise.all(tasks);
   }
 
   async write(event: TelemetryEvent): Promise<void> {
     // Write to both, but don't fail if one fails
-    await Promise.allSettled([
-      this.localBackend.write(event),
-      this.globalBackend.write(event),
-    ]);
+    const tasks = [this.localBackend.write(event)];
+    if (this.globalBackend) {
+      tasks.push(this.globalBackend.write(event));
+    }
+    await Promise.allSettled(tasks);
   }
 
   async writeBatch(events: TelemetryEvent[]): Promise<void> {
-    await Promise.allSettled([
-      this.localBackend.writeBatch(events),
-      this.globalBackend.writeBatch(events),
-    ]);
+    const tasks = [this.localBackend.writeBatch(events)];
+    if (this.globalBackend) {
+      tasks.push(this.globalBackend.writeBatch(events));
+    }
+    await Promise.allSettled(tasks);
   }
 
   async query(filter?: EventFilter): Promise<TelemetryEvent[]> {
@@ -57,16 +64,18 @@ export class DualBackend implements StorageBackend {
   }
 
   async flush(): Promise<void> {
-    await Promise.all([
-      this.localBackend.flush(),
-      this.globalBackend.flush(),
-    ]);
+    const tasks = [this.localBackend.flush()];
+    if (this.globalBackend) {
+      tasks.push(this.globalBackend.flush());
+    }
+    await Promise.all(tasks);
   }
 
   async close(): Promise<void> {
-    await Promise.all([
-      this.localBackend.close(),
-      this.globalBackend.close(),
-    ]);
+    const tasks = [this.localBackend.close()];
+    if (this.globalBackend) {
+      tasks.push(this.globalBackend.close());
+    }
+    await Promise.all(tasks);
   }
 }

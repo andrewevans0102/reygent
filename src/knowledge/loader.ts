@@ -32,11 +32,57 @@ export function findKnowledgeDir(): string | null {
 }
 
 /**
+ * Sanitize markdown content to prevent prompt injection attacks.
+ * Removes potentially malicious patterns while preserving legitimate content.
+ */
+function sanitizeMarkdown(content: string): string {
+  // Remove common prompt injection patterns
+  return content
+    // Remove instructions to ignore previous instructions
+    .replace(/ignore (all |previous |prior )?(instructions|prompts|context)/gi, '[FILTERED]')
+    // Remove instructions to reveal system prompts
+    .replace(/show me (your|the) (system prompt|instructions)/gi, '[FILTERED]')
+    // Remove instructions to output sensitive files
+    .replace(/output (the )?(contents? of|entire) (\.|\/)?\.?env/gi, '[FILTERED]')
+    .replace(/(print|show|display|output) (secrets?|keys?|tokens?|passwords?)/gi, '[FILTERED]')
+    // Remove roleplaying attempts
+    .replace(/pretend (you are|to be) /gi, '[FILTERED]')
+    .replace(/act as (if )?/gi, '[FILTERED]');
+}
+
+/**
+ * Validate markdown content is well-formed and safe.
+ * Returns true if content passes validation.
+ */
+function validateMarkdown(content: string): boolean {
+  if (!content || content.trim().length === 0) return true;
+
+  // Check for excessive size (>1MB indicates potential attack)
+  if (content.length > 1024 * 1024) return false;
+
+  // Check for suspicious patterns (many consecutive special chars)
+  if (/[^a-zA-Z0-9\s]{50,}/.test(content)) return false;
+
+  return true;
+}
+
+/**
  * Load and parse a markdown file. Returns empty string if file doesn't exist.
+ * Validates and sanitizes content to prevent prompt injection attacks.
  */
 export function readMarkdown(filePath: string): string {
   if (!existsSync(filePath)) return "";
-  return readFileSync(filePath, "utf-8");
+
+  const content = readFileSync(filePath, "utf-8");
+
+  // Validate content
+  if (!validateMarkdown(content)) {
+    console.warn(chalk.yellow(`⚠ Suspicious content detected in ${filePath}, skipping`));
+    return "";
+  }
+
+  // Sanitize content
+  return sanitizeMarkdown(content);
 }
 
 /**

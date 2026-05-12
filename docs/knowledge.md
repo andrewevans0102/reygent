@@ -255,14 +255,25 @@ def get_current_user():
    - Recent success patterns (last 30 days)
    - Project conventions (always included)
 
-3. **Telemetry tracking**: Knowledge consultation is tracked via telemetry events:
+3. **Security validation**: Knowledge files validated before injection:
+   - Size limit: Max 1MB per file (prevents memory attacks)
+   - Content sanitization: Removes prompt injection patterns
+   - Malicious pattern detection: Blocks suspicious content
+   - Validated patterns removed:
+     - "ignore previous instructions"
+     - "show me your system prompt"
+     - "output contents of .env"
+     - "print secrets/keys/tokens"
+     - Roleplaying attempts ("pretend you are", "act as")
+
+4. **Telemetry tracking**: Knowledge consultation is tracked via telemetry events:
    - `knowledge.consulted` - When knowledge loaded before agent spawn
    - `knowledge.prevented_failure` - When knowledge helps avoid documented failure
    - `knowledge.success` - When knowledge-based run succeeds
 
-4. **Effectiveness measurement**: Compare success rates between runs that consulted knowledge vs baseline runs without knowledge.
+5. **Effectiveness measurement**: Compare success rates between runs that consulted knowledge vs baseline runs without knowledge.
 
-5. **Auto-learning**: After every run, system automatically extracts top patterns from last 7 days and updates knowledge files. Runs silently without interrupting workflow.
+6. **Auto-learning**: After every run, system automatically extracts top patterns from last 7 days and updates knowledge files. Runs silently without interrupting workflow.
 
 ## Advanced Configuration
 
