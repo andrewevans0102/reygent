@@ -1,14 +1,21 @@
 {
   "name": "reygent",
-  "version": "0.1.0",
-  "description": "Reygent CLI tool",
+  "version": "1.0.2",
+  "description": "Reygent CLI tool for agentic workflows",
   "type": "module",
   "main": "./dist/cli.js",
+  "module": "./dist/cli.js",
+  "exports": {
+    ".": {
+      "import": "./dist/cli.js"
+    }
+  },
   "bin": {
     "reygent": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -16,7 +23,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "verify:publish": "npm pack && npm link",
+    "release:prepare": "./scripts/release.sh prepare",
+    "release:tag": "./scripts/release.sh tag"
   },
   "keywords": [],
   "author": "",

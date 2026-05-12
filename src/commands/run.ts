@@ -274,22 +274,42 @@ interface RetryGateOptions {
 async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").GateResult> {
   const { gateName, gateRunner, agentsToRun, context, agentOptions, maxRetries, autoApprove, stageName, tracker, verbose, toolTracker } = opts;
 
-  // Retry attempt numbering:
-  // - Initial gate run uses attempt=1 (before entering this loop)
-  // - Loop variable `attempt` represents retry iteration (1 to maxRetries)
-  // - Gate receives attempt+1 as total attempt number:
-  //   * First retry (attempt=1) → gate attempt 2
-  //   * Second retry (attempt=2) → gate attempt 3
-  //   * etc.
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  let attempt = 0;
+
+  // Retry loop - continue until test passes or user aborts
+  while (true) {
+    attempt++;
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
 
+    // Check maxRetries boundary before prompting user or continuing
+    if (autoApprove && attempt > maxRetries) {
+      // All retries exhausted in auto mode
+      const chesstrace = getChesstrace();
+      if (chesstrace) {
+        try {
+          chesstrace.emit(Events.ERROR_TASK, {
+            type: "TaskError",
+            message: `${gateName} failed after ${maxRetries} retries`,
+            stage: stageName,
+            agent: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
+          });
+        } catch {
+          // Swallow emit errors
+        }
+      }
+      throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
+    }
+
+    // Prompt user whether to retry (unless autoApprove enabled)
     if (!autoApprove) {
       resetTerminalForInput();
       const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const attemptInfo = maxRetries > 0
+        ? `(attempt ${attempt}/${maxRetries})`
+        : `(attempt ${attempt})`;
       const answer = await new Promise<string>((resolve) => {
         rl.question(
-          chalk.yellow(`\n${gateName} failed. Retry with failure context? (y/n) `),
+          chalk.yellow(`\n${gateName} failed. Retry with failure context? ${attemptInfo} (y/n) `),
           resolve,
         );
       });
@@ -320,13 +340,16 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
       }
     }
 
-    console.log(chalk.yellow(`\nRetrying ${gateName} (attempt ${attempt}/${maxRetries})...`));
+    const attemptDisplay = maxRetries > 0
+      ? `${attempt}/${maxRetries}`
+      : `${attempt}`;
+    console.log(chalk.yellow(`\nRetrying ${gateName} (attempt ${attemptDisplay})...`));
 
     const failureContext: FailureContext = {
       gateName,
       testOutput: truncateForPrompt(lastOutput),
       attempt,
-      maxAttempts: maxRetries,
+      maxAttempts: maxRetries > 0 ? maxRetries : 0,
     };
 
     const status = createLiveStatus(`re-running ${agentsToRun.join(" + ")} agent(s)...`);
@@ -371,25 +394,11 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
       return gateResult;
     }
 
-    retryStatus.fail(chalk.red(`${gateName} FAILED (retry ${attempt}/${maxRetries})`));
+    const attemptDisplayFail = maxRetries > 0
+      ? `${attempt}/${maxRetries}`
+      : `${attempt}`;
+    retryStatus.fail(chalk.red(`${gateName} FAILED (retry ${attemptDisplayFail})`));
   }
-
-  // All retries exhausted
-  // Emit error.task before throwing
-  const chesstrace = getChesstrace();
-  if (chesstrace) {
-    try {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: `${gateName} failed after ${maxRetries} retries`,
-        stage: stageName,
-        agent: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
-      });
-    } catch {
-      // Swallow emit errors
-    }
-  }
-  throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
 }
 
 async function promptLinearSpec(): Promise<string> {
@@ -911,44 +920,25 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
         unitStatus.fail(chalk.red("Unit tests FAILED"));
 
-        // If no retries configured, emit failure and throw
-        if (maxRetries === 0) {
-          context.results.push({
-            stage: stage.name,
-            success: false,
-            output: gateResult.output,
-          });
-          emitStageEnd(chesstrace, stage.name, stageStartTime, false, undefined, toolTracker);
-          // Emit error.task before throwing
-          if (chesstrace) {
-            try {
-              chesstrace.emit(Events.ERROR_TASK, {
-                type: "TaskError",
-                message: "unit tests failed with 0 retries configured",
-                stage: "gate-unit-tests",
-                agent: "gate:unit-tests",
-              });
-            } catch {
-              // Swallow emit errors
-            }
-          }
-          throw new TaskError("unit tests failed with 0 retries configured");
-        }
-
         // Retry loop — dev agent only for unit test failures
-        gateResult = await retryGate({
-          gateName: "unit tests",
-          gateRunner: (attempt) => runUnitTestGate(context, { ...agentOptions, attempt, verbose: options.verbose }),
-          agentsToRun: ["dev"],
-          context,
-          agentOptions,
-          maxRetries,
-          autoApprove,
-          stageName: stage.name,
-          tracker,
-          verbose: options.verbose,
-          toolTracker,
-        });
+        try {
+          gateResult = await retryGate({
+            gateName: "unit tests",
+            gateRunner: (attempt) => runUnitTestGate(context, { ...agentOptions, attempt, verbose: options.verbose }),
+            agentsToRun: ["dev"],
+            context,
+            agentOptions,
+            maxRetries,
+            autoApprove,
+            stageName: stage.name,
+            tracker,
+            verbose: options.verbose,
+            toolTracker,
+          });
+        } catch (err) {
+          emitStageEnd(chesstrace, stage.name, stageStartTime, false, undefined, toolTracker);
+          throw err;
+        }
 
         context.results.push({
           stage: stage.name,
@@ -1004,44 +994,25 @@ export async function runCommand(options: RunOptions): Promise<void> {
         funcStatus.fail(chalk.red("Functional tests FAILED"));
         console.log(gateResult.output);
 
-        // If no retries configured, emit failure and throw
-        if (maxRetries === 0) {
-          context.results.push({
-            stage: stage.name,
-            success: false,
-            output: gateResult.output,
-          });
-          emitStageEnd(chesstrace, stage.name, stageStartTime, false, undefined, toolTracker);
-          // Emit error.task before throwing
-          if (chesstrace) {
-            try {
-              chesstrace.emit(Events.ERROR_TASK, {
-                type: "TaskError",
-                message: "functional tests failed with 0 retries configured",
-                stage: "gate-functional-tests",
-                agent: "gate:functional-tests",
-              });
-            } catch {
-              // Swallow emit errors
-            }
-          }
-          throw new TaskError("functional tests failed with 0 retries configured");
-        }
-
         // Retry loop — both dev + qe agents for functional test failures
-        gateResult = await retryGate({
-          gateName: "functional tests",
-          gateRunner: (attempt) => runFunctionalTestGate(context, { ...agentOptions, attempt, verbose: options.verbose }),
-          agentsToRun: ["dev", "qe"],
-          context,
-          agentOptions,
-          maxRetries,
-          autoApprove,
-          stageName: stage.name,
-          tracker,
-          verbose: options.verbose,
-          toolTracker,
-        });
+        try {
+          gateResult = await retryGate({
+            gateName: "functional tests",
+            gateRunner: (attempt) => runFunctionalTestGate(context, { ...agentOptions, attempt, verbose: options.verbose }),
+            agentsToRun: ["dev", "qe"],
+            context,
+            agentOptions,
+            maxRetries,
+            autoApprove,
+            stageName: stage.name,
+            tracker,
+            verbose: options.verbose,
+            toolTracker,
+          });
+        } catch (err) {
+          emitStageEnd(chesstrace, stage.name, stageStartTime, false, undefined, toolTracker);
+          throw err;
+        }
 
         context.results.push({
           stage: stage.name,
