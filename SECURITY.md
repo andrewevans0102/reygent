@@ -31,7 +31,7 @@ All error messages automatically sanitized before storage:
 
 **Example**:
 ```
-Before: "API key abc123xyz789token456 invalid"
+Before: "API key YOUR_SECRET_KEY_HERE invalid"
 After:  "API key [REDACTED_TOKEN] invalid"
 ```
 
