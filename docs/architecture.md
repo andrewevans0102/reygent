@@ -46,43 +46,72 @@ Reygent is a meta-orchestrator: it doesn't call the Claude API directly. Instead
 
 ```
 src/
-├── cli.ts              # Entry point, Commander setup, command registration
-├── agents.ts           # AgentConfig interface + builtinAgents array
-├── config.ts           # Config resolution (local .reygent/ → built-in fallback)
-├── debug.ts            # Debug flag management
-├── env.ts              # .env file parser
-├── model.ts            # Model validation, provider resolution, aliases
-├── usage.ts            # Token/cost tracking and reporting
-├── spec.ts             # Spec loading (markdown, Jira, Linear dispatch)
-├── linear.ts           # Linear GraphQL API client
-├── jira.ts             # Jira REST API client
-├── spawn.ts            # Agent spawner — delegates to provider adapter
-├── task.ts             # Type definitions, TaskContext, PIPELINE constant
-├── planner.ts          # Planner agent execution + JSON extraction
-├── implement.ts        # Dev + QE agent orchestration (parallel/sequential)
-├── gate.ts             # Test gate runner (unit + functional)
-├── security-review.ts  # Security scan + severity comparison
-├── pr-create.ts        # Git operations + GitHub/GitLab API PR creation
-├── pr-review.ts        # PR diff review + comment posting
-├── generate-spec.ts    # Spec generation from description
-├── skills.ts           # Skill manifest parsing, discovery, validation
-├── registry.ts         # Remote skill registry client (GitHub-based)
+├── cli.ts                  # Entry point, Commander setup, command registration
+├── agents.ts               # AgentConfig interface + builtinAgents array
+├── branch-type.ts          # Branch type detection, validation, naming conventions
+├── child-registry.ts       # Child process tracking for cleanup
+├── config.ts               # Config resolution (local .reygent/ → built-in fallback)
+├── debug.ts                # Debug flag management
+├── env.ts                  # .env file parser
+├── format.ts               # Output formatting utilities
+├── gate.ts                 # Test gate runner (unit + functional)
+├── generate-spec.ts        # Spec generation from description
+├── implement.ts            # Dev + QE agent orchestration (parallel/sequential)
+├── jira.ts                 # Jira REST API client
+├── linear.ts               # Linear GraphQL API client
+├── live-status.ts          # Live terminal status display
+├── model.ts                # Model validation, provider resolution, aliases
+├── planner.ts              # Planner agent execution + JSON extraction
+├── pr-create.ts            # Git operations + GitHub/GitLab API PR creation
+├── pr-review.ts            # PR diff review + comment posting
+├── pricing.ts              # Provider token pricing data
+├── project-detection.ts    # Project root and type detection
+├── registry.ts             # Remote skill registry client (GitHub-based)
+├── security-review.ts      # Security scan + severity comparison
+├── skills.ts               # Skill manifest parsing, discovery, validation
+├── spawn.ts                # Agent spawner — delegates to provider adapter
+├── spec-prefix.ts          # Spec source prefix handling
+├── spec.ts                 # Spec loading (markdown, Jira, Linear dispatch)
+├── task.ts                 # Type definitions, TaskContext, PIPELINE constant
+├── telemetry-override.ts   # Telemetry config override handling
+├── telemetry-path.ts       # Telemetry DB path resolution
+├── terminal-reset.ts       # Terminal state cleanup on exit
+├── usage.ts                # Token/cost tracking and reporting
+├── chesstrace/             # Telemetry event system (see chesstrace.md)
+│   ├── index.ts            # Core Chesstrace class, singleton management
+│   ├── events.ts           # Event definitions, category enum, level mapping
+│   ├── config.ts           # User config types and defaults
+│   ├── prompt.ts           # First-run opt-in prompt
+│   └── backends/
+│       ├── types.ts        # StorageBackend interface, EventFilter, RunSummary
+│       ├── sqlite.ts       # SQLite implementation (primary)
+│       ├── json-file.ts    # JSONL file implementation (fallback)
+│       └── dual.ts         # Dual backend for local + global writes
+├── knowledge/              # Living documentation system
+│   ├── analyzer.ts         # Telemetry pattern analysis, error sanitization
+│   └── loader.ts           # Knowledge file loading and validation
+├── skills/                 # Skills system internals
 ├── providers/
-│   ├── types.ts         # ProviderAdapter interface, SpawnAdapterOptions
-│   ├── index.ts         # Provider factory (getProvider), PROVIDER_NAMES
-│   ├── claude.ts        # Claude CLI adapter (stream-json parsing)
-│   ├── gemini.ts        # Gemini CLI adapter
-│   ├── codex.ts         # Codex CLI adapter
-│   └── openrouter.ts    # OpenRouter HTTP API adapter
+│   ├── types.ts            # ProviderAdapter interface, SpawnAdapterOptions
+│   ├── index.ts            # Provider factory (getProvider), PROVIDER_NAMES
+│   ├── claude.ts           # Claude CLI adapter (stream-json parsing)
+│   ├── gemini.ts           # Gemini CLI adapter
+│   ├── codex.ts            # Codex CLI adapter
+│   └── openrouter.ts       # OpenRouter HTTP API adapter
 └── commands/
-    ├── init.ts              # `reygent init` handler
-    ├── agent.ts             # `reygent agent` handler (interactive sessions)
-    ├── spec.ts              # `reygent spec` handler
-    ├── generate-spec.ts     # `reygent generate-spec` handler
-    ├── run.ts               # `reygent run` handler (pipeline orchestrator)
-    ├── review-work.ts       # `reygent review-work` handler
-    ├── review-comments.ts   # `reygent review-comments` handler
-    └── skills.ts            # `reygent skills` handler (list/add/remove)
+    ├── init.ts             # `reygent init` handler
+    ├── agent.ts            # `reygent agent` handler (interactive sessions)
+    ├── analyze.ts          # `reygent analyze` handler (failures/success/costs/agents)
+    ├── config.ts           # `reygent config` handler
+    ├── generate-spec.ts    # `reygent generate-spec` handler
+    ├── knowledge.ts        # `reygent knowledge` handler
+    ├── last.ts             # `reygent last` handler (latest run details)
+    ├── review-comments.ts  # `reygent review-comments` handler
+    ├── review-work.ts      # `reygent review-work` handler
+    ├── run.ts              # `reygent run` handler (pipeline orchestrator)
+    ├── skills.ts           # `reygent skills` handler (list/add/remove)
+    ├── spec.ts             # `reygent spec` handler
+    └── telemetry.ts        # `reygent telemetry` handler (status/runs/export/prune)
 ```
 
 ## Entry Point: How a Command Starts

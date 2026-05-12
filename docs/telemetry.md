@@ -145,44 +145,66 @@ export REYGENT_TELEMETRY_DB=/custom/path/telemetry.db
 
 ## Telemetry Internals
 
-**Database schema (`telemetry.db`):**
+Reygent's telemetry system is called **Chesstrace**. For full architecture details, see the [Chesstrace Guide](./chesstrace.md).
 
-SQLite database with tables:
-- `runs` - Top-level run metadata (id, timestamp, status, duration)
-- `events` - Event log entries (run_id, type, timestamp, payload JSON)
-- `costs` - Cost tracking (run_id, stage, tokens, provider, model, cost)
-- `errors` - Error details (run_id, stage, message, stack, timestamp)
+**Database schema (`chesstrace.db`):**
 
-**Event types:**
-- `run.start` - Run initiated
-- `run.complete` - Run finished successfully
-- `run.error` - Run failed
-- `agent.spawn` - Agent started
-- `agent.complete` - Agent finished
-- `agent.error` - Agent failed
-- `knowledge.consulted` - Knowledge loaded before agent spawn
-- `knowledge.prevented_failure` - Knowledge helped avoid documented failure
-- `knowledge.success` - Knowledge-based run succeeded
-- `cost.tracked` - API usage recorded
+Single SQLite table with WAL mode enabled:
 
-**Retention policies:**
-- Telemetry events: 180 days (auto-pruned on `reygent analyze` commands)
-- Error logs: 90 days
-- Cost data: 365 days (never pruned)
-- Runs with zero events: 30 days
+```sql
+CREATE TABLE events (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  timestamp INTEGER NOT NULL,
+  category TEXT NOT NULL,
+  event TEXT NOT NULL,
+  min_level INTEGER NOT NULL,
+  data TEXT NOT NULL          -- JSON serialized
+)
+```
+
+Indexes: `run_id`, `timestamp`, `category`, `event`.
+
+**Event categories:** `command`, `agent`, `llm`, `git`, `spec`, `error`, `performance`, `pipeline`, `usage`, `gate`, `tool`, `knowledge`
+
+**Key events by level:**
+
+*Minimal (always captured):*
+- `command.start`, `command.end`, `command.error`
+- `error.unhandled`, `error.validation`, `error.task`, `error.parse`, `error.provider`
+- `tool.summary`, `knowledge.prevented_failure`
+
+*Standard (default level):*
+- `agent.spawn`, `agent.complete`, `agent.timeout`
+- `pipeline.start`, `pipeline.end`, `pipeline.stage_start`, `pipeline.stage_end`
+- `gate.result`, `gate.retry`
+- `git.branch_create`, `git.commit`, `git.push`
+- `spec.fetch`, `spec.parse`
+- `tool.invoke`, `knowledge.consulted`, `knowledge.success`
+
+*Verbose (diagnostic):*
+- `llm.request`, `llm.response`, `llm.token_usage`
+- `performance.metric`, `performance.duration`
+- `usage.tokens`, `usage.cost`
+- `tool.invoke.full`
+
+**Retention:**
+- Default: 30 days (configurable via `telemetry.retention` in config)
+- Auto-pruned on init
+- DB hard prune at 180 days when size limit approached
 
 **Performance:**
 - DB typically <10MB per project after 6 months
-- Indexes on `run_id`, `timestamp`, `event_type`
-- Vacuum runs automatically after pruning
+- Indexes on `run_id`, `timestamp`, `category`, `event`
+- WAL mode for concurrent reads/writes
 
 **Backup:**
 ```bash
 # Backup telemetry DB
-cp .reygent/telemetry.db .reygent/telemetry.db.backup
+cp .reygent/chesstrace.db .reygent/chesstrace.db.backup
 
 # Restore from backup
-mv .reygent/telemetry.db.backup .reygent/telemetry.db
+mv .reygent/chesstrace.db.backup .reygent/chesstrace.db
 ```
 
 ## Troubleshooting
@@ -190,14 +212,14 @@ mv .reygent/telemetry.db.backup .reygent/telemetry.db
 **DB corruption:**
 ```bash
 # Check DB integrity
-sqlite3 .reygent/telemetry.db "PRAGMA integrity_check;"
+sqlite3 .reygent/chesstrace.db "PRAGMA integrity_check;"
 
 # If corrupted, restore from backup
-mv .reygent/telemetry.db .reygent/telemetry.db.corrupted
-cp .reygent/telemetry.db.backup .reygent/telemetry.db
+mv .reygent/chesstrace.db .reygent/chesstrace.db.corrupted
+cp .reygent/chesstrace.db.backup .reygent/chesstrace.db
 
 # If no backup, rebuild from scratch
-rm .reygent/telemetry.db
+rm .reygent/chesstrace.db
 # Next run will create fresh DB
 ```
 
@@ -207,7 +229,7 @@ rm .reygent/telemetry.db
 echo $REYGENT_TELEMETRY  # Should be empty or "true"
 
 # Check DB permissions
-ls -la .reygent/telemetry.db  # Should be writable
+ls -la .reygent/chesstrace.db  # Should be writable
 
 # Enable debug logging
 REYGENT_DEBUG=telemetry reygent run ...
@@ -216,26 +238,19 @@ REYGENT_DEBUG=telemetry reygent run ...
 **Analyze commands fail:**
 ```bash
 # Check DB exists
-ls -la .reygent/telemetry.db
+ls -la .reygent/chesstrace.db
 
 # Check DB has data
-sqlite3 .reygent/telemetry.db "SELECT COUNT(*) FROM runs;"
+sqlite3 .reygent/chesstrace.db "SELECT COUNT(*) FROM events;"
 
 # If empty, need at least one run first
 reygent run "test task"
 ```
 
-**Schema version mismatch:**
+**Schema issues:**
 ```bash
-# Check current schema version
-sqlite3 .reygent/telemetry.db "SELECT value FROM metadata WHERE key='schema_version';"
-
-# Run migration
-reygent migrate --from v1 --to v2
-
-# If migration fails, export data first
-reygent telemetry export --output backup.json
-rm .reygent/telemetry.db
-# Next run creates new schema
-reygent telemetry import --input backup.json
+# If schema problems, safest path is backup + recreate
+cp .reygent/chesstrace.db .reygent/chesstrace.db.backup
+rm .reygent/chesstrace.db
+# Next run creates fresh DB with current schema
 ```
