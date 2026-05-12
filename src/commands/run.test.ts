@@ -889,17 +889,20 @@ describe("run command - Chesstrace instrumentation", () => {
   });
 
   describe("CLI flags and options", () => {
+    // Common options shared across all tests in this block
+    const baseOptions = {
+      spec: "test.md",
+      dryRun: false,
+      securityThreshold: "HIGH" as const,
+      autoApprove: true,
+      insecure: false,
+      skipClarification: true,
+      maxRetries: "0",
+      verbose: false,
+    };
+
     it("respects --auto-approve flag", async () => {
-      await runCommand({
-        spec: "test.md",
-        dryRun: false,
-        securityThreshold: "HIGH",
-        autoApprove: true,
-        insecure: false,
-        skipClarification: true,
-        maxRetries: "0",
-        verbose: false,
-      });
+      await runCommand(baseOptions);
 
       // Should not prompt for approval (runs successfully)
       expect(runPlanner).toHaveBeenCalled();
@@ -907,16 +910,7 @@ describe("run command - Chesstrace instrumentation", () => {
     });
 
     it("respects --skip-clarification flag", async () => {
-      await runCommand({
-        spec: "test.md",
-        dryRun: false,
-        securityThreshold: "HIGH",
-        autoApprove: true,
-        insecure: false,
-        skipClarification: true,
-        maxRetries: "0",
-        verbose: false,
-      });
+      await runCommand(baseOptions);
 
       // Planner should be called with makeAssumptions=true
       expect(runPlanner).toHaveBeenCalledWith(
@@ -943,14 +937,8 @@ describe("run command - Chesstrace instrumentation", () => {
       });
 
       await runCommand({
-        spec: "test.md",
-        dryRun: false,
-        securityThreshold: "HIGH",
-        autoApprove: true,
-        insecure: false,
-        skipClarification: true,
+        ...baseOptions,
         maxRetries: "2",
-        verbose: false,
       });
 
       // Unit test gate should be called 3 times (initial + 2 retries)
@@ -961,13 +949,7 @@ describe("run command - Chesstrace instrumentation", () => {
       const { printVerboseUsage } = await import("../usage.js");
 
       await runCommand({
-        spec: "test.md",
-        dryRun: false,
-        securityThreshold: "HIGH",
-        autoApprove: true,
-        insecure: false,
-        skipClarification: true,
-        maxRetries: "0",
+        ...baseOptions,
         verbose: true,
       });
 
@@ -977,16 +959,7 @@ describe("run command - Chesstrace instrumentation", () => {
     it("does not call printVerboseUsage when verbose=false", async () => {
       const { printVerboseUsage } = await import("../usage.js");
 
-      await runCommand({
-        spec: "test.md",
-        dryRun: false,
-        securityThreshold: "HIGH",
-        autoApprove: true,
-        insecure: false,
-        skipClarification: true,
-        maxRetries: "0",
-        verbose: false,
-      });
+      await runCommand(baseOptions);
 
       expect(printVerboseUsage).not.toHaveBeenCalled();
     });

@@ -9,10 +9,18 @@ import { isDebug } from "../debug.js";
 
 /**
  * Check if telemetry opt-in prompt should be shown.
- * Returns true when telemetry.enabled is undefined in config AND stdin is TTY.
+ *
+ * CRITICAL: This function REQUIRES a TTY (interactive terminal). It will never
+ * prompt in non-interactive environments (CI, piped input, automated scripts).
+ *
+ * Returns true when:
+ * 1. stdin is a TTY (interactive terminal)
+ * 2. telemetry.enabled is undefined in config
+ *
+ * Returns false in all other cases, including non-TTY environments.
  */
 export function shouldPromptForTelemetry(): boolean {
-  // Never prompt in non-TTY environments (CI, piped input, etc.)
+  // CRITICAL: Never prompt in non-TTY environments (CI, piped input, etc.)
   if (!process.stdin.isTTY) {
     return false;
   }

@@ -142,6 +142,22 @@ describe.skipIf(!hasTwoProviders)("Multi-provider integration", () => {
     expect(plannerResult.stdout).toBeTruthy();
     expect(devResult.stdout).toBeTruthy();
     expect(qeResult.stdout).toBeTruthy();
+
+    // Verify context threading: dev output should reference auth/login concepts from plan
+    const devOutput = devResult.stdout.toLowerCase();
+    expect(
+      devOutput.includes("login") ||
+      devOutput.includes("auth") ||
+      devOutput.includes("endpoint")
+    ).toBe(true);
+
+    // Verify context threading: qe output should reference test/login concepts from implementation
+    const qeOutput = qeResult.stdout.toLowerCase();
+    expect(
+      qeOutput.includes("test") ||
+      qeOutput.includes("login") ||
+      qeOutput.includes("logout")
+    ).toBe(true);
   }, 180000);
 });
 

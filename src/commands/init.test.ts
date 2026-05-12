@@ -291,4 +291,25 @@ describe("initCommand", () => {
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(output).toContain("Cannot prompt in non-interactive mode");
   });
+
+  it("dry-run works in non-TTY environment (as suggested in error message)", async () => {
+    // Simulate non-TTY environment (CI)
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+
+    mockExistsSync.mockReturnValue(true);
+
+    // dry-run should not require prompts and should not exit
+    await initCommand({ dryRun: true });
+
+    // Should complete successfully without calling process.exit
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("[dry-run]");
+    expect(output).toContain("Would create:");
+
+    // No filesystem writes should occur
+    expect(mockMkdirSync).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
 });

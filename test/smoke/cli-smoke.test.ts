@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, readdir } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
 
@@ -61,8 +61,9 @@ describe("CLI smoke tests", () => {
         cwd: tempDir,
       });
 
-      const { stdout } = await execFileAsync("node", ["-e", `const fs = require('fs'); console.log(fs.readdirSync('${path.join(tempDir, ".reygent").replace(/\\/g, "\\\\")}').join('\\n'));`]);
-      expect(stdout).toContain("config.json");
+      const reygentDir = path.join(tempDir, ".reygent");
+      const dirContents = await readdir(reygentDir);
+      expect(dirContents).toContain("config.json");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

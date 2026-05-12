@@ -31,6 +31,7 @@ import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
 import { findProjectRoot } from "../project-detection.js";
 import { DualBackend } from "../chesstrace/backends/dual.js";
 import { existsSync, mkdirSync } from "node:fs";
+import { isTestEnvironment } from "../test-env.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -1325,8 +1326,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
     }
 
-    // In test env, re-throw instead of process.exit to allow test assertions
-    const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
+    // In test env, re-throw instead of process.exit to allow test assertions.
+    // We check runtime environment variables (NODE_ENV, VITEST) rather than import.meta.env
+    // because test runners set these at runtime, not during bundling. See src/test-env.ts.
+    const isTest = isTestEnvironment();
 
     if (err instanceof Error && err.name === "ExitPromptError") {
       if (isTest) throw err;
