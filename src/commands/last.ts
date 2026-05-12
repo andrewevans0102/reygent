@@ -6,6 +6,7 @@ import { loadConfig } from "../config.js";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import type { TelemetryEvent } from "../chesstrace/events.js";
 import { Events } from "../chesstrace/events.js";
+import { findProjectRoot } from "../project-detection.js";
 
 interface LastOptions {
   verbose?: boolean;
@@ -228,8 +229,17 @@ export async function lastCommandImpl(
     const config = loadConfig();
     checkTelemetryEnabled(config);
 
-    const backend = testBackend ?? new SqliteBackend("local");
-    if (!testBackend) {
+    // Determine backend path - match writer path from run.ts
+    let backend: SqliteBackend;
+    if (testBackend) {
+      backend = testBackend;
+    } else {
+      const projectRoot = findProjectRoot(process.cwd());
+      if (projectRoot) {
+        backend = new SqliteBackend("local", `${projectRoot}/.reygent/telemetry.db`);
+      } else {
+        backend = new SqliteBackend("local");
+      }
       await backend.init();
     }
 

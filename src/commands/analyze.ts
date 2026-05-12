@@ -8,6 +8,7 @@ import type { TelemetryEvent } from "../chesstrace/events.js";
 import { Events } from "../chesstrace/events.js";
 import { analyzeFailurePatterns, analyzeSuccessPatterns } from "../knowledge/analyzer.js";
 import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
+import { findProjectRoot } from "../project-detection.js";
 
 /**
  * Cost estimation constants
@@ -115,7 +116,11 @@ function filterEvents(
  * Get backend instance
  */
 async function getBackend(): Promise<SqliteBackend> {
-  const backend = new SqliteBackend("local");
+  // Match writer path from run.ts
+  const projectRoot = findProjectRoot(process.cwd());
+  const backend = projectRoot
+    ? new SqliteBackend("local", `${projectRoot}/.reygent/telemetry.db`)
+    : new SqliteBackend("local");
   await backend.init();
   return backend;
 }
