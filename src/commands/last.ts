@@ -6,6 +6,7 @@ import { loadConfig } from "../config.js";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import type { TelemetryEvent } from "../chesstrace/events.js";
 import { Events } from "../chesstrace/events.js";
+import { getLocalTelemetryPath } from "../telemetry-path.js";
 
 interface LastOptions {
   verbose?: boolean;
@@ -228,7 +229,8 @@ export async function lastCommandImpl(
     const config = loadConfig();
     checkTelemetryEnabled(config);
 
-    const backend = testBackend ?? new SqliteBackend("local");
+    // Determine backend path - match writer path from run.ts
+    const backend = testBackend ?? new SqliteBackend("local", getLocalTelemetryPath(process.cwd()));
     if (!testBackend) {
       await backend.init();
     }

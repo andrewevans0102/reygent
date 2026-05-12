@@ -8,6 +8,7 @@ import type { TelemetryEvent } from "../chesstrace/events.js";
 import { Events } from "../chesstrace/events.js";
 import { analyzeFailurePatterns, analyzeSuccessPatterns } from "../knowledge/analyzer.js";
 import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
+import { getLocalTelemetryPath } from "../telemetry-path.js";
 
 /**
  * Cost estimation constants
@@ -115,7 +116,9 @@ function filterEvents(
  * Get backend instance
  */
 async function getBackend(): Promise<SqliteBackend> {
-  const backend = new SqliteBackend("local");
+  // Match writer path from run.ts
+  const dbPath = getLocalTelemetryPath(process.cwd());
+  const backend = new SqliteBackend("local", dbPath);
   await backend.init();
   return backend;
 }
