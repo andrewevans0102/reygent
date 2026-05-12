@@ -1,5 +1,5 @@
 {
-  "name": "@reygent/cli",
+  "name": "reygent",
   "version": "1.0.2",
   "description": "Reygent CLI tool for agentic workflows",
   "type": "module",

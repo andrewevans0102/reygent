@@ -281,11 +281,30 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     attempt++;
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
 
+    // Check maxRetries boundary before prompting user or continuing
+    if (autoApprove && maxRetries > 0 && attempt > maxRetries) {
+      // All retries exhausted in auto mode
+      const chesstrace = getChesstrace();
+      if (chesstrace) {
+        try {
+          chesstrace.emit(Events.ERROR_TASK, {
+            type: "TaskError",
+            message: `${gateName} failed after ${maxRetries} retries`,
+            stage: stageName,
+            agent: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
+          });
+        } catch {
+          // Swallow emit errors
+        }
+      }
+      throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
+    }
+
     // Prompt user whether to retry (unless autoApprove enabled)
     if (!autoApprove) {
       resetTerminalForInput();
       const rl = createInterface({ input: process.stdin, output: process.stdout });
-      const attemptInfo = maxRetries > 0 && attempt <= maxRetries
+      const attemptInfo = maxRetries > 0
         ? `(attempt ${attempt}/${maxRetries})`
         : `(attempt ${attempt})`;
       const answer = await new Promise<string>((resolve) => {
@@ -298,25 +317,6 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
       if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
         console.log(chalk.red("Aborted by user."));
         process.exit(1);
-      }
-    } else {
-      // In autoApprove mode, respect maxRetries limit
-      if (attempt > maxRetries) {
-        // All retries exhausted in auto mode
-        const chesstrace = getChesstrace();
-        if (chesstrace) {
-          try {
-            chesstrace.emit(Events.ERROR_TASK, {
-              type: "TaskError",
-              message: `${gateName} failed after ${maxRetries} retries`,
-              stage: stageName,
-              agent: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
-            });
-          } catch {
-            // Swallow emit errors
-          }
-        }
-        throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
       }
     }
 
@@ -340,7 +340,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
       }
     }
 
-    const attemptDisplay = maxRetries > 0 && attempt <= maxRetries
+    const attemptDisplay = maxRetries > 0
       ? `${attempt}/${maxRetries}`
       : `${attempt}`;
     console.log(chalk.yellow(`\nRetrying ${gateName} (attempt ${attemptDisplay})...`));
@@ -349,7 +349,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
       gateName,
       testOutput: truncateForPrompt(lastOutput),
       attempt,
-      maxAttempts: maxRetries > 0 ? maxRetries : attempt,
+      maxAttempts: maxRetries > 0 ? maxRetries : 0,
     };
 
     const status = createLiveStatus(`re-running ${agentsToRun.join(" + ")} agent(s)...`);
@@ -394,7 +394,7 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
       return gateResult;
     }
 
-    const attemptDisplayFail = maxRetries > 0 && attempt <= maxRetries
+    const attemptDisplayFail = maxRetries > 0
       ? `${attempt}/${maxRetries}`
       : `${attempt}`;
     retryStatus.fail(chalk.red(`${gateName} FAILED (retry ${attemptDisplayFail})`));

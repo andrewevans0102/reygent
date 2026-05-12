@@ -229,6 +229,36 @@ describe("npm package configuration", () => {
       expect(existsSync(join(packageDir, "tests"))).toBe(false);
       expect(existsSync(join(packageDir, ".reygent"))).toBe(false);
     });
+
+    it("npm pack output should match extracted tarball contents", () => {
+      // Verify that files listed in npm pack dry-run output are actually in the tarball
+      const packageDir = join(extractDir, "package");
+
+      // If pack output mentions dist/cli.js, it should exist in extracted tarball
+      if (packOutput.includes("dist/cli.js")) {
+        expect(existsSync(join(packageDir, "dist/cli.js"))).toBe(true);
+      }
+
+      // If pack output mentions dist/cli.cjs, it should exist in extracted tarball
+      if (packOutput.includes("dist/cli.cjs")) {
+        expect(existsSync(join(packageDir, "dist/cli.cjs"))).toBe(true);
+      }
+
+      // If pack output mentions README, it should exist in extracted tarball
+      if (packOutput.match(/README\.md|readme/i)) {
+        expect(existsSync(join(packageDir, "README.md"))).toBe(true);
+      }
+
+      // Verify exclusions: if src/ NOT in pack output, it should NOT be in tarball
+      if (!packOutput.includes("src/")) {
+        expect(existsSync(join(packageDir, "src"))).toBe(false);
+      }
+
+      // Verify exclusions: if tests/ NOT in pack output, it should NOT be in tarball
+      if (!packOutput.match(/\btests?\//)) {
+        expect(existsSync(join(packageDir, "tests"))).toBe(false);
+      }
+    });
   });
 
   describe("GitHub Actions workflow integration", () => {

@@ -38,6 +38,9 @@ case "$COMMAND" in
     git pull origin "$MAIN_BRANCH"
 
     # Bump version in package.json
+    # Use --no-git-tag-version because we tag manually in the 'tag' command
+    # after the PR is merged to master. This prevents duplicate tags and
+    # ensures the tag points to the merge commit, not the branch commit.
     if [[ "$BUMP" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       npm version "$BUMP" --no-git-tag-version
       VERSION="$BUMP"

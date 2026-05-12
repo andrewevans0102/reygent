@@ -4,8 +4,8 @@ import { Events } from "../src/chesstrace/events.js";
 import type { ProviderAdapter } from "../src/providers/types.js";
 
 // Mock chesstrace first (before other imports)
-const mockEmit = vi.fn();
-const mockIsEnabled = vi.fn(() => true);
+let mockEmit: ReturnType<typeof vi.fn>;
+let mockIsEnabled: ReturnType<typeof vi.fn>;
 
 vi.mock("../src/chesstrace/index.js", () => ({
   getChesstrace: vi.fn(() => ({
@@ -32,7 +32,7 @@ vi.mock("../src/providers/index.js", async () => {
     ],
     defaultModel: "claude-3-5-sonnet-20241022",
     isAvailable: vi.fn(),
-    spawn: vi.fn(),
+    spawn: vi.fn(() => Promise.reject(new Error("spawn not configured in test"))),
   };
 
   return {
@@ -84,12 +84,15 @@ describe("error boundary telemetry instrumentation", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockEmit.mockClear();
+
+    // Reset mocks at module scope
+    mockEmit = vi.fn();
+    mockIsEnabled = vi.fn(() => true);
 
     // Setup mock provider
     mockProvider = {
       isAvailable: vi.fn().mockResolvedValue({ available: true }),
-      spawn: vi.fn(),
+      spawn: vi.fn(() => Promise.reject(new Error("spawn not configured in test"))),
     } as unknown as ProviderAdapter;
 
     vi.mocked(providers.getProvider).mockReturnValue(mockProvider);
@@ -101,6 +104,9 @@ describe("error boundary telemetry instrumentation", () => {
 
   describe("error.task - TaskError catch blocks", () => {
     // TODO: spawn.ts catch block (line 152) needs ERROR_TASK emission for provider.spawn() failures
+    // Current status: spawn.ts does not emit ERROR_TASK events on TaskError failures
+    // Plan: Either add ERROR_TASK emit to spawn.ts catch block or enhance mock setup to test higher-level error handling
+    // These tests are skipped until spawn.ts ERROR_TASK emission is implemented
     it.skip("should emit error.task when dev agent fails in implement", async () => {
       // Mock dev agent failure
       vi.mocked(mockProvider.spawn).mockRejectedValueOnce(

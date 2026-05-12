@@ -30,6 +30,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Validate package with dry-run
+        run: npm publish --dry-run
+
       - name: Publish to npm
         run: npm publish
         env:
