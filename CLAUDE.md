@@ -1,4 +1,13 @@
-# Reygent
+# Reygent - Claude Code Integration
+
+This file contains Claude Code specific integration notes. For general Reygent documentation, see [README.md](./README.md) and [docs/](./docs/).
+
+## Quick Reference
+
+- **Full Documentation**: See [README.md](./README.md) for commands, agents, providers, and workflows
+- **Telemetry**: See [docs/telemetry.md](./docs/telemetry.md) for analysis commands and troubleshooting
+- **Living Documentation**: See [docs/knowledge.md](./docs/knowledge.md) for auto-learning knowledge system
+- **Architecture**: See [docs/architecture.md](./docs/architecture.md) for technical implementation details
 
 ## Tech Stack
 
@@ -11,7 +20,7 @@
 
 - Build: `npm run build`
 - Dev: `npm run dev`
-- Verify pricing: Use `/verify-pricing` skill in Claude Code (see below)
+- Verify pricing: Use `/verify-pricing` skill in Claude Code
 
 ## Conventions
 
@@ -210,56 +219,18 @@ multi.stop();
 - Use `chalk.gray` for timestamps and secondary metadata.
 - Keep output scannable: one concept per line, consistent indentation.
 
-## Telemetry Analysis
+## Security
 
-Analyze Reygent runs to optimize performance and reduce costs:
+Reygent implements comprehensive security measures enforced across ALL providers (Claude, Gemini, Codex, OpenRouter).
 
-- `reygent last` - Show latest run details (quick summary, verbose log, output, errors, or JSON)
-- `reygent analyze failures` - Common error patterns
-- `reygent analyze success` - What works well
-- `reygent analyze costs` - Cost breakdown and savings
-- `reygent analyze agents` - Agent performance comparison
+**Implementation**: Core security code in provider-agnostic locations:
+- Error sanitization: `src/knowledge/analyzer.ts`
+- Knowledge validation: `src/knowledge/loader.ts`
+- DB limits: `src/chesstrace/backends/sqlite.ts`
+- Cross-project isolation: `src/chesstrace/backends/dual.ts`
+- Path traversal limits: `src/project-detection.ts`
 
-All analysis runs on local telemetry database. No data leaves your machine.
-
-### Command Details
-
-**Duration Format:** All commands use `--since` with format `Nd` where N is number of days. Examples: `7d` (7 days), `30d` (30 days), `90d` (90 days).
-
-**Latest Run Details:**
-```bash
-reygent last [--verbose] [--output] [--errors] [--json]
-```
-Quick access to most recent run:
-- Default: Summary with status, duration, agents, cost, and top errors
-- `--verbose`: Full event log with timestamps and details
-- `--output`: Only final output from the run
-- `--errors`: Only errors with stack traces
-- `--json`: Machine-readable JSON for scripting
-
-**Failures Analysis:**
-```bash
-reygent analyze failures [--agent <name>] [--since 30d] [--limit N]
-```
-Shows top failure patterns with occurrence counts, agent breakdown, and actionable recommendations.
-
-**Success Analysis:**
-```bash
-reygent analyze success [--stage <name>] [--since 30d] [--min-success-rate <pct>]
-```
-Extracts patterns from successful runs: agent performance, model distribution, optimal configurations.
-
-**Cost Analysis:**
-```bash
-reygent analyze costs [--since 30d] [--by-agent] [--show-runs]
-```
-Cost breakdown by stage/agent with optimization opportunities and potential savings.
-
-**Agent Analysis:**
-```bash
-reygent analyze agents [--agent <name>] [--since 30d] [--compare-models]
-```
-Per-agent performance: success rates, duration, costs, error types, model distribution.
+**For complete security details**, including threat model, configuration, and developer guidelines, see **[SECURITY.md](./SECURITY.md)**.
 
 ## Provider Pricing Verification
 

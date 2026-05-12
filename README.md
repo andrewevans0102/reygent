@@ -177,39 +177,39 @@ Requires corresponding API keys in `.env` for tracker sources. See [Commands Ref
 
 Reygent searches upward from the current directory to find `.reygent/`, so you can run commands from any subdirectory.
 
-## Telemetry
+## Telemetry & Learning
 
-Reygent includes opt-in telemetry to help improve the tool. On first run, you'll be prompted to enable or disable telemetry. Your choice is stored in `.reygent/config.json`.
+Reygent tracks local telemetry and learns from past runs to improve future performance.
 
-**Configuration:**
+**Telemetry Analysis:**
+- `reygent last` - Show latest run details
+- `reygent analyze failures` - Common error patterns
+- `reygent analyze success` - What works well
+- `reygent analyze costs` - Cost breakdown and savings
 
-```json
-{
-  "telemetry": {
-    "enabled": true,
-    "level": "standard",
-    "backend": "sqlite",
-    "retention": 30
-  }
-}
+**Living Documentation:**
+Reygent automatically learns from your project through `.reygent/knowledge/`:
+- Auto-generated failure solutions from past errors
+- Success patterns extracted from high-performing runs
+- Agent-specific tips that prevent repeated mistakes
+
+**Privacy:** All data stored locally. Error messages automatically sanitized to remove tokens, passwords, and paths. By default writes to both project-local and global DBs.
+
+**Security (enforced across all providers):**
+- Auto-sanitizes error messages (removes tokens, API keys, paths)
+- Validates knowledge files to prevent prompt injection
+- DB size limits prevent disk exhaustion
+- Optional global telemetry opt-out for cross-project isolation
+- See [SECURITY.md](./SECURITY.md) for full details
+
+**Disable:**
+```bash
+export REYGENT_TELEMETRY=false         # Disable all telemetry
+export REYGENT_GLOBAL_TELEMETRY=false  # Disable global DB only (security)
+export REYGENT_KNOWLEDGE=false         # Disable knowledge learning
 ```
 
-**Telemetry Levels:**
-
-| Level | What's captured | When to use |
-|---|---|---|
-| `minimal` | Only critical events (errors, warnings) | CI environments, production deployments, or when bandwidth/storage is limited |
-| `standard` | Normal usage events including commands, success/failure outcomes | Interactive development and typical debugging workflows (default) |
-| `verbose` | Detailed diagnostic events including timing, internal state transitions, API calls | Troubleshooting specific issues or developing Reygent itself |
-
-**Fields:**
-
-- `enabled` — `true` (opted in), `false` (opted out), or `undefined` (prompts on first run)
-- `level` — Capture level: `minimal`, `standard`, or `verbose`
-- `backend` — Storage backend (currently only `sqlite` supported)
-- `retention` — Number of days to retain telemetry data (must be positive integer)
-
-**Privacy:** Telemetry data is stored locally in `.reygent/` and never transmitted to external servers. You can disable telemetry at any time by setting `enabled: false` in your config.
+See [Telemetry Guide](./docs/telemetry.md) and [Living Documentation Guide](./docs/knowledge.md) for full details.
 
 ## Documentation
 
@@ -220,6 +220,9 @@ Reygent includes opt-in telemetry to help improve the tool. On first run, you'll
 | [Agents Guide](./docs/agents.md) | Agent specs, customization, output formats |
 | [Providers Guide](./docs/providers.md) | Multi-provider setup and configuration |
 | [Skills Guide](./docs/skills.md) | Extend reygent with custom skills |
+| [Telemetry](./docs/telemetry.md) | Telemetry analysis, privacy, and troubleshooting |
+| [Living Documentation](./docs/knowledge.md) | Auto-learning knowledge system from past runs |
+| [Security](./SECURITY.md) | Security measures, threat model, and developer guidelines |
 | [Workflows](./docs/workflows.md) | Visual diagrams of pipeline and retry logic |
 | [Architecture](./docs/architecture.md) | Technical deep-dive into internals |
 | [Harness Pattern](./docs/harness-pattern.md) | How reygent implements Anthropic's harness pattern |

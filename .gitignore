@@ -21,3 +21,6 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Reygent config (for testing/development only - not shipped)
+.reygent/

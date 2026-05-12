@@ -1,9 +1,19 @@
 import Database from 'better-sqlite3';
 import { join, dirname } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
 import type { StorageBackend, EventFilter, RunSummary } from './types.js';
 import type { TelemetryEvent, TelemetryCategory } from '../events.js';
 import { findLocalConfigDir, resolveGlobalConfigDir } from '../../config.js';
+
+/**
+ * Max DB size in bytes (50MB default, prevents disk exhaustion)
+ */
+const MAX_DB_SIZE_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Max events per run (prevents event spam attacks)
+ */
+const MAX_EVENTS_PER_RUN = 10000;
 
 /**
  * SQLite storage backend for telemetry events
@@ -77,11 +87,66 @@ export class SqliteBackend implements StorageBackend {
   }
 
   /**
+   * Check if database size exceeds limit
+   */
+  private checkDbSize(): boolean {
+    if (!existsSync(this.dbPath)) return true;
+    try {
+      const stats = statSync(this.dbPath);
+      return stats.size < MAX_DB_SIZE_BYTES;
+    } catch (err) {
+      // File deleted between existsSync and statSync (race condition)
+      // Treat as valid (file doesn't exist = no size limit hit)
+      if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+        console.error('[debug:telemetry] checkDbSize stat failed (file deleted?):', err instanceof Error ? err.message : String(err));
+      }
+      return true;
+    }
+  }
+
+  /**
+   * Check if run has exceeded event limit (prevents spam)
+   */
+  private checkRunEventLimit(runId: string): boolean {
+    if (!this.db) return false;
+    const result = this.db.prepare('SELECT COUNT(*) as count FROM events WHERE run_id = ?').get(runId) as { count: number };
+    return result.count < MAX_EVENTS_PER_RUN;
+  }
+
+  /**
+   * Prune old events to free space (keeps last 180 days)
+   */
+  private pruneOldEvents(): void {
+    if (!this.db) return;
+    const cutoffMs = Date.now() - (180 * 24 * 60 * 60 * 1000);
+    this.db.prepare('DELETE FROM events WHERE timestamp < ?').run(cutoffMs);
+    this.db.pragma('vacuum');
+  }
+
+  /**
    * Write single event to database
    */
   async write(event: TelemetryEvent): Promise<void> {
     if (!this.db) {
       throw new Error('Database not initialized. Call init() first.');
+    }
+
+    // Security: Check DB size limit
+    if (!this.checkDbSize()) {
+      // Attempt to prune old events
+      this.pruneOldEvents();
+      // If still too large after pruning, skip write silently
+      if (!this.checkDbSize()) {
+        if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+          console.error('[debug:telemetry] DB size limit hit, skipping write (event:', event.event, ')');
+        }
+        return;
+      }
+    }
+
+    // Security: Check per-run event limit (prevent spam)
+    if (!this.checkRunEventLimit(event.runId)) {
+      return;
     }
 
     const stmt = this.db.prepare(`
@@ -108,6 +173,14 @@ export class SqliteBackend implements StorageBackend {
       throw new Error('Database not initialized. Call init() first.');
     }
 
+    // Security: Check DB size limit
+    if (!this.checkDbSize()) {
+      this.pruneOldEvents();
+      if (!this.checkDbSize()) {
+        return;
+      }
+    }
+
     const stmt = this.db.prepare(`
       INSERT INTO events (id, run_id, timestamp, category, event, min_level, data)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -115,6 +188,11 @@ export class SqliteBackend implements StorageBackend {
 
     const transaction = this.db.transaction((events: TelemetryEvent[]) => {
       for (const event of events) {
+        // Security: Check per-run limit for each event
+        if (!this.checkRunEventLimit(event.runId)) {
+          continue;
+        }
+
         stmt.run(
           event.id,
           event.runId,

@@ -87,16 +87,15 @@ describe("spawnAgentStream", () => {
       systemPrompt: "You are a coding agent",
     });
 
-    expect(mockSpawn).toHaveBeenCalledWith({
-      prompt: "implement feature",
-      systemPrompt: "You are a coding agent",
-      model: "gemini-2.5-pro",
-      autoApprove: true,
-      quiet: true,
-      timeoutMs: 60_000,
-      agentName: "dev",
-      onActivity: undefined,
-    });
+    const call = mockSpawn.mock.calls[0][0];
+    expect(call.prompt).toBe("implement feature");
+    expect(call.model).toBe("gemini-2.5-pro");
+    expect(call.autoApprove).toBe(true);
+    expect(call.quiet).toBe(true);
+    expect(call.timeoutMs).toBe(60_000);
+    expect(call.agentName).toBe("dev");
+    // Knowledge may be appended to systemPrompt
+    expect(call.systemPrompt).toContain("You are a coding agent");
   });
 
   it("returns spawn result from adapter", async () => {

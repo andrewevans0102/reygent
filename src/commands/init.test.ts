@@ -36,6 +36,9 @@ vi.mock("../agents.js", () => ({
 }));
 vi.mock("../debug.js", () => ({ isDebug: vi.fn(() => false) }));
 vi.mock("../model.js", () => ({ DEFAULT_MODEL: "test-model" }));
+vi.mock("../knowledge/manager.js", () => ({
+  ensureKnowledgeDir: vi.fn(async () => {}),
+}));
 vi.mock("ora", () => {
   function createSpinner() {
     const spinner: Record<string, unknown> = { text: "" };
