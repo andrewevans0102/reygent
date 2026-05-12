@@ -239,8 +239,12 @@ npm run dev      # Watch mode
 npm test         # Run tests
 ```
 
+## License
+
+Apache-2.0 - see [LICENSE](LICENSE) for details.
+
 ## Disclaimer
 
-This software is provided "as is", without warranty of any kind. See the [MIT License](./LICENSE) for full terms.
+This software is provided "as is", without warranty of any kind.
 
 **AI-generated output:** Reygent orchestrates AI agents that produce code, tests, and reviews. All AI-generated output should be reviewed by a human before merging or deploying. The authors are not responsible for any damages resulting from the use of this tool or its output.
