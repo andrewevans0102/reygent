@@ -537,6 +537,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
     if (!specSource) {
       if (!process.stdin.isTTY) {
         console.log(chalk.red.bold("Error:"), "--spec is required in non-interactive environments.");
+        await chesstrace?.close();
         process.exit(1);
       }
       specSource = await promptForSpec();

@@ -9,9 +9,14 @@ import { isDebug } from "../debug.js";
 
 /**
  * Check if telemetry opt-in prompt should be shown.
- * Returns true when telemetry.enabled is undefined in config.
+ * Returns true when telemetry.enabled is undefined in config AND stdin is TTY.
  */
 export function shouldPromptForTelemetry(): boolean {
+  // Never prompt in non-TTY environments (CI, piped input, etc.)
+  if (!process.stdin.isTTY) {
+    return false;
+  }
+
   // Find config path (local takes precedence)
   const localConfigDir = findLocalConfigDir(process.cwd());
   let configPath: string | null = null;

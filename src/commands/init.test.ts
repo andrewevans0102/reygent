@@ -70,6 +70,7 @@ import { initCommand } from "./init.js";
 describe("initCommand", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
   let exitSpy: ReturnType<typeof vi.spyOn>;
+  let originalIsTTY: boolean | undefined;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -79,11 +80,17 @@ describe("initCommand", () => {
       .mockImplementation(() => {
         throw new Error("process.exit");
       });
+
+    // Mock TTY to simulate interactive terminal
+    originalIsTTY = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
   });
 
   afterEach(() => {
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
+    // Restore original TTY state
+    Object.defineProperty(process.stdin, "isTTY", { value: originalIsTTY, configurable: true });
   });
 
   it("dry run prints preview without creating files", async () => {
@@ -269,5 +276,19 @@ describe("initCommand", () => {
     await expect(initCommand({ dryRun: false })).rejects.toThrow("process.exit");
 
     expect(exitSpy).toHaveBeenCalledWith(2);
+  });
+
+  it("exits with code 1 in non-TTY when existing config found", async () => {
+    // Simulate non-TTY environment (CI)
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+
+    mockExistsSync.mockReturnValue(true);
+
+    await expect(initCommand({ dryRun: false })).rejects.toThrow("process.exit");
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(output).toContain("Cannot prompt in non-interactive mode");
   });
 });
