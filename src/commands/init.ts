@@ -42,6 +42,10 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
       console.log(chalk.gray(`  Path: ${targetDir}\n`));
 
       if (existsSync(configPath)) {
+        if (!process.stdin.isTTY) {
+          console.log(chalk.red.bold("Error:"), "Cannot prompt in non-interactive mode. Use --dry-run to preview or remove existing .reygent/ first.");
+          process.exit(1);
+        }
         resetTerminalForInput();
         const action = await select({
           message: "Existing config found. What would you like to do?",

@@ -33,6 +33,18 @@ export async function agentCommand(
       if (agents.length === 0) {
         throw new TaskError("No agents configured. Add agents to .reygent/config.json or check built-in agents.");
       }
+      if (!process.stdin.isTTY) {
+        const validNames = agents.map((a) => a.name);
+        // Truncate long agent lists for readability
+        const displayNames = validNames.length > 5
+          ? `${validNames.slice(0, 5).join(", ")}, ... (${validNames.length - 5} more)`
+          : validNames.join(", ");
+        console.log(chalk.red.bold("Error:"), `Agent name required in non-interactive mode. Valid agents: ${displayNames}`);
+        if (validNames.length > 5) {
+          console.log(chalk.gray("  Run 'reygent list' to see all agents."));
+        }
+        process.exit(1);
+      }
       resetTerminalForInput();
       agent = await select({
         message: "Select agent:",

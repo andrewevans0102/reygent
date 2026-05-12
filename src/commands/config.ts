@@ -103,6 +103,13 @@ export async function configCommand(): Promise<void> {
 }
 
 async function runConfig(): Promise<void> {
+  // Check for interactive environment before prompting
+  if (!process.stdin.isTTY) {
+    console.log(chalk.red.bold("Error:"), "config command requires interactive mode.");
+    console.log(chalk.gray("  Edit"), chalk.cyan(".reygent/config.json"), chalk.gray("or"), chalk.cyan("~/.reygent/config.json"), chalk.gray("directly."));
+    process.exit(1);
+  }
+
   // 1. Scope selection
   const scope = await select({
     message: "Configuration scope:",

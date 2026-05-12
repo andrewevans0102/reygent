@@ -13,6 +13,7 @@ describe("shouldPromptForTelemetry", () => {
   let tmpDir: string;
   let findLocalConfigDirSpy: ReturnType<typeof vi.spyOn>;
   let resolveGlobalConfigPathSpy: ReturnType<typeof vi.spyOn>;
+  let originalIsTTY: boolean | undefined;
 
   beforeEach(() => {
     tmpDir = join(tmpdir(), `reygent-test-${Date.now()}`);
@@ -20,6 +21,10 @@ describe("shouldPromptForTelemetry", () => {
 
     findLocalConfigDirSpy = vi.spyOn(config, "findLocalConfigDir");
     resolveGlobalConfigPathSpy = vi.spyOn(config, "resolveGlobalConfigPath");
+
+    // Mock TTY to simulate interactive terminal
+    originalIsTTY = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
   });
 
   afterEach(() => {
@@ -27,6 +32,8 @@ describe("shouldPromptForTelemetry", () => {
     if (existsSync(tmpDir)) {
       rmSync(tmpDir, { recursive: true, force: true });
     }
+    // Restore original TTY state
+    Object.defineProperty(process.stdin, "isTTY", { value: originalIsTTY, configurable: true });
   });
 
   it("returns true when no config file exists", () => {
@@ -152,6 +159,16 @@ describe("shouldPromptForTelemetry", () => {
     resolveGlobalConfigPathSpy.mockReturnValue(configPath);
 
     expect(shouldPromptForTelemetry()).toBe(true);
+  });
+
+  it("returns false in non-TTY environments (CI, piped input)", () => {
+    // Simulate non-TTY environment
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+
+    findLocalConfigDirSpy.mockReturnValue(null);
+    resolveGlobalConfigPathSpy.mockReturnValue(join(tmpDir, "nonexistent", "config.json"));
+
+    expect(shouldPromptForTelemetry()).toBe(false);
   });
 });
 

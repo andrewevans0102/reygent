@@ -887,4 +887,355 @@ describe("run command - Chesstrace instrumentation", () => {
       expect(funcRetryEmit![1].failureSnippet.length).toBeLessThanOrEqual(500);
     });
   });
+
+  describe("CLI flags and options", () => {
+    // Common options shared across all tests in this block
+    const baseOptions = {
+      spec: "test.md",
+      dryRun: false,
+      securityThreshold: "HIGH" as const,
+      autoApprove: true,
+      insecure: false,
+      skipClarification: true,
+      maxRetries: "0",
+      verbose: false,
+    };
+
+    it("respects --auto-approve flag", async () => {
+      await runCommand(baseOptions);
+
+      // Should not prompt for approval (runs successfully)
+      expect(runPlanner).toHaveBeenCalled();
+      expect(runImplement).toHaveBeenCalled();
+    });
+
+    it("respects --skip-clarification flag", async () => {
+      await runCommand(baseOptions);
+
+      // Planner should be called with makeAssumptions=true
+      expect(runPlanner).toHaveBeenCalledWith(
+        expect.anything(),
+        undefined,
+        expect.objectContaining({ makeAssumptions: true })
+      );
+    });
+
+    it("respects --max-retries flag", async () => {
+      let unitTestCallCount = 0;
+      vi.mocked(runUnitTestGate).mockImplementation(async () => {
+        unitTestCallCount++;
+        if (unitTestCallCount <= 2) {
+          return {
+            gate: { passed: false, output: "Tests failed" },
+            usage: { costUsd: 0.01 },
+          };
+        }
+        return {
+          gate: { passed: true, output: "Tests passed" },
+          usage: { costUsd: 0.01 },
+        };
+      });
+
+      await runCommand({
+        ...baseOptions,
+        maxRetries: "2",
+      });
+
+      // Unit test gate should be called 3 times (initial + 2 retries)
+      expect(runUnitTestGate).toHaveBeenCalledTimes(3);
+    });
+
+    it("respects --verbose flag for usage output", async () => {
+      const { printVerboseUsage } = await import("../usage.js");
+
+      await runCommand({
+        ...baseOptions,
+        verbose: true,
+      });
+
+      expect(printVerboseUsage).toHaveBeenCalled();
+    });
+
+    it("does not call printVerboseUsage when verbose=false", async () => {
+      const { printVerboseUsage } = await import("../usage.js");
+
+      await runCommand(baseOptions);
+
+      expect(printVerboseUsage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("spec resolution", () => {
+    it("loads spec from markdown file when spec flag provided", async () => {
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "0",
+        verbose: false,
+      });
+
+      expect(loadSpec).toHaveBeenCalledWith("test.md");
+    });
+
+    it("loads spec from Linear when linear URL provided", async () => {
+      await runCommand({
+        spec: "https://linear.app/test/issue/ENG-123",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "0",
+        verbose: false,
+      });
+
+      expect(loadSpec).toHaveBeenCalledWith("https://linear.app/test/issue/ENG-123");
+    });
+
+    it("loads spec from Jira when jira key provided", async () => {
+      await runCommand({
+        spec: "PROJ-123",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "0",
+        verbose: false,
+      });
+
+      expect(loadSpec).toHaveBeenCalledWith("PROJ-123");
+    });
+  });
+
+  describe("gate retry loop", () => {
+    it("retries dev agent when unit tests fail", async () => {
+      let unitTestCallCount = 0;
+      vi.mocked(runUnitTestGate).mockImplementation(async () => {
+        unitTestCallCount++;
+        if (unitTestCallCount === 1) {
+          return {
+            gate: { passed: false, output: "Tests failed" },
+            usage: { costUsd: 0.01 },
+          };
+        }
+        return {
+          gate: { passed: true, output: "Tests passed" },
+          usage: { costUsd: 0.01 },
+        };
+      });
+
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "1",
+        verbose: false,
+      });
+
+      // runImplement should be called twice: initial + 1 retry
+      expect(runImplement).toHaveBeenCalledTimes(2);
+    });
+
+    it("retries both dev and qe when functional tests fail", async () => {
+      let funcTestCallCount = 0;
+      vi.mocked(runFunctionalTestGate).mockImplementation(async () => {
+        funcTestCallCount++;
+        if (funcTestCallCount === 1) {
+          return {
+            gate: { passed: false, output: "Functional tests failed" },
+            usage: { costUsd: 0.01 },
+          };
+        }
+        return {
+          gate: { passed: true, output: "Functional tests passed" },
+          usage: { costUsd: 0.01 },
+        };
+      });
+
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "HIGH",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "1",
+        verbose: false,
+      });
+
+      // runImplement should be called twice: initial + 1 retry
+      expect(runImplement).toHaveBeenCalledTimes(2);
+    });
+
+    it("throws after exhausting all retries", async () => {
+      vi.mocked(runUnitTestGate).mockResolvedValue({
+        gate: { passed: false, output: "Tests always fail" },
+        usage: { costUsd: 0.01 },
+      });
+
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "HIGH",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "2",
+          verbose: false,
+        })
+      ).rejects.toThrow("unit tests failed after 2 retries");
+    });
+  });
+
+  describe("security gate bypass", () => {
+    it("bypasses security gate when autoApprove=true", async () => {
+      vi.mocked(runSecurityReview).mockResolvedValue({
+        output: {
+          severity: "CRITICAL",
+          findings: [{ severity: "CRITICAL", description: "XSS vulnerability" }],
+        },
+        passed: false,
+        usage: { costUsd: 0.01 },
+      });
+
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "CRITICAL",
+        autoApprove: true,
+        insecure: false,
+        skipClarification: true,
+        maxRetries: "0",
+        verbose: false,
+      });
+
+      // Should continue to PR creation despite security failure
+      expect(runPRCreate).toHaveBeenCalled();
+    });
+
+    it("continues pipeline after security failure when insecure=true", async () => {
+      vi.mocked(runSecurityReview).mockResolvedValue({
+        output: {
+          severity: "CRITICAL",
+          findings: [{ severity: "CRITICAL", description: "SQL injection" }],
+        },
+        passed: false,
+        usage: { costUsd: 0.01 },
+      });
+
+      await runCommand({
+        spec: "test.md",
+        dryRun: false,
+        securityThreshold: "CRITICAL",
+        autoApprove: true,
+        insecure: true,
+        skipClarification: true,
+        maxRetries: "0",
+        verbose: false,
+      });
+
+      expect(runPRCreate).toHaveBeenCalled();
+    });
+  });
+
+  describe("error handling", () => {
+    it("handles loadSpec failure gracefully", async () => {
+      vi.mocked(loadSpec).mockRejectedValue(new Error("Spec file not found"));
+
+      await expect(
+        runCommand({
+          spec: "nonexistent.md",
+          dryRun: false,
+          securityThreshold: "HIGH",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).rejects.toThrow("Spec file not found");
+    });
+
+    it("handles runPlanner failure gracefully", async () => {
+      vi.mocked(runPlanner).mockRejectedValue(new Error("Planner timeout"));
+
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "HIGH",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).rejects.toThrow("Planner timeout");
+    });
+
+    it("handles runImplement failure gracefully", async () => {
+      vi.mocked(runImplement).mockRejectedValue(new Error("Implementation error"));
+
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "HIGH",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).rejects.toThrow("Implementation error");
+    });
+
+    it("handles runUnitTestGate failure gracefully", async () => {
+      vi.mocked(runUnitTestGate).mockRejectedValue(new Error("Gate runner crashed"));
+
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "HIGH",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).rejects.toThrow("Gate runner crashed");
+    });
+
+    it("handles invalid security threshold gracefully", async () => {
+      // Mock process.exit to prevent test from exiting
+      const mockExit = vi.spyOn(process, "exit").mockImplementation(() => {
+        throw new Error("process.exit called");
+      });
+
+      await expect(
+        runCommand({
+          spec: "test.md",
+          dryRun: false,
+          securityThreshold: "INVALID",
+          autoApprove: true,
+          insecure: false,
+          skipClarification: true,
+          maxRetries: "0",
+          verbose: false,
+        })
+      ).rejects.toThrow();
+
+      mockExit.mockRestore();
+    });
+  });
 });

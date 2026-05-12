@@ -3,6 +3,7 @@ import { join } from "node:path";
 import chalk from "chalk";
 import { findLocalConfigDir } from "../config.js";
 import { marked } from "marked";
+import { isTestEnvironment } from "../test-env.js";
 
 export interface KnowledgeEntry {
   id: string;
@@ -213,7 +214,7 @@ export async function loadKnowledge(agentName: string, stage?: string): Promise<
 
   // If no knowledge dir, return empty knowledge and suggest initialization
   if (!knowledgeDir) {
-    if (process.env.NODE_ENV !== 'test' && process.env.REYGENT_DEBUG !== 'knowledge') {
+    if (!isTestEnvironment() && process.env.REYGENT_DEBUG !== 'knowledge') {
       console.warn(chalk.yellow("⚠ No knowledge directory found. Run 'reygent init' to create .reygent/knowledge/"));
     }
     return {

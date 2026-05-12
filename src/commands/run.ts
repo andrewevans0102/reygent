@@ -31,6 +31,7 @@ import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
 import { findProjectRoot } from "../project-detection.js";
 import { DualBackend } from "../chesstrace/backends/dual.js";
 import { existsSync, mkdirSync } from "node:fs";
+import { isTestEnvironment } from "../test-env.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -537,6 +538,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
     if (!specSource) {
       if (!process.stdin.isTTY) {
         console.log(chalk.red.bold("Error:"), "--spec is required in non-interactive environments.");
+        await chesstrace?.close();
         process.exit(1);
       }
       specSource = await promptForSpec();
@@ -1324,17 +1326,25 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
     }
 
+    // In test env, re-throw instead of process.exit to allow test assertions.
+    // We check runtime environment variables (NODE_ENV, VITEST) rather than import.meta.env
+    // because test runners set these at runtime, not during bundling. See src/test-env.ts.
+    const isTest = isTestEnvironment();
+
     if (err instanceof Error && err.name === "ExitPromptError") {
+      if (isTest) throw err;
       process.exit(0);
     }
     if (err instanceof SpecError || err instanceof TaskError) {
       console.log(chalk.red.bold("Error:"), err.message);
       if (isDebug()) console.error(err.stack);
+      if (isTest) throw err;
       process.exit(1);
     }
     const message = err instanceof Error ? err.message : String(err);
     console.log(chalk.red.bold("Internal error:"), message);
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
+    if (isTest) throw err;
     process.exit(2);
   }
 }
