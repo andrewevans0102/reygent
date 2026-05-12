@@ -49,6 +49,11 @@ export function findProjectRoot(startDir: string): string | null {
     depth++;
   }
 
+  // Hit traversal limit - log for debugging
+  if (depth >= MAX_TRAVERSAL_DEPTH && (process.env.REYGENT_DEBUG === '1')) {
+    console.error(`[debug] findProjectRoot: MAX_TRAVERSAL_DEPTH (${MAX_TRAVERSAL_DEPTH}) reached from ${startDir}`);
+  }
+
   return null;
 }
 

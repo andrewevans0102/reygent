@@ -37,7 +37,17 @@ export class DualBackend implements StorageBackend {
     if (this.globalBackend) {
       tasks.push(this.globalBackend.write(event));
     }
-    await Promise.allSettled(tasks);
+    const results = await Promise.allSettled(tasks);
+
+    // Log failures in debug mode
+    if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+      results.forEach((result, idx) => {
+        if (result.status === 'rejected') {
+          const backend = idx === 0 ? 'local' : 'global';
+          console.error(`[debug:telemetry] Dual backend ${backend} write failed:`, result.reason instanceof Error ? result.reason.message : String(result.reason));
+        }
+      });
+    }
   }
 
   async writeBatch(events: TelemetryEvent[]): Promise<void> {
@@ -45,7 +55,17 @@ export class DualBackend implements StorageBackend {
     if (this.globalBackend) {
       tasks.push(this.globalBackend.writeBatch(events));
     }
-    await Promise.allSettled(tasks);
+    const results = await Promise.allSettled(tasks);
+
+    // Log failures in debug mode
+    if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+      results.forEach((result, idx) => {
+        if (result.status === 'rejected') {
+          const backend = idx === 0 ? 'local' : 'global';
+          console.error(`[debug:telemetry] Dual backend ${backend} writeBatch failed:`, result.reason instanceof Error ? result.reason.message : String(result.reason));
+        }
+      });
+    }
   }
 
   async query(filter?: EventFilter): Promise<TelemetryEvent[]> {

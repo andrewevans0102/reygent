@@ -254,8 +254,11 @@ export async function analyzeFailures(options: AnalyzeOptions): Promise<void> {
       const updateSpinner = ora("Updating knowledge base...").start();
 
       try {
+        // Reopen backend for analyzer (was closed earlier)
+        const analysisBackend = await getBackend();
         // Use analyzer to extract structured patterns
-        const patterns = analyzeFailurePatterns(backend, since);
+        const patterns = analyzeFailurePatterns(analysisBackend, since);
+        await analysisBackend.close();
 
         if (patterns.length === 0) {
           updateSpinner.info(chalk.yellow("No recurring patterns to add"));
@@ -280,12 +283,20 @@ export async function analyzeFailures(options: AnalyzeOptions): Promise<void> {
           console.log();
         }
       } catch (err) {
-        updateSpinner.fail(chalk.red(`Failed to update knowledge: ${(err as Error).message}`));
+        const errMsg = err instanceof Error ? err.message : String(err);
+        updateSpinner.fail(chalk.red(`Failed to update knowledge: ${errMsg}`));
+        if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+          console.error('[debug:telemetry] analyzeFailures knowledge update error:', err);
+        }
       }
     }
 
   } catch (err) {
-    spinner.fail(chalk.red(`Failed to analyze failures: ${(err as Error).message}`));
+    const errMsg = err instanceof Error ? err.message : String(err);
+    spinner.fail(chalk.red(`Failed to analyze failures: ${errMsg}`));
+    if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+      console.error('[debug:telemetry] analyzeFailures error:', err);
+    }
     process.exit(1);
   }
 }
@@ -433,9 +444,12 @@ export async function analyzeSuccess(options: AnalyzeOptions): Promise<void> {
       const updateSpinner = ora("Updating knowledge base...").start();
 
       try {
+        // Reopen backend for analyzer (was closed earlier)
+        const analysisBackend = await getBackend();
         // Use analyzer to extract structured patterns
         const minRate = options.minSuccessRate ? Number.parseFloat(options.minSuccessRate) / 100 : 0.8;
-        const patterns = analyzeSuccessPatterns(backend, since, minRate);
+        const patterns = analyzeSuccessPatterns(analysisBackend, since, minRate);
+        await analysisBackend.close();
 
         if (patterns.length === 0) {
           updateSpinner.info(chalk.yellow("No high-success patterns to add"));
@@ -456,12 +470,20 @@ export async function analyzeSuccess(options: AnalyzeOptions): Promise<void> {
           console.log();
         }
       } catch (err) {
-        updateSpinner.fail(chalk.red(`Failed to update knowledge: ${(err as Error).message}`));
+        const errMsg = err instanceof Error ? err.message : String(err);
+        updateSpinner.fail(chalk.red(`Failed to update knowledge: ${errMsg}`));
+        if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+          console.error('[debug:telemetry] analyzeSuccess knowledge update error:', err);
+        }
       }
     }
 
   } catch (err) {
-    spinner.fail(chalk.red(`Failed to analyze success: ${(err as Error).message}`));
+    const errMsg = err instanceof Error ? err.message : String(err);
+    spinner.fail(chalk.red(`Failed to analyze success: ${errMsg}`));
+    if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+      console.error('[debug:telemetry] analyzeSuccess error:', err);
+    }
     process.exit(1);
   }
 }

@@ -67,18 +67,23 @@ function validateMarkdown(content: string): boolean {
 }
 
 /**
- * Load and parse a markdown file. Returns empty string if file doesn't exist.
+ * Load and parse a markdown file.
+ * Returns empty string if file doesn't exist or is empty.
+ * Returns null if file validation fails (security).
  * Validates and sanitizes content to prevent prompt injection attacks.
  */
-export function readMarkdown(filePath: string): string {
+export function readMarkdown(filePath: string): string | null {
   if (!existsSync(filePath)) return "";
 
   const content = readFileSync(filePath, "utf-8");
 
+  // Empty file is valid - return empty string
+  if (!content || content.trim().length === 0) return "";
+
   // Validate content
   if (!validateMarkdown(content)) {
     console.warn(chalk.yellow(`⚠ Suspicious content detected in ${filePath}, skipping`));
-    return "";
+    return null;
   }
 
   // Sanitize content
@@ -93,7 +98,17 @@ export function readMarkdown(filePath: string): string {
 export function parseMarkdownEntries(markdown: string, source: string): KnowledgeEntry[] {
   if (!markdown.trim()) return [];
 
-  const tokens = marked.lexer(markdown);
+  let tokens;
+  try {
+    tokens = marked.lexer(markdown);
+  } catch (err) {
+    // Malformed markdown - return empty array instead of crashing
+    if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'knowledge') {
+      console.warn(`[debug:knowledge] Failed to parse markdown from ${source}:`, err instanceof Error ? err.message : String(err));
+    }
+    return [];
+  }
+
   const entries: KnowledgeEntry[] = [];
   let currentEntry: Partial<KnowledgeEntry> | null = null;
   let currentContent: string[] = [];
@@ -198,7 +213,7 @@ export async function loadKnowledge(agentName: string, stage?: string): Promise<
 
   // If no knowledge dir, return empty knowledge and suggest initialization
   if (!knowledgeDir) {
-    if (process.env.NODE_ENV !== 'test') {
+    if (process.env.NODE_ENV !== 'test' && process.env.REYGENT_DEBUG !== 'knowledge') {
       console.warn(chalk.yellow("⚠ No knowledge directory found. Run 'reygent init' to create .reygent/knowledge/"));
     }
     return {

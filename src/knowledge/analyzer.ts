@@ -210,8 +210,8 @@ export function measureKnowledgeEffectiveness(db: SqliteBackend, sinceMs: number
  */
 function sanitizeErrorMessage(message: string): string {
   return message
-    // API keys, tokens, secrets (20+ alphanumeric chars)
-    .replace(/[A-Za-z0-9+/=_-]{20,}/g, '[REDACTED_TOKEN]')
+    // API keys, tokens, secrets (20+ alphanumeric chars with word boundaries to avoid base64 false positives)
+    .replace(/\b[A-Za-z0-9+/=_-]{20,}\b/g, '[REDACTED_TOKEN]')
     // User home paths
     .replace(/\/Users\/[^/\s]+/g, '/Users/***')
     .replace(/\/home\/[^/\s]+/g, '/home/***')

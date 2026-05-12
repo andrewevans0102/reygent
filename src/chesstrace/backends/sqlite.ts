@@ -91,8 +91,17 @@ export class SqliteBackend implements StorageBackend {
    */
   private checkDbSize(): boolean {
     if (!existsSync(this.dbPath)) return true;
-    const stats = statSync(this.dbPath);
-    return stats.size < MAX_DB_SIZE_BYTES;
+    try {
+      const stats = statSync(this.dbPath);
+      return stats.size < MAX_DB_SIZE_BYTES;
+    } catch (err) {
+      // File deleted between existsSync and statSync (race condition)
+      // Treat as valid (file doesn't exist = no size limit hit)
+      if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+        console.error('[debug:telemetry] checkDbSize stat failed (file deleted?):', err instanceof Error ? err.message : String(err));
+      }
+      return true;
+    }
   }
 
   /**
@@ -128,6 +137,9 @@ export class SqliteBackend implements StorageBackend {
       this.pruneOldEvents();
       // If still too large after pruning, skip write silently
       if (!this.checkDbSize()) {
+        if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'telemetry') {
+          console.error('[debug:telemetry] DB size limit hit, skipping write (event:', event.event, ')');
+        }
         return;
       }
     }

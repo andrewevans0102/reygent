@@ -129,8 +129,12 @@ async function updateKnowledgeFromTelemetry(): Promise<void> {
     }
 
     await backend.close();
-  } catch {
+  } catch (err) {
     // Silently fail - don't interrupt user workflow
+    // Log for debugging if REYGENT_DEBUG=knowledge enabled
+    if (process.env.REYGENT_DEBUG === '1' || process.env.REYGENT_DEBUG === 'knowledge') {
+      console.error('[debug:knowledge] updateKnowledgeFromTelemetry failed:', err instanceof Error ? err.message : String(err));
+    }
   }
 }
 

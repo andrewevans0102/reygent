@@ -45,19 +45,28 @@ function parseEntries(markdown: string): ParsedEntry[] {
 
   for (const section of sections) {
     const lines = section.split('\n');
-    const title = lines[0].trim();
+    const title = lines[0]?.trim() || 'Untitled';
 
     const occurrenceMatch = section.match(/\*\*Occurrences\*\*:\s*(\d+)/);
     const lastSeenMatch = section.match(/\*\*Last seen\*\*:\s*(\d{4}-\d{2}-\d{2})/);
     const agentMatch = section.match(/\*\*Agent\*\*:\s*(\w+)/);
     const successRateMatch = section.match(/\*\*Success rate\*\*:\s*(\d+)%/);
 
+    // Validate date format - use default if invalid
+    let lastSeen = new Date().toISOString().split('T')[0];
+    if (lastSeenMatch) {
+      const parsedDate = new Date(lastSeenMatch[1]);
+      if (!isNaN(parsedDate.getTime())) {
+        lastSeen = lastSeenMatch[1];
+      }
+    }
+
     entries.push({
       title,
-      occurrences: occurrenceMatch ? parseInt(occurrenceMatch[1]) : undefined,
-      lastSeen: lastSeenMatch ? lastSeenMatch[1] : new Date().toISOString().split('T')[0],
+      occurrences: occurrenceMatch ? parseInt(occurrenceMatch[1], 10) : undefined,
+      lastSeen,
       agent: agentMatch ? agentMatch[1] : undefined,
-      successRate: successRateMatch ? parseInt(successRateMatch[1]) : undefined,
+      successRate: successRateMatch ? parseInt(successRateMatch[1], 10) : undefined,
       fullContent: '## ' + section,
     });
   }

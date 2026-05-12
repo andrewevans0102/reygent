@@ -5,7 +5,8 @@ import { execSync } from "node:child_process";
 import chalk from "chalk";
 import ora from "ora";
 import Table from "cli-table3";
-import { input, select, confirm } from '@inquirer/prompts';
+import { select, confirm } from '@inquirer/prompts';
+import { inputWithTimeout, InputTimeoutError } from '../input-with-timeout.js';
 import {
   findKnowledgeDir,
   listKnowledgeFiles,
@@ -132,8 +133,13 @@ async function showCommand(file: string) {
 
   try {
     const content = readMarkdown(filePath);
-    if (!content) {
-      console.log(chalk.yellow(`Knowledge file not found: ${normalizedFile}`));
+    if (content === null) {
+      console.log(chalk.red(`Knowledge file validation failed: ${normalizedFile}`));
+      console.log(chalk.gray("File may contain suspicious content or be malformed."));
+      process.exit(1);
+    }
+    if (content === "") {
+      console.log(chalk.yellow(`Knowledge file is empty or not found: ${normalizedFile}`));
       console.log(chalk.gray("Available files:"));
       const files = listKnowledgeFiles();
       files.forEach((f) => console.log(chalk.gray(`  - ${f}`)));
@@ -230,17 +236,33 @@ async function addFailureCommand(options: {
   let example = options.example;
 
   if (!issue) {
-    issue = await input({
-      message: 'What is the issue/error?',
-      validate: (value) => value.trim() !== '' || 'Issue description required',
-    });
+    try {
+      issue = await inputWithTimeout({
+        message: 'What is the issue/error?',
+        validate: (value) => value.trim() !== '' || 'Issue description required',
+      });
+    } catch (err) {
+      if (err instanceof InputTimeoutError) {
+        console.log(chalk.red('\n✗ Input timed out'));
+        process.exit(1);
+      }
+      throw err;
+    }
   }
 
   if (!solution) {
-    solution = await input({
-      message: 'What is the solution/fix?',
-      validate: (value) => value.trim() !== '' || 'Solution description required',
-    });
+    try {
+      solution = await inputWithTimeout({
+        message: 'What is the solution/fix?',
+        validate: (value) => value.trim() !== '' || 'Solution description required',
+      });
+    } catch (err) {
+      if (err instanceof InputTimeoutError) {
+        console.log(chalk.red('\n✗ Input timed out'));
+        process.exit(1);
+      }
+      throw err;
+    }
   }
 
   if (!agent) {
@@ -258,9 +280,17 @@ async function addFailureCommand(options: {
     });
 
     if (addExample) {
-      example = await input({
-        message: 'Enter code example:',
-      });
+      try {
+        example = await inputWithTimeout({
+          message: 'Enter code example:',
+        });
+      } catch (err) {
+        if (err instanceof InputTimeoutError) {
+          console.log(chalk.red('\n✗ Input timed out'));
+          process.exit(1);
+        }
+        throw err;
+      }
     }
   }
 
@@ -301,10 +331,18 @@ async function addPatternCommand(options: {
   let successRate = options.successRate;
 
   if (!description) {
-    description = await input({
-      message: 'Describe the success pattern:',
-      validate: (value) => value.trim() !== '' || 'Description required',
-    });
+    try {
+      description = await inputWithTimeout({
+        message: 'Describe the success pattern:',
+        validate: (value) => value.trim() !== '' || 'Description required',
+      });
+    } catch (err) {
+      if (err instanceof InputTimeoutError) {
+        console.log(chalk.red('\n✗ Input timed out'));
+        process.exit(1);
+      }
+      throw err;
+    }
   }
 
   if (!approach) {
@@ -314,9 +352,17 @@ async function addPatternCommand(options: {
     });
 
     if (addApproach) {
-      approach = await input({
-        message: 'Describe the approach:',
-      });
+      try {
+        approach = await inputWithTimeout({
+          message: 'Describe the approach:',
+        });
+      } catch (err) {
+        if (err instanceof InputTimeoutError) {
+          console.log(chalk.red('\n✗ Input timed out'));
+          process.exit(1);
+        }
+        throw err;
+      }
     }
   }
 
@@ -327,14 +373,22 @@ async function addPatternCommand(options: {
     });
 
     if (addRate) {
-      const rateStr = await input({
-        message: 'Enter success rate (0-100):',
-        validate: (value) => {
-          const num = parseFloat(value);
-          return (!isNaN(num) && num >= 0 && num <= 100) || 'Must be a number between 0 and 100';
-        },
-      });
-      successRate = parseFloat(rateStr);
+      try {
+        const rateStr = await inputWithTimeout({
+          message: 'Enter success rate (0-100):',
+          validate: (value) => {
+            const num = parseFloat(value);
+            return (!isNaN(num) && num >= 0 && num <= 100) || 'Must be a number between 0 and 100';
+          },
+        });
+        successRate = parseFloat(rateStr);
+      } catch (err) {
+        if (err instanceof InputTimeoutError) {
+          console.log(chalk.red('\n✗ Input timed out'));
+          process.exit(1);
+        }
+        throw err;
+      }
     }
   }
 
