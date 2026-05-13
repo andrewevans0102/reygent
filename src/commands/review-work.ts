@@ -21,6 +21,7 @@ import {
 import type { PRReviewOutput, TaskContext } from "../task.js";
 import { TaskError } from "../task.js";
 import { parseSpecWithPrefix, SpecPrefixError } from "../spec-prefix.js";
+import { withTelemetry } from "../telemetry-lifecycle.js";
 
 interface ReviewWorkOptions {
   spec?: string;
@@ -312,6 +313,7 @@ async function runAgentReview(
 export async function reviewWorkCommand(
   options: ReviewWorkOptions,
 ): Promise<void> {
+  return withTelemetry('review-work', async () => {
   try {
     // Verify we're in a git repo
     try {
@@ -479,4 +481,5 @@ export async function reviewWorkCommand(
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
     process.exit(2);
   }
+  });
 }

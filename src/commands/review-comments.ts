@@ -16,6 +16,9 @@ import type { RemoteInfo } from "../pr-create.js";
 import type { PlannerOutput } from "../task.js";
 import { TaskError } from "../task.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
+import { withTelemetry } from "../telemetry-lifecycle.js";
+import { getChesstrace } from "../chesstrace/index.js";
+import { Events } from "../chesstrace/events.js";
 
 interface ReviewCommentsOptions {
   insecure?: boolean;
@@ -648,6 +651,7 @@ async function executeWithDevAgent(
 export async function reviewCommentsCommand(
   options: ReviewCommentsOptions,
 ): Promise<void> {
+  return withTelemetry('review-comments', async () => {
   try {
     // 1. Verify git repo
     try {
@@ -823,10 +827,13 @@ export async function reviewCommentsCommand(
     // 11. Commit and push changes
     console.log();
     const pushSpinner = createLiveStatus("committing and pushing...");
+    const trace = getChesstrace();
     try {
       await exec("git", ["add", "-A"]);
       await exec("git", ["commit", "-m", "fix: address PR review comments"]);
+      try { trace.emit(Events.GIT_COMMIT, { branch, messageSubject: "fix: address PR review comments" }); } catch { /* swallow */ }
       await exec("git", ["push", "origin", branch]);
+      try { trace.emit(Events.GIT_PUSH, { branch }); } catch { /* swallow */ }
       pushSpinner.succeed(chalk.green("Changes committed and pushed."));
     } catch (pushErr) {
       const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
@@ -838,6 +845,7 @@ export async function reviewCommentsCommand(
           ]);
           if (parseInt(ahead.trim(), 10) > 0) {
             await exec("git", ["push", "origin", branch]);
+            try { trace.emit(Events.GIT_PUSH, { branch }); } catch { /* swallow */ }
             pushSpinner.succeed(chalk.green("Changes pushed."));
           } else {
             pushSpinner.warn(chalk.yellow("No changes were made by the dev agent."));
@@ -846,6 +854,7 @@ export async function reviewCommentsCommand(
           pushSpinner.warn(chalk.yellow("Nothing to commit or push."));
         }
       } else {
+        try { trace.emit(Events.GIT_ERROR, { operation: "commit-push", error: msg }); } catch { /* swallow */ }
         pushSpinner.fail(chalk.red(`Push failed: ${msg}`));
       }
     }
@@ -867,6 +876,7 @@ export async function reviewCommentsCommand(
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
     process.exit(2);
   }
+  });
 }
 
 // Exported for unit testing

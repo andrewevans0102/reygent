@@ -573,6 +573,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
     }
   }
 
+  const commandStartTime = Date.now();
+
   try {
     let specSource = options.spec;
     if (!specSource) {
@@ -624,6 +626,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       console.log("");
       return;
+    }
+
+    // Emit COMMAND_START after dry-run check
+    if (chesstrace) {
+      try { chesstrace.emit(Events.COMMAND_START, { command: 'run' }); } catch { /* swallow */ }
     }
 
     // Initialize context after dry-run check
@@ -1386,6 +1393,17 @@ export async function runCommand(options: RunOptions): Promise<void> {
         // Swallow emit errors
       }
 
+      // Emit COMMAND_END on success
+      try {
+        chesstrace.emit(Events.COMMAND_END, {
+          command: 'run',
+          success: allSuccess,
+          durationMs: Date.now() - commandStartTime,
+        });
+      } catch {
+        // Swallow emit errors
+      }
+
       // Flush and close telemetry
       try {
         await chesstrace.flush();
@@ -1425,8 +1443,18 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
     }
 
-    // Emit pipeline.end with failure status (if context exists)
+    // Emit COMMAND_ERROR + pipeline.end with failure status
     if (chesstrace) {
+      try {
+        chesstrace.emit(Events.COMMAND_ERROR, {
+          command: 'run',
+          error: err instanceof Error ? err.message : String(err),
+          durationMs: Date.now() - commandStartTime,
+        });
+      } catch {
+        // Swallow emit errors
+      }
+
       try {
         if (context) {
           chesstrace.emit(Events.PIPELINE_END, {

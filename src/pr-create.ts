@@ -7,6 +7,8 @@ import type { BranchType as CanonicalBranchType } from "./branch-type.js";
 import type { SpecPayload } from "./spec.js";
 import type { PRCreateOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 function exec(
   cmd: string,
@@ -581,8 +583,11 @@ export async function runPRCreate(
   }
 
   // Create branch and commit
+  const trace = getChesstrace();
   await exec("git", ["checkout", "-b", branch]);
+  try { trace.emit(Events.GIT_BRANCH_CREATE, { branch }); } catch { /* swallow */ }
   await exec("git", ["commit", "-m", commitMessage]);
+  try { trace.emit(Events.GIT_COMMIT, { branch, messageSubject: commitMessage.split('\n')[0] }); } catch { /* swallow */ }
 
   // Check if branch exists remotely and delete it
   try {
@@ -601,7 +606,13 @@ export async function runPRCreate(
   }
 
   // Push with timeout
-  await exec("git", ["push", "-u", "origin", branch], { timeout: 60_000 });
+  try {
+    await exec("git", ["push", "-u", "origin", branch], { timeout: 60_000 });
+    try { trace.emit(Events.GIT_PUSH, { branch }); } catch { /* swallow */ }
+  } catch (pushErr) {
+    try { trace.emit(Events.GIT_ERROR, { operation: "push", error: pushErr instanceof Error ? pushErr.message : String(pushErr) }); } catch { /* swallow */ }
+    throw pushErr;
+  }
 
   const { prUrl, prNumber } = await createPR({
     remote: remoteForToken,
