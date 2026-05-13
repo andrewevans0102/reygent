@@ -24,9 +24,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "verify:publish": "npm pack && npm link",
-    "release:prepare": "./scripts/release.sh prepare",
-    "release:tag": "./scripts/release.sh tag"
+    "verify:publish": "npm pack && npm link"
   },
   "repository": {
     "type": "git",
