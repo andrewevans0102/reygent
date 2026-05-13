@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, develop]
   push:
-    branches: [main, develop]
+    branches: [main]
 
 # Cancel superseded runs on the same PR to save minutes
 concurrency:
