@@ -462,6 +462,367 @@ reygent skills remove code-reviewer --global
 
 ---
 
+## `reygent telemetry`
+
+Manage telemetry data and configuration. Telemetry captures workflow execution details, agent calls, costs, and errors to help debug failures and optimize workflows.
+
+```bash
+reygent telemetry [command]
+```
+
+### Subcommands
+
+#### `reygent telemetry status`
+
+Show telemetry configuration and storage status.
+
+```bash
+reygent telemetry status
+```
+
+Displays:
+- Current telemetry level (`minimal`, `standard`, `verbose`)
+- Database location and size
+- Number of runs stored
+- Retention policy
+
+#### `reygent telemetry runs`
+
+List recent telemetry runs.
+
+```bash
+reygent telemetry runs [--limit <count>] [--failed] [--successful]
+```
+
+| Option | Description |
+|---|---|
+| `--limit <count>` | Max number of runs to show (default: 10) |
+| `--failed` | Show only failed runs |
+| `--successful` | Show only successful runs |
+
+Displays table with:
+- Run ID
+- Timestamp
+- Command
+- Status (success/failure)
+- Duration
+- Total cost
+
+#### `reygent telemetry show <runId>`
+
+Show detailed event log for a specific run.
+
+```bash
+reygent telemetry show <runId>
+```
+
+Displays full event log including:
+- All agent calls with timestamps
+- Input/output tokens
+- Costs per agent
+- Errors and warnings
+- Stage transitions
+
+#### `reygent telemetry export <runId>`
+
+Export run data to JSON or CSV.
+
+```bash
+reygent telemetry export <runId> [--format <type>] [--output <file>]
+```
+
+| Option | Description |
+|---|---|
+| `--format <type>` | Export format: `json` or `csv` (default: `json`) |
+| `--output <file>` | Output file path (default: stdout) |
+
+#### `reygent telemetry prune`
+
+Delete old telemetry data.
+
+```bash
+reygent telemetry prune [--older-than <days>] [--keep-count <count>]
+```
+
+| Option | Description |
+|---|---|
+| `--older-than <days>` | Delete runs older than N days |
+| `--keep-count <count>` | Keep only the N most recent runs |
+
+#### `reygent telemetry enable`
+
+Enable telemetry in configuration.
+
+```bash
+reygent telemetry enable
+```
+
+Sets `telemetry.enabled = true` in `.reygent/config.json`.
+
+#### `reygent telemetry disable`
+
+Disable telemetry in configuration.
+
+```bash
+reygent telemetry disable
+```
+
+Sets `telemetry.enabled = false` in `.reygent/config.json`.
+
+---
+
+## `reygent analyze`
+
+Analyze telemetry data for insights into failures, successes, costs, and performance.
+
+```bash
+reygent analyze [command]
+```
+
+### Subcommands
+
+#### `reygent analyze failures`
+
+Show common failure patterns from telemetry.
+
+```bash
+reygent analyze failures [--limit <count>] [--since <date>]
+```
+
+| Option | Description |
+|---|---|
+| `--limit <count>` | Max number of failures to analyze (default: 20) |
+| `--since <date>` | Only analyze failures since date (ISO format) |
+
+Identifies:
+- Common error messages
+- Failing stages (unit tests, functional tests, security)
+- Agent-specific failures
+- Suggested fixes based on patterns
+
+#### `reygent analyze success`
+
+Extract patterns from successful runs.
+
+```bash
+reygent analyze success [--limit <count>] [--since <date>]
+```
+
+| Option | Description |
+|---|---|
+| `--limit <count>` | Max number of successful runs to analyze (default: 20) |
+| `--since <date>` | Only analyze runs since date (ISO format) |
+
+Identifies:
+- Average completion time per stage
+- Token usage patterns
+- Cost efficiency metrics
+- Common spec characteristics
+
+#### `reygent analyze costs`
+
+Cost breakdown and optimization recommendations.
+
+```bash
+reygent analyze costs [--since <date>] [--by-agent] [--by-stage]
+```
+
+| Option | Description |
+|---|---|
+| `--since <date>` | Only analyze costs since date (ISO format) |
+| `--by-agent` | Group costs by agent |
+| `--by-stage` | Group costs by workflow stage |
+
+Shows:
+- Total cost breakdown
+- Cost per run (average, min, max)
+- Most expensive agents/stages
+- Token usage efficiency
+- Caching effectiveness (if supported by provider)
+- Recommendations for cost reduction
+
+#### `reygent analyze agents`
+
+Agent-specific performance breakdown.
+
+```bash
+reygent analyze agents [--agent <name>] [--since <date>]
+```
+
+| Option | Description |
+|---|---|
+| `--agent <name>` | Focus on specific agent (`dev`, `qe`, `planner`, etc.) |
+| `--since <date>` | Only analyze runs since date (ISO format) |
+
+Shows per-agent:
+- Average duration
+- Token usage (input/output)
+- Cost per invocation
+- Success rate
+- Common failure modes
+
+---
+
+## `reygent last`
+
+Show details of the most recent run.
+
+```bash
+reygent last [options]
+```
+
+| Option | Description |
+|---|---|
+| `--verbose` | Show full event log with timestamps and details |
+| `--output` | Show only the final output from the run |
+| `--errors` | Show only errors from the run |
+| `--json` | Output as JSON for machine parsing |
+
+**Examples:**
+
+```bash
+# Quick summary of last run
+reygent last
+
+# Full event log with timestamps
+reygent last --verbose
+
+# Just show errors
+reygent last --errors
+
+# Get structured JSON (useful for scripts)
+reygent last --json
+```
+
+**Default output includes:**
+- Run ID
+- Command
+- Status (success/failure)
+- Duration
+- Total cost
+- High-level summary of stages completed
+
+---
+
+## `reygent knowledge`
+
+Manage living documentation in `.reygent/knowledge/`. The knowledge system automatically learns from telemetry data to improve future runs. See [docs/knowledge.md](./knowledge.md) for full details.
+
+```bash
+reygent knowledge [command]
+```
+
+### Subcommands
+
+#### `reygent knowledge list`
+
+List all knowledge files.
+
+```bash
+reygent knowledge list
+```
+
+Shows:
+- File names
+- File sizes
+- Last modified dates
+- Number of entries (for structured files)
+
+#### `reygent knowledge show <file>`
+
+Show specific knowledge file.
+
+```bash
+reygent knowledge show <file>
+```
+
+Displays full contents of:
+- `failures.md` — documented failure patterns and solutions
+- `patterns.md` — successful workflow patterns
+- `optimizations.md` — performance and cost optimizations
+- Custom knowledge files
+
+#### `reygent knowledge search <query>`
+
+Search knowledge files for a query.
+
+```bash
+reygent knowledge search <query>
+```
+
+Full-text search across all knowledge files. Highlights matches and shows surrounding context.
+
+#### `reygent knowledge edit <file>`
+
+Edit knowledge file in `$EDITOR`.
+
+```bash
+reygent knowledge edit <file>
+```
+
+Opens specified knowledge file in your configured editor. Falls back to `vi` if `$EDITOR` not set.
+
+#### `reygent knowledge add-failure`
+
+Document a failure pattern interactively.
+
+```bash
+reygent knowledge add-failure [--from-run <runId>]
+```
+
+| Option | Description |
+|---|---|
+| `--from-run <runId>` | Pre-populate from a specific telemetry run |
+
+Interactive prompts:
+1. **Error pattern** — what went wrong
+2. **Root cause** — why it happened
+3. **Solution** — how to fix it
+4. **Prevention** — how to avoid it in future
+
+Appends structured entry to `.reygent/knowledge/failures.md`.
+
+#### `reygent knowledge add-pattern`
+
+Document a success pattern interactively.
+
+```bash
+reygent knowledge add-pattern [--from-run <runId>]
+```
+
+| Option | Description |
+|---|---|
+| `--from-run <runId>` | Pre-populate from a specific telemetry run |
+
+Interactive prompts:
+1. **Pattern description** — what worked well
+2. **Context** — when to apply this pattern
+3. **Implementation** — how to replicate
+4. **Benefits** — why it's effective
+
+Appends structured entry to `.reygent/knowledge/patterns.md`.
+
+#### `reygent knowledge stats`
+
+Show knowledge base statistics and effectiveness.
+
+```bash
+reygent knowledge stats [--since <date>]
+```
+
+| Option | Description |
+|---|---|
+| `--since <date>` | Only analyze effectiveness since date (ISO format) |
+
+Displays:
+- Total number of documented patterns/failures
+- Knowledge base growth over time
+- Success rate improvement (before/after knowledge addition)
+- Most referenced knowledge entries
+- Suggested knowledge gaps based on recent failures
+
+---
+
 ## Environment Variables
 
 Set these in a `.env` file in your project root (or export in your shell).

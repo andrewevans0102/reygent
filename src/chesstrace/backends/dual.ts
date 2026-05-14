@@ -15,7 +15,7 @@ export class DualBackend implements StorageBackend {
   private globalEnabled: boolean;
 
   constructor(projectRoot: string) {
-    // Local backend in project
+    // Local backend stores project-specific telemetry in chesstrace.db
     this.localBackend = new SqliteBackend('local', `${projectRoot}/.reygent/chesstrace.db`);
 
     // Global backend opt-out for security (prevent cross-project data leakage)
