@@ -37,13 +37,13 @@ Reygent detects projects by searching upward for markers (`.git`, `package.json`
 **In a project** (has `.git`, `package.json`, `pyproject.toml`, `Cargo.toml`, etc.):
 - **First run**: Auto-creates `.reygent/` with message `✓ Created .reygent/ for local knowledge learning`
 - **Telemetry**: Writes to BOTH:
-  - Local: `./.reygent/telemetry.db` (project-specific runs)
-  - Global: `~/.reygent/telemetry.db` (aggregate across all projects)
+  - Local: `./.reygent/chesstrace.db` (project-specific runs)
+  - Global: `~/.reygent/chesstrace.db` (aggregate across all projects)
 - **Knowledge**: `./.reygent/knowledge/` (auto-updated after each run)
 - **Config**: Uses `./.reygent/config.json` if exists, otherwise built-in agents
 
 **Outside project** (no markers found):
-- **Telemetry**: `~/.reygent/telemetry.db` (global only)
+- **Telemetry**: `~/.reygent/chesstrace.db` (global only)
 - **Knowledge**: Skipped (no project context)
 - **Config**: Built-in agents only
 

@@ -16,7 +16,7 @@ export class DualBackend implements StorageBackend {
 
   constructor(projectRoot: string) {
     // Local backend in project
-    this.localBackend = new SqliteBackend('local', `${projectRoot}/.reygent/telemetry.db`);
+    this.localBackend = new SqliteBackend('local', `${projectRoot}/.reygent/chesstrace.db`);
 
     // Global backend opt-out for security (prevent cross-project data leakage)
     this.globalEnabled = process.env.REYGENT_GLOBAL_TELEMETRY !== 'false';

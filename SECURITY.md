@@ -47,7 +47,7 @@ After:  "API key [REDACTED_TOKEN] invalid"
 export REYGENT_GLOBAL_TELEMETRY=false
 ```
 
-When disabled, only local `.reygent/telemetry.db` used (no cross-project data).
+When disabled, only local `.reygent/chesstrace.db` used (no cross-project data).
 
 ### Database Size Limits
 

@@ -78,8 +78,8 @@ All error messages automatically sanitized before storage to remove:
 
 *Cross-project isolation:*
 By default, telemetry writes to BOTH:
-- Local: `.reygent/telemetry.db` (project-specific)
-- Global: `~/.reygent/telemetry.db` (aggregate across all projects)
+- Local: `.reygent/chesstrace.db` (project-specific)
+- Global: `~/.reygent/chesstrace.db` (aggregate across all projects)
 
 **Warning:** Global DB contains data from all projects. If you work on private and public repos, consider disabling global telemetry to prevent cross-project data leakage.
 
@@ -140,7 +140,7 @@ export REYGENT_GLOBAL_TELEMETRY=false
 export REYGENT_DEBUG=telemetry       # Telemetry events
 
 # Custom DB location
-export REYGENT_TELEMETRY_DB=/custom/path/telemetry.db
+export REYGENT_TELEMETRY_DB=/custom/path/chesstrace.db
 ```
 
 ## Telemetry Internals
