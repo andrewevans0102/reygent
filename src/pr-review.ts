@@ -7,71 +7,14 @@ import { extractJSON } from "./planner.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
 import type { UsageInfo } from "./usage.js";
-import {
-  estimateTokens,
-  MAX_DIFF_TOKENS,
-  splitDiffByFile,
-} from "./diff-split.js";
 
-export function buildPRReviewPrompt(
+function buildPRReviewPrompt(
   systemPrompt: string,
   context: TaskContext,
   diff: string,
-  summaryOnly = false,
 ): string {
   const goals = context.plan?.goals ?? [];
   const tasks = context.plan?.tasks ?? [];
-
-  const instructions = summaryOnly
-    ? `## Instructions
-
-1. Review the PR diff above in the context of the spec and planner goals.
-2. Focus on high-level architecture, design patterns, and major correctness issues.
-3. Skip line-by-line nitpicks — catch big problems only.
-4. When you are finished, output a single JSON block with your review:
-
-\`\`\`json
-{
-  "summary": "High-level assessment covering architecture, design patterns, major bugs, and spec alignment",
-  "comments": [],
-  "recommendedActions": [
-    "Action item 1",
-    "Action item 2"
-  ]
-}
-\`\`\`
-
-- \`summary\` should cover architecture, design decisions, major bugs, and whether the implementation meets the spec.
-- \`comments\` should be empty (summary-only mode).
-- \`recommendedActions\` is a list of high-level follow-up actions.
-- Do NOT output any text after the JSON block.`
-    : `## Instructions
-
-1. Review the PR diff above in the context of the spec and planner goals.
-2. Check for correctness, potential bugs, style issues, and whether the implementation meets the spec.
-3. When you are finished, output a single JSON block with your review:
-
-\`\`\`json
-{
-  "summary": "Brief overall assessment of the PR",
-  "comments": [
-    {
-      "file": "src/example.ts",
-      "line": 42,
-      "comment": "Description of the issue or suggestion"
-    }
-  ],
-  "recommendedActions": [
-    "Action item 1",
-    "Action item 2"
-  ]
-}
-\`\`\`
-
-- \`summary\` is a brief overall assessment of the PR.
-- \`comments\` is an array of inline review comments. \`line\` may be null if the comment applies to the whole file.
-- \`recommendedActions\` is a list of suggested follow-up actions.
-- Do NOT output any text after the JSON block.`;
 
   return `${systemPrompt}
 
@@ -103,7 +46,33 @@ ${diff}
 
 ---
 
-${instructions}`;
+## Instructions
+
+1. Review the PR diff above in the context of the spec and planner goals.
+2. Check for correctness, potential bugs, style issues, and whether the implementation meets the spec.
+3. When you are finished, output a single JSON block with your review:
+
+\`\`\`json
+{
+  "summary": "Brief overall assessment of the PR",
+  "comments": [
+    {
+      "file": "src/example.ts",
+      "line": 42,
+      "comment": "Description of the issue or suggestion"
+    }
+  ],
+  "recommendedActions": [
+    "Action item 1",
+    "Action item 2"
+  ]
+}
+\`\`\`
+
+- \`summary\` is a brief overall assessment of the PR.
+- \`comments\` is an array of inline review comments. \`line\` may be null if the comment applies to the whole file.
+- \`recommendedActions\` is a list of suggested follow-up actions.
+- Do NOT output any text after the JSON block.`;
 }
 
 export function extractPRReviewOutput(stdout: string): PRReviewOutput {
@@ -345,53 +314,16 @@ export async function runPRReview(
   }
 
   const diff = await getDiff(prNumber);
+  const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff);
+  const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model });
 
-  // Check if diff is too large
-  const tokens = estimateTokens(diff);
-  const isTooLarge = tokens > MAX_DIFF_TOKENS;
-
-  let output: PRReviewOutput;
-
-  if (isTooLarge) {
-    const fileDiffs = splitDiffByFile(diff);
-
-    console.log();
-    console.log(chalk.yellow.bold("⚠ Large diff detected"));
-    console.log(chalk.gray(`  Estimated tokens: ${tokens.toLocaleString()} (threshold: ${MAX_DIFF_TOKENS.toLocaleString()})`));
-    console.log(chalk.gray(`  Files changed: ${fileDiffs.length}`));
-    console.log();
-    console.log(chalk.blue("Running summary-only review (architecture/design/major issues only)..."));
-    console.log();
-
-    const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff, true);
-    const result = await spawnAgent("pr-review", prompt, {
-      ...options,
-      quiet: true,
-      provider: agent.provider,
-      model: agent.model
-    });
-
-    if (result.exitCode !== 0) {
-      throw new TaskError(
-        `pr-review: agent exited with code ${result.exitCode}`,
-      );
-    }
-
-    output = extractPRReviewOutput(result.stdout);
-  } else {
-    const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff, false);
-    const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model });
-
-    if (result.exitCode !== 0) {
-      throw new TaskError(
-        `pr-review: agent exited with code ${result.exitCode}`,
-      );
-    }
-
-    output = extractPRReviewOutput(result.stdout);
+  if (result.exitCode !== 0) {
+    throw new TaskError(
+      `pr-review: agent exited with code ${result.exitCode}`,
+    );
   }
 
-  return { output, usage: undefined };
+  return { output: extractPRReviewOutput(result.stdout), usage: result.usage };
 }
 
 /**

@@ -5,8 +5,8 @@ vi.mock("./config.js", () => ({ getAgents: vi.fn(() => []) }));
 vi.mock("./spawn.js", () => ({ spawnAgentStream: vi.fn() }));
 vi.mock("./implement.js", () => ({ spawnAgent: vi.fn() }));
 
-import { extractPRReviewOutput, formatPRReviewOutput, buildPRReviewPrompt } from "./pr-review.js";
-import type { PRReviewOutput, TaskContext } from "./task.js";
+import { extractPRReviewOutput, formatPRReviewOutput } from "./pr-review.js";
+import type { PRReviewOutput } from "./task.js";
 
 describe("extractPRReviewOutput", () => {
   it("extracts valid review JSON", () => {
@@ -160,72 +160,5 @@ describe("formatPRReviewOutput", () => {
     const result = formatPRReviewOutput(output);
     expect(result).toContain("c.ts: whole file");
     expect(result).not.toContain("c.ts:null");
-  });
-});
-
-describe("buildPRReviewPrompt", () => {
-  const mockContext: TaskContext = {
-    spec: {
-      title: "Test feature",
-      content: "Add new feature",
-    },
-    plan: {
-      goals: ["Implement feature"],
-      tasks: ["Write code", "Add tests"],
-    },
-  };
-
-  const systemPrompt = "You are a code reviewer.";
-  const diff = "diff --git a/test.ts b/test.ts\n+console.log('test');";
-
-  it("generates normal review prompt by default", () => {
-    const prompt = buildPRReviewPrompt(systemPrompt, mockContext, diff);
-    expect(prompt).toContain("You are a code reviewer.");
-    expect(prompt).toContain("Test feature");
-    expect(prompt).toContain("Implement feature");
-    expect(prompt).toContain("console.log('test')");
-    expect(prompt).toContain('"comments": [');
-    expect(prompt).toContain('"file": "src/example.ts"');
-    expect(prompt).not.toContain("summary-only mode");
-  });
-
-  it("generates summary-only prompt when summaryOnly=true", () => {
-    const prompt = buildPRReviewPrompt(systemPrompt, mockContext, diff, true);
-    expect(prompt).toContain("You are a code reviewer.");
-    expect(prompt).toContain("Test feature");
-    expect(prompt).toContain("High-level assessment covering architecture");
-    expect(prompt).toContain('"comments": []');
-    expect(prompt).toContain("summary-only mode");
-    expect(prompt).toContain("Skip line-by-line nitpicks");
-    expect(prompt).not.toContain('"file": "src/example.ts"');
-  });
-
-  it("includes spec and plan in both modes", () => {
-    const normal = buildPRReviewPrompt(systemPrompt, mockContext, diff, false);
-    const summary = buildPRReviewPrompt(systemPrompt, mockContext, diff, true);
-
-    for (const prompt of [normal, summary]) {
-      expect(prompt).toContain("## Spec");
-      expect(prompt).toContain("**Title:** Test feature");
-      expect(prompt).toContain("Add new feature");
-      expect(prompt).toContain("## Planner Output");
-      expect(prompt).toContain("Implement feature");
-      expect(prompt).toContain("Write code");
-    }
-  });
-
-  it("handles empty goals and tasks", () => {
-    const emptyContext: TaskContext = {
-      spec: {
-        title: "Simple",
-        content: "Content",
-      },
-    };
-
-    const prompt = buildPRReviewPrompt(systemPrompt, emptyContext, diff);
-    expect(prompt).toContain("**Goals:**");
-    expect(prompt).toContain("- (none)");
-    expect(prompt).toContain("**Tasks:**");
-    expect(prompt).toContain("- (none)");
   });
 });
