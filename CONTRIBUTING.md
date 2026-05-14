@@ -109,15 +109,46 @@ BREAKING CHANGE: Node 22 is now the minimum required version.
 
 Breaking changes trigger a major version bump.
 
+### Scopes
+
+Scopes are **optional** but recommended to add context about which part of the codebase your change affects. Use lowercase, kebab-case identifiers:
+
+**When to use a scope:**
+- Changes affect a specific module, subsystem, or feature area
+- You want to clarify which component is being modified
+- The commit type alone doesn't provide enough context
+
+**Scope naming conventions:**
+- Use kebab-case (lowercase with hyphens): `feat(user-auth):` not `feat(UserAuth):`
+- Be specific but concise: `feat(cli):` not `feat(command-line-interface):`
+- Common scopes in Reygent:
+  - `cli` — CLI command and argument parsing
+  - `agents` — Agent configuration and spawning
+  - `providers` — LLM provider integration (claude, gemini, etc.)
+  - `telemetry` — Chesstrace and telemetry system
+  - `knowledge` — Knowledge base and learning system
+  - `config` — Configuration loading and resolution
+  - `gates` — Test gates and validation
+  - `security` — Security review and validation
+  - `pr` — Pull request creation and review
+
+**When NOT to use a scope:**
+- Changes are global or affect multiple areas (just use the type)
+- The commit is already clear without it (e.g., `docs: update README`)
+
 ### Examples
 
 Good commit messages:
 ```
 feat: add gemini provider support
+feat(providers): add gemini provider support
 fix: resolve token counting error in claude provider
+fix(providers): resolve token counting error in claude provider
 docs: update CONTRIBUTING with conventional commit examples
 refactor: extract branch type detection to separate module
+refactor(cli): extract branch type detection to separate module
 test: add unit tests for config loader
+test(config): add unit tests for config loader
 chore: upgrade typescript to v6
 ```
 

@@ -22,7 +22,8 @@ export type TelemetryCategory =
   | 'usage'
   | 'gate'
   | 'tool'
-  | 'knowledge';
+  | 'knowledge'
+  | 'review';
 
 /**
  * Core telemetry event interface
@@ -119,6 +120,10 @@ export const Events = {
   KNOWLEDGE_PREVENTED_FAILURE: 'knowledge.prevented_failure',
   /** Emitted when knowledge-based run succeeds - { entries_used, agent, stage } (standard level) */
   KNOWLEDGE_SUCCESS: 'knowledge.success',
+
+  // Review events (standard level)
+  /** Emitted when diff budget applied - { filesIncluded, filesExcluded, tokensUsed, tokensAvailable, excludedFilesList } */
+  REVIEW_DIFF_BUDGET: 'review.diff_budget',
 } as const;
 
 /**
@@ -189,6 +194,9 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   [Events.KNOWLEDGE_CONSULTED]: TelemetryLevel.standard,
   [Events.KNOWLEDGE_PREVENTED_FAILURE]: TelemetryLevel.minimal,
   [Events.KNOWLEDGE_SUCCESS]: TelemetryLevel.standard,
+
+  // Review events
+  [Events.REVIEW_DIFF_BUDGET]: TelemetryLevel.standard,
 };
 
 /**
@@ -213,6 +221,7 @@ export function categoryFromEvent(event: string): TelemetryCategory {
     'gate',
     'tool',
     'knowledge',
+    'review',
   ];
 
   if (validCategories.includes(category as TelemetryCategory)) {

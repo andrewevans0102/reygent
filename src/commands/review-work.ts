@@ -26,7 +26,10 @@ import {
   selectDiffsWithinBudget,
   estimateTokens,
   MAX_REVIEW_TOKENS,
+  RESERVED_PROMPT_TOKENS,
 } from "../diff-split.js";
+import { getChesstrace } from "../chesstrace/index.js";
+import { Events } from "../chesstrace/events.js";
 
 interface ReviewWorkOptions {
   spec?: string;
@@ -299,7 +302,7 @@ ${f.diff}
 
   if (input.excludedFiles.length > 0) {
     prompt += `
-### Files not shown (too large for context)
+### Files not shown (${input.excludedFiles.length} excluded due to size)
 
 ${input.excludedFiles.map((f) => `- ${f}`).join("\n")}
 `;
@@ -364,8 +367,39 @@ async function runAgentReview(
 
   // Split diff by file and select within budget
   const fileDiffs = splitDiffByFile(diff);
-  const reservedTokens = estimateTokens(agent.systemPrompt) + estimateTokens(stat) + estimateTokens(log) + 2000; // 2k for prompt chrome
+  const reservedTokens = estimateTokens(agent.systemPrompt) + estimateTokens(stat) + estimateTokens(log) + RESERVED_PROMPT_TOKENS;
   const { included, excluded } = selectDiffsWithinBudget(fileDiffs, MAX_REVIEW_TOKENS, reservedTokens);
+
+  // Debug logging and telemetry for diff budget decisions
+  const totalDiffTokens = included.reduce((sum, f) => sum + f.tokens, 0);
+  const excludedTokens = fileDiffs.filter(f => excluded.includes(f.file)).reduce((sum, f) => sum + f.tokens, 0);
+  const availableTokens = MAX_REVIEW_TOKENS - reservedTokens;
+
+  if (isDebug()) {
+    console.log(
+      `[DEBUG] Diff budget: ${totalDiffTokens}/${availableTokens} tokens used ` +
+      `(${included.length}/${fileDiffs.length} files included, ${excluded.length} excluded for ${excludedTokens} tokens)`
+    );
+    if (excluded.length > 0) {
+      console.log(`[DEBUG] Excluded files: ${excluded.join(", ")}`);
+    }
+  }
+
+  // Emit telemetry event
+  const chesstrace = getChesstrace();
+  if (chesstrace) {
+    try {
+      chesstrace.emit(Events.REVIEW_DIFF_BUDGET, {
+        filesIncluded: included.length,
+        filesExcluded: excluded.length,
+        tokensUsed: totalDiffTokens,
+        tokensAvailable: availableTokens,
+        excludedFilesList: excluded,
+      });
+    } catch {
+      // Swallow emit errors
+    }
+  }
 
   const prompt = buildReviewPrompt(agent.systemPrompt, {
     stat: stat.trim(),

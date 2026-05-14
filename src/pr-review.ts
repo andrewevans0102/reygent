@@ -313,7 +313,10 @@ async function getPRDiffStat(prNumber: number): Promise<string> {
       "pr", "view", String(prNumber), "--json", "baseRefName", "--jq", ".baseRefName",
     ])).trim();
     return (await exec("git", ["diff", "--stat", `origin/${baseBranch}...HEAD`])).trim();
-  } catch {
+  } catch (err) {
+    if (process.env.DEBUG) {
+      console.warn("getPRDiffStat failed:", err instanceof Error ? err.message : String(err));
+    }
     return "";
   }
 }
@@ -325,7 +328,10 @@ async function getPRCommitLog(prNumber: number): Promise<string> {
       "pr", "view", String(prNumber), "--json", "baseRefName", "--jq", ".baseRefName",
     ])).trim();
     return (await exec("git", ["log", `origin/${baseBranch}..HEAD`, "--oneline"])).trim();
-  } catch {
+  } catch (err) {
+    if (process.env.DEBUG) {
+      console.warn("getPRCommitLog failed:", err instanceof Error ? err.message : String(err));
+    }
     return "";
   }
 }

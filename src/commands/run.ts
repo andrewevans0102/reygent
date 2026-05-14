@@ -32,7 +32,7 @@ import { findProjectRoot } from "../project-detection.js";
 import { DualBackend } from "../chesstrace/backends/dual.js";
 import { existsSync, mkdirSync } from "node:fs";
 import { isTestEnvironment } from "../test-env.js";
-import { killAllChildrenProcesses } from "../child-registry.js";
+import { promptForRetry } from "../retry-prompt.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -282,74 +282,17 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     attempt++;
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
 
-    // Check if exceeded max retries
-    if (attempt > maxRetries) {
-      const isTest = isTestEnvironment();
-
-      // In test/non-interactive mode, or when no retries configured, throw immediately
-      if (isTest || !process.stdin.isTTY || maxRetries === 0) {
-        const chesstrace = getChesstrace();
-        if (chesstrace) {
-          try {
-            chesstrace.emit(Events.ERROR_TASK, {
-              type: "TaskError",
-              message: `${gateName} failed after ${maxRetries} retries`,
-              stage: stageName,
-              agent: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
-            });
-          } catch {
-            // Swallow emit errors
-          }
-        }
-        throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
-      }
-
-      // Interactive mode with retries configured: prompt user to continue
-      resetTerminalForInput();
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      const answer = await new Promise<string>((resolve) => {
-        rl.question(
-          chalk.yellow(`\n${gateName} failed after ${maxRetries} retries. Continue retrying? (y/n) `),
-          resolve,
-        );
-      });
-      rl.close();
-      if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
-        const chesstrace = getChesstrace();
-        if (chesstrace) {
-          try {
-            chesstrace.emit(Events.ERROR_TASK, {
-              type: "TaskError",
-              message: `${gateName} failed after ${maxRetries} retries`,
-              stage: stageName,
-              agent: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
-            });
-          } catch {
-            // Swallow emit errors
-          }
-        }
-        throw new TaskError(`${gateName} failed - user declined to retry after ${maxRetries} attempts`);
-      }
-      console.log(chalk.blue("\nContinuing retries...\n"));
-    } else if (!autoApprove) {
-      // Not exceeded max yet, prompt if not auto-approved
-      resetTerminalForInput();
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      const attemptInfo = maxRetries > 0
-        ? `(attempt ${attempt}/${maxRetries})`
-        : `(attempt ${attempt})`;
-      const answer = await new Promise<string>((resolve) => {
-        rl.question(
-          chalk.yellow(`\n${gateName} failed. Retry with failure context? ${attemptInfo} (y/n) `),
-          resolve,
-        );
-      });
-      rl.close();
-      if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
-        console.log(chalk.red("Aborted by user."));
-        process.exit(1);
-      }
-    }
+    // Check if exceeded max retries or prompt user
+    await promptForRetry({
+      taskName: gateName,
+      attempt,
+      maxRetries,
+      autoApprove,
+      telemetry: {
+        stageName,
+        agentName: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
+      },
+    });
 
     // Emit gate.retry telemetry after user approves
     const chesstrace = getChesstrace();
@@ -915,74 +858,17 @@ export async function runCommand(options: RunOptions): Promise<void> {
             !qeSuccess ? "qe" : null,
           ].filter(Boolean).join(", ");
 
-          // Check if exceeded max retries
-          if (attempt > maxRetries) {
-            const isTest = isTestEnvironment();
-
-            // In test/non-interactive mode, or when no retries configured, throw immediately
-            if (isTest || !process.stdin.isTTY || maxRetries === 0) {
-              if (chesstrace) {
-                try {
-                  chesstrace.emit(Events.ERROR_TASK, {
-                    type: "TaskError",
-                    message: `Implement failed after ${maxRetries} retries`,
-                    stage: stage.name,
-                    agent: !devSuccess ? "dev" : "qe",
-                  });
-                } catch {
-                  // Swallow emit errors
-                }
-              }
-              const failedAgent = !devSuccess ? "dev" : "qe";
-              throw new TaskError(`Implement: ${failedAgent} agent failed after ${maxRetries} retries`);
-            }
-
-            // Interactive mode with retries configured: prompt user to continue
-            resetTerminalForInput();
-            const rl = createInterface({ input: process.stdin, output: process.stdout });
-            const answer = await new Promise<string>((resolve) => {
-              rl.question(
-                chalk.yellow(`\n${failedAgents} agent(s) failed after ${maxRetries} retries. Continue retrying? (y/n) `),
-                resolve,
-              );
-            });
-            rl.close();
-            if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
-              if (chesstrace) {
-                try {
-                  chesstrace.emit(Events.ERROR_TASK, {
-                    type: "TaskError",
-                    message: `Implement failed after ${maxRetries} retries`,
-                    stage: stage.name,
-                    agent: !devSuccess ? "dev" : "qe",
-                  });
-                } catch {
-                  // Swallow emit errors
-                }
-              }
-              const failedAgent = !devSuccess ? "dev" : "qe";
-              throw new TaskError(`Implement: ${failedAgent} agent failed - user declined to retry after ${maxRetries} attempts`);
-            }
-            console.log(chalk.blue("\nContinuing retries...\n"));
-          } else if (!autoApprove) {
-            // Not exceeded max yet, prompt if not auto-approved
-            resetTerminalForInput();
-            const rl = createInterface({ input: process.stdin, output: process.stdout });
-            const attemptInfo = maxRetries > 0
-              ? `(attempt ${attempt}/${maxRetries})`
-              : `(attempt ${attempt})`;
-            const answer = await new Promise<string>((resolve) => {
-              rl.question(
-                chalk.yellow(`\n${failedAgents} agent(s) failed. Retry? ${attemptInfo} (y/n) `),
-                resolve,
-              );
-            });
-            rl.close();
-            if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
-              console.log(chalk.red("Aborted by user."));
-              process.exit(1);
-            }
-          }
+          // Check if exceeded max retries or prompt user
+          await promptForRetry({
+            taskName: `${failedAgents} agent(s)`,
+            attempt,
+            maxRetries,
+            autoApprove,
+            telemetry: {
+              stageName: stage.name,
+              agentName: !devSuccess ? "dev" : "qe",
+            },
+          });
 
           // Determine which agents to retry
           const agentsToRetry: Array<"dev" | "qe"> = [];
@@ -1488,12 +1374,6 @@ export async function runCommand(options: RunOptions): Promise<void> {
     // We check runtime environment variables (NODE_ENV, VITEST) rather than import.meta.env
     // because test runners set these at runtime, not during bundling. See src/test-env.ts.
     const isTest = isTestEnvironment();
-
-    // Kill all child processes before exiting to prevent orphaned vitest instances
-    // In test mode, process.exit() never fires, so we must cleanup explicitly
-    if (isTest) {
-      killAllChildrenProcesses();
-    }
 
     if (err instanceof Error && err.name === "ExitPromptError") {
       if (isTest) throw err;

@@ -443,4 +443,89 @@ describe("Commitlint validation", () => {
       expect(msg).toContain(";");
     });
   });
+
+  describe("Commitlint CLI end-to-end validation", () => {
+    it("commitlint CLI accepts valid conventional commit", () => {
+      const validMsg = "feat: add new feature";
+      const result = spawnSync(
+        "npx",
+        ["commitlint"],
+        {
+          input: validMsg,
+          encoding: "utf-8",
+          cwd: ROOT,
+          shell: true,
+        }
+      );
+
+      // Exit code 0 = valid commit message
+      expect(result.status).toBe(0);
+    });
+
+    it("commitlint CLI rejects invalid conventional commit", () => {
+      const invalidMsg = "Add new feature";
+      const result = spawnSync(
+        "npx",
+        ["commitlint"],
+        {
+          input: invalidMsg,
+          encoding: "utf-8",
+          cwd: ROOT,
+          shell: true,
+        }
+      );
+
+      // Exit code non-zero = invalid commit message
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("subject may not be empty");
+    });
+
+    it("commitlint CLI validates commit with scope", () => {
+      const validMsg = "fix(auth): resolve login issue";
+      const result = spawnSync(
+        "npx",
+        ["commitlint"],
+        {
+          input: validMsg,
+          encoding: "utf-8",
+          cwd: ROOT,
+          shell: true,
+        }
+      );
+
+      expect(result.status).toBe(0);
+    });
+
+    it("commitlint CLI validates breaking change", () => {
+      const validMsg = "feat!: breaking API change";
+      const result = spawnSync(
+        "npx",
+        ["commitlint"],
+        {
+          input: validMsg,
+          encoding: "utf-8",
+          cwd: ROOT,
+          shell: true,
+        }
+      );
+
+      expect(result.status).toBe(0);
+    });
+
+    it("commitlint CLI rejects uppercase type", () => {
+      const invalidMsg = "FEAT: add feature";
+      const result = spawnSync(
+        "npx",
+        ["commitlint"],
+        {
+          input: invalidMsg,
+          encoding: "utf-8",
+          cwd: ROOT,
+          shell: true,
+        }
+      );
+
+      expect(result.status).not.toBe(0);
+    });
+  });
 });

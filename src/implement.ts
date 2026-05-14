@@ -18,11 +18,24 @@ import { Events } from "./chesstrace/events.js";
 
 export type { SpawnResult };
 
-/** Extract tail of agent output for error display. */
+/**
+ * Extract head and tail of agent output for error display.
+ *
+ * For long outputs, shows first 150 and last 150 characters to capture
+ * both the initial error context and the final failure message.
+ * In debug mode, full output is already printed, so this is for quick
+ * terminal feedback during normal operation.
+ */
 function getFailureSummary(stdout: string, maxLen = 300): string {
   const trimmed = stdout.trim();
   if (!trimmed) return "";
-  return trimmed.length > maxLen ? "…" + trimmed.slice(-maxLen) : trimmed;
+  if (trimmed.length <= maxLen) return trimmed;
+
+  // Show head + tail for better context
+  const halfLen = Math.floor(maxLen / 2);
+  const head = trimmed.slice(0, halfLen);
+  const tail = trimmed.slice(-halfLen);
+  return `${head}…${tail}`;
 }
 
 const AGENT_TIMEOUT_MS = 15 * 60 * 1000;

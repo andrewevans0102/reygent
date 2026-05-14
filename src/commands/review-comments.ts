@@ -24,6 +24,7 @@ import {
   selectDiffsWithinBudget,
   estimateTokens,
   MAX_REVIEW_TOKENS,
+  RESERVED_PROMPT_TOKENS,
 } from "../diff-split.js";
 import type { FileDiff } from "../diff-split.js";
 
@@ -769,8 +770,40 @@ export async function reviewCommentsCommand(
       diffSpinner.warn(chalk.yellow("No diff found against base branch"));
     } else {
       const fileDiffs = splitDiffByFile(rawDiff);
-      const reservedTokens = estimateTokens(formatCommentBlock(classified)) + 2000; // comments + prompt chrome
+      const reservedTokens = estimateTokens(formatCommentBlock(classified)) + RESERVED_PROMPT_TOKENS;
       ({ included: includedDiffs, excluded: excludedFiles } = selectDiffsWithinBudget(fileDiffs, MAX_REVIEW_TOKENS, reservedTokens));
+
+      // Debug logging and telemetry for diff budget decisions
+      const totalDiffTokens = includedDiffs.reduce((sum, f) => sum + f.tokens, 0);
+      const excludedTokens = fileDiffs.filter(f => excludedFiles.includes(f.file)).reduce((sum, f) => sum + f.tokens, 0);
+      const availableTokens = MAX_REVIEW_TOKENS - reservedTokens;
+
+      if (isDebug()) {
+        console.log(
+          `[DEBUG] Diff budget: ${totalDiffTokens}/${availableTokens} tokens used ` +
+          `(${includedDiffs.length}/${fileDiffs.length} files included, ${excludedFiles.length} excluded for ${excludedTokens} tokens)`
+        );
+        if (excludedFiles.length > 0) {
+          console.log(`[DEBUG] Excluded files: ${excludedFiles.join(", ")}`);
+        }
+      }
+
+      // Emit telemetry event
+      const chesstrace = getChesstrace();
+      if (chesstrace) {
+        try {
+          chesstrace.emit(Events.REVIEW_DIFF_BUDGET, {
+            filesIncluded: includedDiffs.length,
+            filesExcluded: excludedFiles.length,
+            tokensUsed: totalDiffTokens,
+            tokensAvailable: availableTokens,
+            excludedFilesList: excludedFiles,
+          });
+        } catch {
+          // Swallow emit errors
+        }
+      }
+
       if (excludedFiles.length > 0) {
         diffSpinner.succeed(chalk.green(`Diff loaded (${includedDiffs.length} files included, ${excludedFiles.length} excluded for size)`));
       } else {

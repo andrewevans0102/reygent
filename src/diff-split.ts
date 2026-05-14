@@ -12,13 +12,56 @@ export interface FileDiff {
   tokens: number;
 }
 
-/** Approximate tokens — ~4 chars per token */
+/**
+ * Approximate tokens — ~4 chars per token.
+ *
+ * This is a rough average that works across most content types but can vary
+ * significantly depending on the text characteristics:
+ * - Code with many identifiers/keywords may be closer to 3 chars/token
+ * - Prose or repetitive patterns may be closer to 5 chars/token
+ * - This estimation is intentionally conservative for budget calculations
+ *
+ * If budget decisions consistently exclude too many or too few files,
+ * tune this ratio based on telemetry feedback and actual provider tokenization.
+ */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** Safe context budget across all providers */
+/**
+ * Safe context budget across all providers (80k tokens).
+ *
+ * This conservative limit ensures reviews work reliably across all supported
+ * providers while leaving headroom for:
+ * - Prompt instructions and templates (~2-3k tokens)
+ * - Review comment formatting and metadata (~1-2k tokens)
+ * - Provider response generation (reviews can be lengthy)
+ *
+ * Provider-specific context windows:
+ * - Claude Opus 4.6: 200k tokens
+ * - Claude Sonnet 3.5: 200k tokens
+ * - Gemini 2.0 Flash: 1M tokens
+ * - GPT-4 Turbo: 128k tokens
+ *
+ * The 80k limit is set well below the smallest provider window (GPT-4 Turbo)
+ * to ensure consistent behavior. For very large PRs (100+ files, 10k+ lines),
+ * consider splitting into multiple focused reviews or increasing this constant
+ * after validating against real-world telemetry data.
+ */
 export const MAX_REVIEW_TOKENS = 80_000;
+
+/**
+ * Reserved token overhead for prompt templates and formatting.
+ *
+ * This accounts for:
+ * - Review prompt instructions and structure (~1k tokens)
+ * - Comment formatting and metadata (~500-1k tokens)
+ * - Headroom for prompt template expansion (~500 tokens)
+ *
+ * If prompt templates grow significantly, increase this value or calculate
+ * dynamically from actual prompt size.
+ */
+export const RESERVED_PROMPT_TOKENS = 2_000;
 
 /**
  * Split a unified diff into per-file chunks.
