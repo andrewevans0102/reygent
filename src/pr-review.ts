@@ -7,16 +7,29 @@ import { extractJSON } from "./planner.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
 import type { UsageInfo } from "./usage.js";
+import {
+  splitDiffByFile,
+  selectDiffsWithinBudget,
+  estimateTokens,
+  MAX_REVIEW_TOKENS,
+} from "./diff-split.js";
+
+interface PRReviewPromptInput {
+  stat: string;
+  log: string;
+  includedDiffs: { file: string; diff: string }[];
+  excludedFiles: string[];
+}
 
 function buildPRReviewPrompt(
   systemPrompt: string,
   context: TaskContext,
-  diff: string,
+  input: PRReviewPromptInput,
 ): string {
   const goals = context.plan?.goals ?? [];
   const tasks = context.plan?.tasks ?? [];
 
-  return `${systemPrompt}
+  let prompt = `${systemPrompt}
 
 ---
 
@@ -38,19 +51,53 @@ ${tasks.length > 0 ? tasks.map((t) => `- ${t}`).join("\n") : "- (none)"}
 
 ---
 
-## PR Diff
+## Branch Summary
 
-\`\`\`diff
-${diff}
+### Changed Files
+
 \`\`\`
+${input.stat}
+\`\`\`
+
+### Commits
+
+\`\`\`
+${input.log}
+\`\`\``;
+
+  if (input.includedDiffs.length > 0) {
+    prompt += `
+
+## File Diffs
+
+`;
+    for (const f of input.includedDiffs) {
+      prompt += `\`\`\`diff
+${f.diff}
+\`\`\`
+
+`;
+    }
+  }
+
+  if (input.excludedFiles.length > 0) {
+    prompt += `
+### Files not shown (too large for context)
+
+${input.excludedFiles.map((f) => `- ${f}`).join("\n")}
+`;
+  }
+
+  prompt += `
 
 ---
 
 ## Instructions
 
-1. Review the PR diff above in the context of the spec and planner goals.
+1. Review the changes above in the context of the spec and planner goals.
 2. Check for correctness, potential bugs, style issues, and whether the implementation meets the spec.
-3. When you are finished, output a single JSON block with your review:
+3. For files not shown, note any concerns based on the stat summary and commit messages.
+4. When you are finished, output a single JSON block with your review:
 
 \`\`\`json
 {
@@ -73,6 +120,8 @@ ${diff}
 - \`comments\` is an array of inline review comments. \`line\` may be null if the comment applies to the whole file.
 - \`recommendedActions\` is a list of suggested follow-up actions.
 - Do NOT output any text after the JSON block.`;
+
+  return prompt;
 }
 
 export function extractPRReviewOutput(stdout: string): PRReviewOutput {
@@ -257,6 +306,30 @@ function getDiff(prNumber: number): Promise<string> {
   return exec("gh", ["pr", "diff", String(prNumber)]);
 }
 
+/** Get diff stat for a PR by diffing against the PR base branch */
+async function getPRDiffStat(prNumber: number): Promise<string> {
+  try {
+    const baseBranch = (await exec("gh", [
+      "pr", "view", String(prNumber), "--json", "baseRefName", "--jq", ".baseRefName",
+    ])).trim();
+    return (await exec("git", ["diff", "--stat", `origin/${baseBranch}...HEAD`])).trim();
+  } catch {
+    return "";
+  }
+}
+
+/** Get commit log for a PR by logging against the PR base branch */
+async function getPRCommitLog(prNumber: number): Promise<string> {
+  try {
+    const baseBranch = (await exec("gh", [
+      "pr", "view", String(prNumber), "--json", "baseRefName", "--jq", ".baseRefName",
+    ])).trim();
+    return (await exec("git", ["log", `origin/${baseBranch}..HEAD`, "--oneline"])).trim();
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Detect PR number from current git branch via GitHub CLI.
  * Returns the PR number or throws if no PR is found.
@@ -313,8 +386,23 @@ export async function runPRReview(
     throw new TaskError("pr-review: missing pr-reviewer agent config");
   }
 
-  const diff = await getDiff(prNumber);
-  const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff);
+  const [diff, stat, log] = await Promise.all([
+    getDiff(prNumber),
+    getPRDiffStat(prNumber),
+    getPRCommitLog(prNumber),
+  ]);
+
+  // Split diff by file and select within budget
+  const fileDiffs = splitDiffByFile(diff);
+  const reservedTokens = estimateTokens(agent.systemPrompt) + estimateTokens(stat) + estimateTokens(log) + 2000;
+  const { included, excluded } = selectDiffsWithinBudget(fileDiffs, MAX_REVIEW_TOKENS, reservedTokens);
+
+  const prompt = buildPRReviewPrompt(agent.systemPrompt, context, {
+    stat,
+    log,
+    includedDiffs: included,
+    excludedFiles: excluded,
+  });
   const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model });
 
   if (result.exitCode !== 0) {

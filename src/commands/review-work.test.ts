@@ -128,8 +128,12 @@ describe("review-work --spec prefix parsing", () => {
         callback(null, "refs/remotes/origin/main\n", "");
       } else if (args?.includes("get-url")) {
         callback(null, "git@github.com:test/repo.git\n", "");
+      } else if (args?.includes("--stat")) {
+        callback(null, " src/foo.ts | 10 +++++++---\n 1 file changed, 7 insertions(+), 3 deletions(-)\n", "");
       } else if (args?.includes("diff")) {
-        callback(null, "mock diff", "");
+        callback(null, "diff --git a/src/foo.ts b/src/foo.ts\n--- a/src/foo.ts\n+++ b/src/foo.ts\n@@ -1 +1 @@\n-old\n+new\n", "");
+      } else if (args?.includes("--oneline")) {
+        callback(null, "abc1234 feat: add foo\n", "");
       } else if (args && args[0] === "pr" && args[1] === "view") {
         callback(new Error("not found"), "", "");
       } else {
