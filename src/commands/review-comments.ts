@@ -19,6 +19,13 @@ import { resetTerminalForInput } from "../terminal-reset.js";
 import { withTelemetry } from "../telemetry-lifecycle.js";
 import { getChesstrace } from "../chesstrace/index.js";
 import { Events } from "../chesstrace/events.js";
+import {
+  splitDiffByFile,
+  selectDiffsWithinBudget,
+  estimateTokens,
+  MAX_REVIEW_TOKENS,
+} from "../diff-split.js";
+import type { FileDiff } from "../diff-split.js";
 
 interface ReviewCommentsOptions {
   insecure?: boolean;
@@ -408,13 +415,25 @@ function formatCommentBlock(comments: ClassifiedComment[]): string {
 function buildPlanPrompt(
   systemPrompt: string,
   comments: ClassifiedComment[],
-  diff: string,
+  includedDiffs: FileDiff[],
+  excludedFiles: string[],
 ): string {
   const hasSecurityComments = comments.some((c) => c.isSecurity);
 
   const securityPlanInstruction = hasSecurityComments
     ? " Security-related comments are marked as priority — ensure concrete fix tasks are generated for each one. Apply secure coding practices (input validation, output encoding, least privilege, etc.) when planning fixes."
     : "";
+
+  let diffSection = "";
+  if (includedDiffs.length > 0) {
+    diffSection += `## Current Diff (branch vs base)\n\n`;
+    for (const f of includedDiffs) {
+      diffSection += `\`\`\`diff\n${f.diff}\n\`\`\`\n\n`;
+    }
+  }
+  if (excludedFiles.length > 0) {
+    diffSection += `### Files not shown (too large for context)\n\n${excludedFiles.map((f) => `- ${f}`).join("\n")}\n`;
+  }
 
   return `${systemPrompt}
 
@@ -426,12 +445,7 @@ ${formatCommentBlock(comments)}
 
 ---
 
-## Current Diff (branch vs base)
-
-\`\`\`diff
-${diff}
-\`\`\`
-
+${diffSection}
 ---
 
 ## Instructions
@@ -453,10 +467,11 @@ Each array must contain at least one non-empty string. Do not include any text o
 function buildPlanPromptWithFeedback(
   systemPrompt: string,
   comments: ClassifiedComment[],
-  diff: string,
+  includedDiffs: FileDiff[],
+  excludedFiles: string[],
   feedback: string,
 ): string {
-  const base = buildPlanPrompt(systemPrompt, comments, diff);
+  const base = buildPlanPrompt(systemPrompt, comments, includedDiffs, excludedFiles);
   return `${base}
 
 ---
@@ -470,7 +485,8 @@ ${feedback}`;
 
 async function generatePlan(
   comments: ClassifiedComment[],
-  diff: string,
+  includedDiffs: FileDiff[],
+  excludedFiles: string[],
   feedback?: string,
 ): Promise<PlannerOutput> {
   const agents = getAgents();
@@ -480,8 +496,8 @@ async function generatePlan(
   }
 
   const prompt = feedback
-    ? buildPlanPromptWithFeedback(agent.systemPrompt, comments, diff, feedback)
-    : buildPlanPrompt(agent.systemPrompt, comments, diff);
+    ? buildPlanPromptWithFeedback(agent.systemPrompt, comments, includedDiffs, excludedFiles, feedback)
+    : buildPlanPrompt(agent.systemPrompt, comments, includedDiffs, excludedFiles);
 
   const result = await spawnAgent("planner", prompt, { quiet: true, provider: agent.provider, model: agent.model });
 
@@ -744,20 +760,29 @@ export async function reviewCommentsCommand(
     console.log();
     displayCommentSummary(classified);
 
-    // 7. Get git diff for context
+    // 7. Get git diff for context (token-budgeted)
     const diffSpinner = createLiveStatus("generating diff...");
-    const diff = await exec("git", ["diff", `${defaultBranch}...HEAD`]);
-    if (!diff.trim()) {
+    const rawDiff = await exec("git", ["diff", `${defaultBranch}...HEAD`]);
+    let includedDiffs: FileDiff[] = [];
+    let excludedFiles: string[] = [];
+    if (!rawDiff.trim()) {
       diffSpinner.warn(chalk.yellow("No diff found against base branch"));
     } else {
-      diffSpinner.succeed(chalk.green("Diff loaded"));
+      const fileDiffs = splitDiffByFile(rawDiff);
+      const reservedTokens = estimateTokens(formatCommentBlock(classified)) + 2000; // comments + prompt chrome
+      ({ included: includedDiffs, excluded: excludedFiles } = selectDiffsWithinBudget(fileDiffs, MAX_REVIEW_TOKENS, reservedTokens));
+      if (excludedFiles.length > 0) {
+        diffSpinner.succeed(chalk.green(`Diff loaded (${includedDiffs.length} files included, ${excludedFiles.length} excluded for size)`));
+      } else {
+        diffSpinner.succeed(chalk.green("Diff loaded"));
+      }
     }
 
     // 8. Generate plan
     let plan: PlannerOutput;
     {
       const planSpinner = createLiveStatus("generating plan...");
-      plan = await generatePlan(classified, diff);
+      plan = await generatePlan(classified, includedDiffs, excludedFiles);
       planSpinner.succeed(chalk.green("Plan generated"));
     }
 
@@ -789,7 +814,7 @@ export async function reviewCommentsCommand(
           });
           if (feedback.trim()) {
             const planSpinner = createLiveStatus("regenerating plan...");
-            plan = await generatePlan(classified, diff, feedback);
+            plan = await generatePlan(classified, includedDiffs, excludedFiles, feedback);
             planSpinner.succeed(chalk.green("Plan regenerated"));
             displayPlan(plan);
           }
