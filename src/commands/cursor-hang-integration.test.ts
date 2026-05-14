@@ -69,10 +69,10 @@ describe("Interactive command cursor hang prevention", () => {
       const sourcePath = join(__dirname, "run.ts");
       const sourceCode = readFileSync(sourcePath, "utf-8");
 
-      // Multiple calls expected in run.ts (permission, clarification, retry, security, planner questions, pr-create)
+      // Multiple calls expected in run.ts (permission, clarification, implement retry, gate retry, security, planner questions, pr-create)
       const matches = sourceCode.match(/resetTerminalForInput/g);
       expect(matches).toBeDefined();
-      expect(matches!.length).toBe(12);
+      expect(matches!.length).toBe(11);
     });
   });
 

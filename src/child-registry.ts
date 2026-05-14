@@ -1,19 +1,19 @@
 import type { ChildProcess } from "node:child_process";
 
-const activeChildren = new Set<ChildProcess>();
+const activeChildProcesses = new Set<ChildProcess>();
 
-export function registerChild(child: ChildProcess): void {
-  activeChildren.add(child);
+export function registerChildProcess(child: ChildProcess): void {
+  activeChildProcesses.add(child);
   child.on("close", () => {
-    activeChildren.delete(child);
+    activeChildProcesses.delete(child);
   });
   child.on("error", () => {
-    activeChildren.delete(child);
+    activeChildProcesses.delete(child);
   });
 }
 
-export function killAllChildren(): void {
-  for (const child of activeChildren) {
+export function killAllChildrenProcesses(): void {
+  for (const child of activeChildProcesses) {
     try {
       // Kill entire process group to catch spawned descendants (e.g., vitest)
       if (child.pid && process.platform !== "win32") {
@@ -25,21 +25,21 @@ export function killAllChildren(): void {
       // Already dead — ignore
     }
   }
-  activeChildren.clear();
+  activeChildProcesses.clear();
 }
 
-// Kill orphaned children on any exit path
+// Kill orphaned child processes on any exit path
 process.on("exit", () => {
-  killAllChildren();
+  killAllChildrenProcesses();
 });
 
 // Handle SIGINT (Ctrl+C) and SIGTERM
 process.on("SIGINT", () => {
-  killAllChildren();
+  killAllChildrenProcesses();
   process.exit(130); // Standard exit code for SIGINT
 });
 
 process.on("SIGTERM", () => {
-  killAllChildren();
+  killAllChildrenProcesses();
   process.exit(143); // Standard exit code for SIGTERM
 });

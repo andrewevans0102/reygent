@@ -4,6 +4,8 @@ import chalk from "chalk";
 import { isLinearUrl, extractLinearId, readLinearSpec } from "./linear.js";
 import { readJiraSpec } from "./jira.js";
 import { loadEnvFile } from "./env.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 export interface MarkdownSpecPayload {
   source: "markdown";
@@ -82,52 +84,60 @@ export function readSpec(filePath: string): MarkdownSpecPayload {
 export const ISSUE_KEY_PATTERN = /^[A-Z]+-\d+$/;
 
 export async function loadSpec(source: string, provider?: SpecProvider): Promise<SpecPayload> {
-  // When provider is explicitly set, route directly
-  if (provider === "local") {
-    return readSpec(source);
-  }
-  if (provider === "linear") {
-    loadEnvFile();
-    if (isLinearUrl(source)) {
+  const trace = getChesstrace();
+  try { trace.emit(Events.SPEC_FETCH, { source, provider: provider ?? 'auto' }); } catch { /* swallow */ }
+
+  try {
+    let result: SpecPayload;
+
+    // When provider is explicitly set, route directly
+    if (provider === "local") {
+      result = readSpec(source);
+    } else if (provider === "linear") {
+      loadEnvFile();
+      if (isLinearUrl(source)) {
+        const issueId = extractLinearId(source);
+        result = readLinearSpec(issueId);
+      } else {
+        result = await readLinearSpec(source);
+      }
+    } else if (provider === "jira") {
+      loadEnvFile();
+      result = await readJiraSpec(source);
+    } else if (isLinearUrl(source)) {
+      // Legacy auto-detection when no provider specified (used by other commands)
+      loadEnvFile();
       const issueId = extractLinearId(source);
-      return readLinearSpec(issueId);
+      result = await readLinearSpec(issueId);
+    } else if (ISSUE_KEY_PATTERN.test(source)) {
+      loadEnvFile();
+      const hasLinear = !!process.env.LINEAR_API_KEY;
+      const hasJira = !!(process.env.JIRA_URL && process.env.JIRA_EMAIL && process.env.JIRA_API_TOKEN);
+
+      if (hasLinear && !hasJira) {
+        result = await readLinearSpec(source);
+      } else if (hasJira) {
+        result = await readJiraSpec(source);
+      } else {
+        throw new SpecError(
+          `No issue tracker configured for "${source}".\n\n` +
+            `Add one of the following to your .env file:\n\n` +
+            `  For Linear:\n` +
+            `    LINEAR_API_KEY=lin_api_...\n\n` +
+            `  For Jira:\n` +
+            `    JIRA_URL=https://your-domain.atlassian.net\n` +
+            `    JIRA_EMAIL=your-email@example.com\n` +
+            `    JIRA_API_TOKEN=your-jira-token`,
+        );
+      }
+    } else {
+      result = readSpec(source);
     }
-    return readLinearSpec(source);
-  }
-  if (provider === "jira") {
-    loadEnvFile();
-    return readJiraSpec(source);
-  }
 
-  // Legacy auto-detection when no provider specified (used by other commands)
-  if (isLinearUrl(source)) {
-    loadEnvFile();
-    const issueId = extractLinearId(source);
-    return readLinearSpec(issueId);
+    try { trace.emit(Events.SPEC_PARSE, { source: result.source, title: result.title }); } catch { /* swallow */ }
+    return result;
+  } catch (err) {
+    try { trace.emit(Events.SPEC_ERROR, { source, error: err instanceof Error ? err.message : String(err) }); } catch { /* swallow */ }
+    throw err;
   }
-
-  if (ISSUE_KEY_PATTERN.test(source)) {
-    loadEnvFile();
-    const hasLinear = !!process.env.LINEAR_API_KEY;
-    const hasJira = !!(process.env.JIRA_URL && process.env.JIRA_EMAIL && process.env.JIRA_API_TOKEN);
-
-    if (hasLinear && !hasJira) {
-      return readLinearSpec(source);
-    }
-    if (hasJira) {
-      return readJiraSpec(source);
-    }
-    throw new SpecError(
-      `No issue tracker configured for "${source}".\n\n` +
-        `Add one of the following to your .env file:\n\n` +
-        `  For Linear:\n` +
-        `    LINEAR_API_KEY=lin_api_...\n\n` +
-        `  For Jira:\n` +
-        `    JIRA_URL=https://your-domain.atlassian.net\n` +
-        `    JIRA_EMAIL=your-email@example.com\n` +
-        `    JIRA_API_TOKEN=your-jira-token`,
-    );
-  }
-
-  return readSpec(source);
 }

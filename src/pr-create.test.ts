@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseRemote, deriveBranchName, buildCommitMessage, buildPRBody, mapIssueTypeToBranchType } from "./pr-create.js";
+import type { BranchType } from "./branch-type.js";
 import type { TaskContext, PlannerOutput, SecurityReviewOutput, PRReviewOutput } from "./task.js";
 import type { SpecPayload } from "./spec.js";
 
@@ -154,22 +155,22 @@ describe("buildCommitMessage", () => {
     return { spec, plan, results: [] };
   }
 
-  it("uses jira prefix", () => {
+  it("formats jira as conventional commit with scope", () => {
     const spec: SpecPayload = { source: "jira", issueKey: "PROJ-1", title: "Fix bug", content: "" };
-    const msg = buildCommitMessage(makeContext(spec));
-    expect(msg).toBe("[PROJ-1] Fix bug");
+    const msg = buildCommitMessage(makeContext(spec), "feat");
+    expect(msg).toBe("feat(PROJ-1): Fix bug");
   });
 
-  it("uses linear prefix", () => {
+  it("formats linear as conventional commit with scope", () => {
     const spec: SpecPayload = { source: "linear", issueId: "DT-99", title: "Add feature", content: "" };
-    const msg = buildCommitMessage(makeContext(spec));
-    expect(msg).toBe("[DT-99] Add feature");
+    const msg = buildCommitMessage(makeContext(spec), "fix");
+    expect(msg).toBe("fix(DT-99): Add feature");
   });
 
-  it("uses [reygent] prefix for markdown", () => {
+  it("formats markdown as conventional commit without scope", () => {
     const spec: SpecPayload = { source: "markdown", title: "Do thing", content: "" };
-    const msg = buildCommitMessage(makeContext(spec));
-    expect(msg).toBe("[reygent] Do thing");
+    const msg = buildCommitMessage(makeContext(spec), "chore");
+    expect(msg).toBe("chore: Do thing");
   });
 
   it("includes goals and tasks when plan exists", () => {
@@ -180,11 +181,18 @@ describe("buildCommitMessage", () => {
       constraints: ["c1"],
       dod: ["d1"],
     };
-    const msg = buildCommitMessage(makeContext(spec, plan));
+    const msg = buildCommitMessage(makeContext(spec, plan), "feat");
+    expect(msg).toContain("feat: Do thing");
     expect(msg).toContain("Goals:");
     expect(msg).toContain("- goal1");
     expect(msg).toContain("Tasks:");
     expect(msg).toContain("- task1");
+  });
+
+  it("uses correct branch type in prefix", () => {
+    const spec: SpecPayload = { source: "jira", issueKey: "PROJ-5", title: "Refactor module", content: "" };
+    const msg = buildCommitMessage(makeContext(spec), "refactor");
+    expect(msg).toBe("refactor(PROJ-5): Refactor module");
   });
 });
 

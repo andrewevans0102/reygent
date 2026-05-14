@@ -7,6 +7,7 @@ import { generateSpec, runClarification } from "../generate-spec.js";
 import { createLiveStatus } from "../live-status.js";
 import { TaskError } from "../task.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
+import { withTelemetry } from "../telemetry-lifecycle.js";
 
 async function prompt(question: string, fallback?: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -21,6 +22,7 @@ export async function generateSpecCommand(
   description: string | undefined,
   options: { output?: string; skipClarification: boolean },
 ): Promise<void> {
+  return withTelemetry('generate-spec', async () => {
   try {
     if (!description) {
       description = await prompt("Feature description: ");
@@ -133,4 +135,5 @@ export async function generateSpecCommand(
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
     process.exit(2);
   }
+  });
 }

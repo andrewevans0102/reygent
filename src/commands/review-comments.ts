@@ -16,6 +16,17 @@ import type { RemoteInfo } from "../pr-create.js";
 import type { PlannerOutput } from "../task.js";
 import { TaskError } from "../task.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
+import { withTelemetry } from "../telemetry-lifecycle.js";
+import { getChesstrace } from "../chesstrace/index.js";
+import { Events } from "../chesstrace/events.js";
+import {
+  splitDiffByFile,
+  selectDiffsWithinBudget,
+  estimateTokens,
+  MAX_REVIEW_TOKENS,
+  RESERVED_PROMPT_TOKENS,
+} from "../diff-split.js";
+import type { FileDiff } from "../diff-split.js";
 
 interface ReviewCommentsOptions {
   insecure?: boolean;
@@ -405,13 +416,25 @@ function formatCommentBlock(comments: ClassifiedComment[]): string {
 function buildPlanPrompt(
   systemPrompt: string,
   comments: ClassifiedComment[],
-  diff: string,
+  includedDiffs: FileDiff[],
+  excludedFiles: string[],
 ): string {
   const hasSecurityComments = comments.some((c) => c.isSecurity);
 
   const securityPlanInstruction = hasSecurityComments
     ? " Security-related comments are marked as priority — ensure concrete fix tasks are generated for each one. Apply secure coding practices (input validation, output encoding, least privilege, etc.) when planning fixes."
     : "";
+
+  let diffSection = "";
+  if (includedDiffs.length > 0) {
+    diffSection += `## Current Diff (branch vs base)\n\n`;
+    for (const f of includedDiffs) {
+      diffSection += `\`\`\`diff\n${f.diff}\n\`\`\`\n\n`;
+    }
+  }
+  if (excludedFiles.length > 0) {
+    diffSection += `### Files not shown (too large for context)\n\n${excludedFiles.map((f) => `- ${f}`).join("\n")}\n`;
+  }
 
   return `${systemPrompt}
 
@@ -423,12 +446,7 @@ ${formatCommentBlock(comments)}
 
 ---
 
-## Current Diff (branch vs base)
-
-\`\`\`diff
-${diff}
-\`\`\`
-
+${diffSection}
 ---
 
 ## Instructions
@@ -450,10 +468,11 @@ Each array must contain at least one non-empty string. Do not include any text o
 function buildPlanPromptWithFeedback(
   systemPrompt: string,
   comments: ClassifiedComment[],
-  diff: string,
+  includedDiffs: FileDiff[],
+  excludedFiles: string[],
   feedback: string,
 ): string {
-  const base = buildPlanPrompt(systemPrompt, comments, diff);
+  const base = buildPlanPrompt(systemPrompt, comments, includedDiffs, excludedFiles);
   return `${base}
 
 ---
@@ -467,7 +486,8 @@ ${feedback}`;
 
 async function generatePlan(
   comments: ClassifiedComment[],
-  diff: string,
+  includedDiffs: FileDiff[],
+  excludedFiles: string[],
   feedback?: string,
 ): Promise<PlannerOutput> {
   const agents = getAgents();
@@ -477,8 +497,8 @@ async function generatePlan(
   }
 
   const prompt = feedback
-    ? buildPlanPromptWithFeedback(agent.systemPrompt, comments, diff, feedback)
-    : buildPlanPrompt(agent.systemPrompt, comments, diff);
+    ? buildPlanPromptWithFeedback(agent.systemPrompt, comments, includedDiffs, excludedFiles, feedback)
+    : buildPlanPrompt(agent.systemPrompt, comments, includedDiffs, excludedFiles);
 
   const result = await spawnAgent("planner", prompt, { quiet: true, provider: agent.provider, model: agent.model });
 
@@ -648,6 +668,7 @@ async function executeWithDevAgent(
 export async function reviewCommentsCommand(
   options: ReviewCommentsOptions,
 ): Promise<void> {
+  return withTelemetry('review-comments', async () => {
   try {
     // 1. Verify git repo
     try {
@@ -740,20 +761,61 @@ export async function reviewCommentsCommand(
     console.log();
     displayCommentSummary(classified);
 
-    // 7. Get git diff for context
+    // 7. Get git diff for context (token-budgeted)
     const diffSpinner = createLiveStatus("generating diff...");
-    const diff = await exec("git", ["diff", `${defaultBranch}...HEAD`]);
-    if (!diff.trim()) {
+    const rawDiff = await exec("git", ["diff", `${defaultBranch}...HEAD`]);
+    let includedDiffs: FileDiff[] = [];
+    let excludedFiles: string[] = [];
+    if (!rawDiff.trim()) {
       diffSpinner.warn(chalk.yellow("No diff found against base branch"));
     } else {
-      diffSpinner.succeed(chalk.green("Diff loaded"));
+      const fileDiffs = splitDiffByFile(rawDiff);
+      const reservedTokens = estimateTokens(formatCommentBlock(classified)) + RESERVED_PROMPT_TOKENS;
+      ({ included: includedDiffs, excluded: excludedFiles } = selectDiffsWithinBudget(fileDiffs, MAX_REVIEW_TOKENS, reservedTokens));
+
+      // Debug logging and telemetry for diff budget decisions
+      const totalDiffTokens = includedDiffs.reduce((sum, f) => sum + f.tokens, 0);
+      const excludedTokens = fileDiffs.filter(f => excludedFiles.includes(f.file)).reduce((sum, f) => sum + f.tokens, 0);
+      const availableTokens = MAX_REVIEW_TOKENS - reservedTokens;
+
+      if (isDebug()) {
+        console.log(
+          `[DEBUG] Diff budget: ${totalDiffTokens}/${availableTokens} tokens used ` +
+          `(${includedDiffs.length}/${fileDiffs.length} files included, ${excludedFiles.length} excluded for ${excludedTokens} tokens)`
+        );
+        if (excludedFiles.length > 0) {
+          console.log(`[DEBUG] Excluded files: ${excludedFiles.join(", ")}`);
+        }
+      }
+
+      // Emit telemetry event
+      const chesstrace = getChesstrace();
+      if (chesstrace) {
+        try {
+          chesstrace.emit(Events.REVIEW_DIFF_BUDGET, {
+            filesIncluded: includedDiffs.length,
+            filesExcluded: excludedFiles.length,
+            tokensUsed: totalDiffTokens,
+            tokensAvailable: availableTokens,
+            excludedFilesList: excludedFiles,
+          });
+        } catch {
+          // Swallow emit errors
+        }
+      }
+
+      if (excludedFiles.length > 0) {
+        diffSpinner.succeed(chalk.green(`Diff loaded (${includedDiffs.length} files included, ${excludedFiles.length} excluded for size)`));
+      } else {
+        diffSpinner.succeed(chalk.green("Diff loaded"));
+      }
     }
 
     // 8. Generate plan
     let plan: PlannerOutput;
     {
       const planSpinner = createLiveStatus("generating plan...");
-      plan = await generatePlan(classified, diff);
+      plan = await generatePlan(classified, includedDiffs, excludedFiles);
       planSpinner.succeed(chalk.green("Plan generated"));
     }
 
@@ -785,7 +847,7 @@ export async function reviewCommentsCommand(
           });
           if (feedback.trim()) {
             const planSpinner = createLiveStatus("regenerating plan...");
-            plan = await generatePlan(classified, diff, feedback);
+            plan = await generatePlan(classified, includedDiffs, excludedFiles, feedback);
             planSpinner.succeed(chalk.green("Plan regenerated"));
             displayPlan(plan);
           }
@@ -823,10 +885,13 @@ export async function reviewCommentsCommand(
     // 11. Commit and push changes
     console.log();
     const pushSpinner = createLiveStatus("committing and pushing...");
+    const trace = getChesstrace();
     try {
       await exec("git", ["add", "-A"]);
       await exec("git", ["commit", "-m", "fix: address PR review comments"]);
+      try { trace.emit(Events.GIT_COMMIT, { branch, messageSubject: "fix: address PR review comments" }); } catch { /* swallow */ }
       await exec("git", ["push", "origin", branch]);
+      try { trace.emit(Events.GIT_PUSH, { branch }); } catch { /* swallow */ }
       pushSpinner.succeed(chalk.green("Changes committed and pushed."));
     } catch (pushErr) {
       const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
@@ -838,6 +903,7 @@ export async function reviewCommentsCommand(
           ]);
           if (parseInt(ahead.trim(), 10) > 0) {
             await exec("git", ["push", "origin", branch]);
+            try { trace.emit(Events.GIT_PUSH, { branch }); } catch { /* swallow */ }
             pushSpinner.succeed(chalk.green("Changes pushed."));
           } else {
             pushSpinner.warn(chalk.yellow("No changes were made by the dev agent."));
@@ -846,6 +912,7 @@ export async function reviewCommentsCommand(
           pushSpinner.warn(chalk.yellow("Nothing to commit or push."));
         }
       } else {
+        try { trace.emit(Events.GIT_ERROR, { operation: "commit-push", error: msg }); } catch { /* swallow */ }
         pushSpinner.fail(chalk.red(`Push failed: ${msg}`));
       }
     }
@@ -867,6 +934,7 @@ export async function reviewCommentsCommand(
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
     process.exit(2);
   }
+  });
 }
 
 // Exported for unit testing

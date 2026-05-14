@@ -21,6 +21,15 @@ import {
 import type { PRReviewOutput, TaskContext } from "../task.js";
 import { TaskError } from "../task.js";
 import { parseSpecWithPrefix, SpecPrefixError } from "../spec-prefix.js";
+import {
+  splitDiffByFile,
+  selectDiffsWithinBudget,
+  estimateTokens,
+  MAX_REVIEW_TOKENS,
+  RESERVED_PROMPT_TOKENS,
+} from "../diff-split.js";
+import { getChesstrace } from "../chesstrace/index.js";
+import { Events } from "../chesstrace/events.js";
 
 interface ReviewWorkOptions {
   spec?: string;
@@ -202,6 +211,14 @@ async function getGitDiff(baseBranch: string): Promise<string> {
   return exec("git", ["diff", `${baseBranch}...HEAD`]);
 }
 
+async function getGitStat(baseBranch: string): Promise<string> {
+  return exec("git", ["diff", "--stat", `${baseBranch}...HEAD`]);
+}
+
+async function getGitLog(baseBranch: string): Promise<string> {
+  return exec("git", ["log", `${baseBranch}..HEAD`, "--oneline"]);
+}
+
 async function postGitLabComment(
   remote: RemoteInfo,
   token: string,
@@ -224,42 +241,83 @@ async function postGitLabComment(
   }
 }
 
+interface ReviewPromptInput {
+  stat: string;
+  log: string;
+  includedDiffs: { file: string; diff: string }[];
+  excludedFiles: string[];
+  spec?: { title: string; content: string };
+}
+
 function buildReviewPrompt(
   systemPrompt: string,
-  diff: string,
-  spec?: { title: string; content: string },
+  input: ReviewPromptInput,
 ): string {
   let prompt = systemPrompt;
 
-  if (spec) {
+  if (input.spec) {
     prompt += `
 
 ---
 
 ## Spec
 
-**Title:** ${spec.title}
+**Title:** ${input.spec.title}
 
-${spec.content}
+${input.spec.content}
 
 ---`;
   }
 
   prompt += `
 
-## PR Diff
+## Branch Summary
 
-\`\`\`diff
-${diff}
+### Changed Files
+
 \`\`\`
+${input.stat}
+\`\`\`
+
+### Commits
+
+\`\`\`
+${input.log}
+\`\`\``;
+
+  if (input.includedDiffs.length > 0) {
+    prompt += `
+
+## File Diffs
+
+`;
+    for (const f of input.includedDiffs) {
+      prompt += `\`\`\`diff
+${f.diff}
+\`\`\`
+
+`;
+    }
+  }
+
+  if (input.excludedFiles.length > 0) {
+    prompt += `
+### Files not shown (${input.excludedFiles.length} excluded due to size)
+
+${input.excludedFiles.map((f) => `- ${f}`).join("\n")}
+`;
+  }
+
+  prompt += `
 
 ---
 
 ## Instructions
 
-1. Review the PR diff above${spec ? " in the context of the spec" : ""}.
-2. Check for correctness, potential bugs, style issues${spec ? ", and whether the implementation meets the spec" : ""}.
-3. When you are finished, output a single JSON block with your review:
+1. Review the changes above${input.spec ? " in the context of the spec" : ""}.
+2. Check for correctness, potential bugs, style issues${input.spec ? ", and whether the implementation meets the spec" : ""}.
+3. For files not shown, note any concerns based on the stat summary and commit messages.
+4. When you are finished, output a single JSON block with your review:
 
 \`\`\`json
 {
@@ -287,7 +345,7 @@ ${diff}
 }
 
 async function runAgentReview(
-  diff: string,
+  baseBranch: string,
   spec?: { title: string; content: string },
   onActivity?: (event: ActivityEvent) => void,
 ): Promise<PRReviewOutput> {
@@ -297,7 +355,59 @@ async function runAgentReview(
     throw new TaskError("review-work: no agent with role 'reviewer' found in config");
   }
 
-  const prompt = buildReviewPrompt(agent.systemPrompt, diff, spec);
+  const [diff, stat, log] = await Promise.all([
+    getGitDiff(baseBranch),
+    getGitStat(baseBranch),
+    getGitLog(baseBranch),
+  ]);
+
+  if (!diff.trim()) {
+    throw new TaskError("review-work: no changes found");
+  }
+
+  // Split diff by file and select within budget
+  const fileDiffs = splitDiffByFile(diff);
+  const reservedTokens = estimateTokens(agent.systemPrompt) + estimateTokens(stat) + estimateTokens(log) + RESERVED_PROMPT_TOKENS;
+  const { included, excluded } = selectDiffsWithinBudget(fileDiffs, MAX_REVIEW_TOKENS, reservedTokens);
+
+  // Debug logging and telemetry for diff budget decisions
+  const totalDiffTokens = included.reduce((sum, f) => sum + f.tokens, 0);
+  const excludedTokens = fileDiffs.filter(f => excluded.includes(f.file)).reduce((sum, f) => sum + f.tokens, 0);
+  const availableTokens = MAX_REVIEW_TOKENS - reservedTokens;
+
+  if (isDebug()) {
+    console.log(
+      `[DEBUG] Diff budget: ${totalDiffTokens}/${availableTokens} tokens used ` +
+      `(${included.length}/${fileDiffs.length} files included, ${excluded.length} excluded for ${excludedTokens} tokens)`
+    );
+    if (excluded.length > 0) {
+      console.log(`[DEBUG] Excluded files: ${excluded.join(", ")}`);
+    }
+  }
+
+  // Emit telemetry event
+  const chesstrace = getChesstrace();
+  if (chesstrace) {
+    try {
+      chesstrace.emit(Events.REVIEW_DIFF_BUDGET, {
+        filesIncluded: included.length,
+        filesExcluded: excluded.length,
+        tokensUsed: totalDiffTokens,
+        tokensAvailable: availableTokens,
+        excludedFilesList: excluded,
+      });
+    } catch {
+      // Swallow emit errors
+    }
+  }
+
+  const prompt = buildReviewPrompt(agent.systemPrompt, {
+    stat: stat.trim(),
+    log: log.trim(),
+    includedDiffs: included,
+    excludedFiles: excluded,
+    spec,
+  });
   const result = await spawnAgent("pr-review", prompt, { quiet: true, onActivity, provider: agent.provider, model: agent.model });
 
   if (result.exitCode !== 0) {
@@ -395,15 +505,18 @@ export async function reviewWorkCommand(
         spinner.info(chalk.yellow("No open PR found for this branch"));
         console.log();
 
-        // Run review via agent with git diff
-        const diff = await getGitDiff(defaultBranch);
-        if (!diff.trim()) {
-          console.log(chalk.yellow("No changes found against"), chalk.bold(defaultBranch));
-          return;
-        }
-
         const reviewStatus = createLiveStatus("Running review...");
-        const output = await runAgentReview(diff, spec, reviewStatus.onActivity);
+        let output: PRReviewOutput;
+        try {
+          output = await runAgentReview(defaultBranch, spec, reviewStatus.onActivity);
+        } catch (err) {
+          if (err instanceof TaskError && err.message.includes("no changes found")) {
+            reviewStatus.stop();
+            console.log(chalk.yellow("No changes found against"), chalk.bold(defaultBranch));
+            return;
+          }
+          throw err;
+        }
         reviewStatus.succeed(chalk.green("Review complete"));
 
         console.log(formatPRReviewTerminal(output));
@@ -429,12 +542,6 @@ export async function reviewWorkCommand(
         ? await detectGitLabMR(remote, token, branch, options.insecure)
         : null;
 
-      const diff = await getGitDiff(defaultBranch);
-      if (!diff.trim()) {
-        spinner.info(chalk.yellow("No changes found against ") + chalk.bold(defaultBranch));
-        return;
-      }
-
       if (mrIid !== null) {
         spinner.succeed(chalk.green(`Found MR !${mrIid}`));
       } else {
@@ -443,7 +550,17 @@ export async function reviewWorkCommand(
 
       console.log();
       const glReviewStatus = createLiveStatus("Running review...");
-      const output = await runAgentReview(diff, spec, glReviewStatus.onActivity);
+      let output: PRReviewOutput;
+      try {
+        output = await runAgentReview(defaultBranch, spec, glReviewStatus.onActivity);
+      } catch (err) {
+        if (err instanceof TaskError && err.message.includes("no changes found")) {
+          glReviewStatus.stop();
+          console.log(chalk.yellow("No changes found against"), chalk.bold(defaultBranch));
+          return;
+        }
+        throw err;
+      }
       glReviewStatus.succeed(chalk.green("Review complete"));
 
       console.log(formatPRReviewTerminal(output));

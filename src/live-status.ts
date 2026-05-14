@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import ora from "ora";
-import { killAllChildren } from "./child-registry.js";
+import { killAllChildrenProcesses } from "./child-registry.js";
 import type { ActivityEvent } from "./providers/types.js";
 import { resetTerminalForInput } from "./terminal-reset.js";
 
@@ -143,7 +143,7 @@ export function createLiveStatus(label: string): LiveStatus {
 
   function onSigInt() {
     cleanup();
-    killAllChildren();
+    killAllChildrenProcesses();
     spinner.stop();
     process.exit(130);
   }
