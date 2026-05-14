@@ -92,7 +92,7 @@ async function updateKnowledgeFromTelemetry(): Promise<void> {
       return;
     }
 
-    const backend = new SqliteBackend("local", `${projectRoot}/.reygent/telemetry.db`);
+    const backend = new SqliteBackend("local", `${projectRoot}/.reygent/chesstrace.db`);
     await backend.init();
 
     const since = Date.now() - 7 * 24 * 60 * 60 * 1000; // Last 7 days

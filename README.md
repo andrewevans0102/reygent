@@ -68,6 +68,10 @@ reygent run --spec spec.md                                 # run the full workfl
 | [`reygent review-comments`](./docs/commands.md#reygent-review-comments) | Fetch PR comments and address with dev agent |
 | [`reygent config`](./docs/commands.md#reygent-config) | Configure provider, model, and per-agent overrides |
 | [`reygent skills`](./docs/commands.md#reygent-skills) | Manage skills from the registry |
+| [`reygent telemetry`](./docs/commands.md#reygent-telemetry) | Manage telemetry data and configuration |
+| [`reygent analyze`](./docs/commands.md#reygent-analyze) | Analyze telemetry data for insights |
+| [`reygent last`](./docs/commands.md#reygent-last) | Show latest run details |
+| [`reygent knowledge`](./docs/commands.md#reygent-knowledge) | Manage knowledge base |
 
 See the **[Commands Reference](./docs/commands.md)** for full options and examples.
 
@@ -80,6 +84,9 @@ These flags apply to all commands:
 | `--model <id>` | Override the AI model (e.g., `claude-opus-4-6`) |
 | `--provider <name>` | AI provider: `claude`, `gemini`, `codex`, `openrouter` |
 | `--debug` | Show full stack traces on errors |
+| `--no-telemetry` | Disable telemetry for this run |
+| `--telemetry-level <level>` | Override telemetry level (`minimal`, `standard`, `verbose`) |
+| `--telemetry-verbose` | Shorthand for `--telemetry-level verbose` |
 
 ## Reygent Workflow
 
@@ -188,6 +195,8 @@ Reygent tracks local telemetry and learns from past runs to improve future perfo
 - `reygent analyze failures` - Common error patterns
 - `reygent analyze success` - What works well
 - `reygent analyze costs` - Cost breakdown and savings
+- `reygent analyze agents` - Agent-specific performance breakdown
+- `reygent knowledge` - Manage knowledge base (list, show, search, edit, add entries)
 
 **Living Documentation:**
 Reygent automatically learns from your project through `.reygent/knowledge/`:

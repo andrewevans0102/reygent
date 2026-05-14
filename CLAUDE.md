@@ -118,16 +118,16 @@ Linear labels detected using **partial match** (e.g., "bugfix" label matches "bu
 
 ## Terminal output style
 
-This project uses **chalk**, **ora**, and **cli-progress** for terminal output. Always use these libraries instead of plain `console.log` for anything user-facing.
+This project uses **chalk** and **ora** for terminal output. **cli-progress** is available as a dependency but not currently used in the codebase. Always use chalk/ora instead of plain `console.log` for anything user-facing.
 
 ### Setup
 
 Ensure these packages are installed:
 ```
-npm install chalk ora cli-progress
+npm install chalk ora
 ```
 
-All three are ESM-compatible. Use ESM imports (`import`) unless the project uses CommonJS, in which case use dynamic `import()`.
+Both are ESM-compatible. Use ESM imports (`import`) unless the project uses CommonJS, in which case use dynamic `import()`.
 
 ---
 
@@ -173,41 +173,9 @@ try {
 
 ---
 
-### cli-progress — progress bars for batch work
+### cli-progress — progress bars for batch work (available, not yet used)
 
-Use cli-progress for operations with a known number of steps (file processing, batch uploads, loops, etc.).
-
-Single bar:
-```js
-import { SingleBar, Presets } from 'cli-progress';
-
-const bar = new SingleBar({
-  format: '{task} {bar} {percentage}% | {value}/{total}',
-  barCompleteChar: '█',
-  barIncompleteChar: '░',
-  hideCursor: true,
-}, Presets.shades_classic);
-
-bar.start(total, 0, { task: 'Processing' });
-for (const item of items) {
-  await process(item);
-  bar.increment();
-}
-bar.stop();
-```
-
-Multi bar (parallel tasks):
-```js
-import { MultiBar, Presets } from 'cli-progress';
-const multi = new MultiBar({ hideCursor: true }, Presets.shades_classic);
-const b1 = multi.create(100, 0, { label: 'Task A' });
-const b2 = multi.create(100, 0, { label: 'Task B' });
-// ... increment individually
-multi.stop();
-```
-
-- Always call `.stop()` when done.
-- Do not mix `console.log` with an active progress bar — use `bar.update()` payload fields for status text instead.
+cli-progress is installed as a dependency but not yet imported in the codebase. Use it when adding operations with a known number of steps (file processing, batch uploads, loops, etc.).
 
 ---
 
@@ -248,4 +216,4 @@ The skill:
 - Auto-updates `lastVerified` dates when all values match
 - Prompts for confirmation before applying pricing changes when mismatches exist
 
-See `.claude/skills/verify-pricing.md` for full implementation details.
+See `.claude/skills/verify-pricing/SKILL.md` for full implementation details.

@@ -5,9 +5,9 @@ import { findProjectRoot } from "./project-detection.js";
  * Returns project-local path if in project, undefined for global fallback.
  *
  * @param cwd - Current working directory to search from
- * @returns Absolute path to .reygent/telemetry.db if in project, undefined otherwise
+ * @returns Absolute path to .reygent/chesstrace.db if in project, undefined otherwise
  */
 export function getLocalTelemetryPath(cwd: string): string | undefined {
   const projectRoot = findProjectRoot(cwd);
-  return projectRoot ? `${projectRoot}/.reygent/telemetry.db` : undefined;
+  return projectRoot ? `${projectRoot}/.reygent/chesstrace.db` : undefined;
 }
