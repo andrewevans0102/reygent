@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
 import ora from "ora";
+import { confirm } from "@inquirer/prompts";
 import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
 import { loadEnvFile } from "../env.js";
@@ -22,6 +23,15 @@ import type { PRReviewOutput, TaskContext } from "../task.js";
 import { TaskError } from "../task.js";
 import { parseSpecWithPrefix, SpecPrefixError } from "../spec-prefix.js";
 import { withTelemetry } from "../telemetry-lifecycle.js";
+import {
+  estimateTokens,
+  MAX_DIFF_TOKENS,
+  splitDiffByFile,
+  mergePRReviews,
+  formatFileList,
+  estimateCostMultiplier,
+} from "../diff-split.js";
+import { SingleBar, Presets } from "cli-progress";
 
 interface ReviewWorkOptions {
   spec?: string;
@@ -310,6 +320,61 @@ async function runAgentReview(
   return extractPRReviewOutput(result.stdout);
 }
 
+/**
+ * Run review file-by-file for large diffs.
+ * Each file reviewed independently, then results merged.
+ */
+async function runFileByFileReview(
+  diff: string,
+  spec?: { title: string; content: string },
+): Promise<PRReviewOutput> {
+  const agents = getAgents();
+  const agent = agents.find((a) => a.role === "reviewer");
+  if (!agent) {
+    throw new TaskError("review-work: no agent with role 'reviewer' found in config");
+  }
+
+  const fileDiffs = splitDiffByFile(diff);
+  const reviews: PRReviewOutput[] = [];
+
+  console.log();
+  const progressBar = new SingleBar({
+    format: "Reviewing {bar} {percentage}% | {value}/{total} files | {file}",
+    barCompleteChar: "█",
+    barIncompleteChar: "░",
+    hideCursor: true,
+  }, Presets.shades_classic);
+
+  progressBar.start(fileDiffs.length, 0, { file: "" });
+
+  for (let i = 0; i < fileDiffs.length; i++) {
+    const fileDiff = fileDiffs[i];
+    progressBar.update(i, { file: fileDiff.file });
+
+    const prompt = buildReviewPrompt(agent.systemPrompt, fileDiff.diff, spec);
+    const result = await spawnAgent("pr-review", prompt, {
+      quiet: true,
+      provider: agent.provider,
+      model: agent.model
+    });
+
+    if (result.exitCode !== 0) {
+      progressBar.stop();
+      throw new TaskError(
+        `review-work: agent exited with code ${result.exitCode} while reviewing ${fileDiff.file}`,
+      );
+    }
+
+    reviews.push(extractPRReviewOutput(result.stdout));
+    progressBar.update(i + 1, { file: fileDiff.file });
+  }
+
+  progressBar.stop();
+  console.log();
+
+  return mergePRReviews(reviews);
+}
+
 export async function reviewWorkCommand(
   options: ReviewWorkOptions,
 ): Promise<void> {
@@ -404,9 +469,43 @@ export async function reviewWorkCommand(
           return;
         }
 
-        const reviewStatus = createLiveStatus("Running review...");
-        const output = await runAgentReview(diff, spec, reviewStatus.onActivity);
-        reviewStatus.succeed(chalk.green("Review complete"));
+        // Check if diff is too large
+        const tokens = estimateTokens(diff);
+        const isTooLarge = tokens > MAX_DIFF_TOKENS;
+
+        let output: PRReviewOutput;
+
+        if (isTooLarge) {
+          const fileDiffs = splitDiffByFile(diff);
+          const costMultiplier = estimateCostMultiplier(fileDiffs.length);
+
+          console.log(chalk.yellow.bold("⚠ Large diff detected"));
+          console.log(chalk.gray(`  Estimated tokens: ${tokens.toLocaleString()} (threshold: ${MAX_DIFF_TOKENS.toLocaleString()})`));
+          console.log(chalk.gray(`  Files changed: ${fileDiffs.length}`));
+          console.log();
+          console.log(chalk.yellow("Files to review:"));
+          console.log(formatFileList(fileDiffs.map((f) => f.file)));
+          console.log();
+          console.log(chalk.yellow(`File-by-file review will make ~${fileDiffs.length} API calls.`));
+          console.log(chalk.yellow(`Estimated cost increase: ${costMultiplier.toFixed(1)}x vs single review.`));
+          console.log();
+
+          const proceed = await confirm({
+            message: "Proceed with file-by-file review?",
+            default: true,
+          });
+
+          if (!proceed) {
+            console.log(chalk.gray("Review cancelled."));
+            return;
+          }
+
+          output = await runFileByFileReview(diff, spec);
+        } else {
+          const reviewStatus = createLiveStatus("Running review...");
+          output = await runAgentReview(diff, spec, reviewStatus.onActivity);
+          reviewStatus.succeed(chalk.green("Review complete"));
+        }
 
         console.log(formatPRReviewTerminal(output));
         console.log();
@@ -444,9 +543,44 @@ export async function reviewWorkCommand(
       }
 
       console.log();
-      const glReviewStatus = createLiveStatus("Running review...");
-      const output = await runAgentReview(diff, spec, glReviewStatus.onActivity);
-      glReviewStatus.succeed(chalk.green("Review complete"));
+
+      // Check if diff is too large
+      const tokens = estimateTokens(diff);
+      const isTooLarge = tokens > MAX_DIFF_TOKENS;
+
+      let output: PRReviewOutput;
+
+      if (isTooLarge) {
+        const fileDiffs = splitDiffByFile(diff);
+        const costMultiplier = estimateCostMultiplier(fileDiffs.length);
+
+        console.log(chalk.yellow.bold("⚠ Large diff detected"));
+        console.log(chalk.gray(`  Estimated tokens: ${tokens.toLocaleString()} (threshold: ${MAX_DIFF_TOKENS.toLocaleString()})`));
+        console.log(chalk.gray(`  Files changed: ${fileDiffs.length}`));
+        console.log();
+        console.log(chalk.yellow("Files to review:"));
+        console.log(formatFileList(fileDiffs.map((f) => f.file)));
+        console.log();
+        console.log(chalk.yellow(`File-by-file review will make ~${fileDiffs.length} API calls.`));
+        console.log(chalk.yellow(`Estimated cost increase: ${costMultiplier.toFixed(1)}x vs single review.`));
+        console.log();
+
+        const proceed = await confirm({
+          message: "Proceed with file-by-file review?",
+          default: true,
+        });
+
+        if (!proceed) {
+          console.log(chalk.gray("Review cancelled."));
+          return;
+        }
+
+        output = await runFileByFileReview(diff, spec);
+      } else {
+        const glReviewStatus = createLiveStatus("Running review...");
+        output = await runAgentReview(diff, spec, glReviewStatus.onActivity);
+        glReviewStatus.succeed(chalk.green("Review complete"));
+      }
 
       console.log(formatPRReviewTerminal(output));
       console.log();

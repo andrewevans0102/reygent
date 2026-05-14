@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import chalk from "chalk";
+import { confirm } from "@inquirer/prompts";
+import { SingleBar, Presets } from "cli-progress";
 import { getAgents } from "./config.js";
 import { wrapText } from "./format.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
@@ -7,6 +9,14 @@ import { extractJSON } from "./planner.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
 import type { UsageInfo } from "./usage.js";
+import {
+  estimateTokens,
+  MAX_DIFF_TOKENS,
+  splitDiffByFile,
+  mergePRReviews,
+  formatFileList,
+  estimateCostMultiplier,
+} from "./diff-split.js";
 
 function buildPRReviewPrompt(
   systemPrompt: string,
@@ -301,6 +311,58 @@ async function resolvePRNumber(context: TaskContext): Promise<number> {
   return detected.prNumber;
 }
 
+/**
+ * Run review file-by-file for large diffs.
+ * Each file reviewed independently, then results merged.
+ */
+async function runFileByFileReview(
+  context: TaskContext,
+  diff: string,
+  agent: { systemPrompt: string; provider?: string; model?: string },
+  options?: AgentSpawnOptions,
+): Promise<PRReviewOutput> {
+  const fileDiffs = splitDiffByFile(diff);
+  const reviews: PRReviewOutput[] = [];
+
+  console.log();
+  const progressBar = new SingleBar({
+    format: "Reviewing {bar} {percentage}% | {value}/{total} files | {file}",
+    barCompleteChar: "█",
+    barIncompleteChar: "░",
+    hideCursor: true,
+  }, Presets.shades_classic);
+
+  progressBar.start(fileDiffs.length, 0, { file: "" });
+
+  for (let i = 0; i < fileDiffs.length; i++) {
+    const fileDiff = fileDiffs[i];
+    progressBar.update(i, { file: fileDiff.file });
+
+    const prompt = buildPRReviewPrompt(agent.systemPrompt, context, fileDiff.diff);
+    const result = await spawnAgent("pr-review", prompt, {
+      ...options,
+      quiet: true,
+      provider: agent.provider,
+      model: agent.model
+    });
+
+    if (result.exitCode !== 0) {
+      progressBar.stop();
+      throw new TaskError(
+        `pr-review: agent exited with code ${result.exitCode} while reviewing ${fileDiff.file}`,
+      );
+    }
+
+    reviews.push(extractPRReviewOutput(result.stdout));
+    progressBar.update(i + 1, { file: fileDiff.file });
+  }
+
+  progressBar.stop();
+  console.log();
+
+  return mergePRReviews(reviews);
+}
+
 export async function runPRReview(
   context: TaskContext,
   options?: AgentSpawnOptions,
@@ -314,16 +376,53 @@ export async function runPRReview(
   }
 
   const diff = await getDiff(prNumber);
-  const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff);
-  const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model });
 
-  if (result.exitCode !== 0) {
-    throw new TaskError(
-      `pr-review: agent exited with code ${result.exitCode}`,
-    );
+  // Check if diff is too large
+  const tokens = estimateTokens(diff);
+  const isTooLarge = tokens > MAX_DIFF_TOKENS;
+
+  let output: PRReviewOutput;
+
+  if (isTooLarge) {
+    const fileDiffs = splitDiffByFile(diff);
+    const costMultiplier = estimateCostMultiplier(fileDiffs.length);
+
+    console.log();
+    console.log(chalk.yellow.bold("⚠ Large diff detected"));
+    console.log(chalk.gray(`  Estimated tokens: ${tokens.toLocaleString()} (threshold: ${MAX_DIFF_TOKENS.toLocaleString()})`));
+    console.log(chalk.gray(`  Files changed: ${fileDiffs.length}`));
+    console.log();
+    console.log(chalk.yellow("Files to review:"));
+    console.log(formatFileList(fileDiffs.map((f) => f.file)));
+    console.log();
+    console.log(chalk.yellow(`File-by-file review will make ~${fileDiffs.length} API calls.`));
+    console.log(chalk.yellow(`Estimated cost increase: ${costMultiplier.toFixed(1)}x vs single review.`));
+    console.log();
+
+    const proceed = await confirm({
+      message: "Proceed with file-by-file review?",
+      default: true,
+    });
+
+    if (!proceed) {
+      throw new TaskError("pr-review: cancelled by user");
+    }
+
+    output = await runFileByFileReview(context, diff, agent, options);
+  } else {
+    const prompt = buildPRReviewPrompt(agent.systemPrompt, context, diff);
+    const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model });
+
+    if (result.exitCode !== 0) {
+      throw new TaskError(
+        `pr-review: agent exited with code ${result.exitCode}`,
+      );
+    }
+
+    output = extractPRReviewOutput(result.stdout);
   }
 
-  return { output: extractPRReviewOutput(result.stdout), usage: result.usage };
+  return { output, usage: undefined };
 }
 
 /**
