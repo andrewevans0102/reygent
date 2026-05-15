@@ -1,6 +1,6 @@
 # Chesstrace
 
-![Chesstrace Logo](/README_IMAGES/ChesstraceLogo.png)
+![Chesstrace Logo](/ChesstraceLogo.png)
 
 Chesstrace is Reygent's local telemetry engine. It captures pipeline execution events, stores them in SQLite, and powers the `reygent last`, `reygent analyze`, and `reygent telemetry` commands.
 
