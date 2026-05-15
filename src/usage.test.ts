@@ -307,9 +307,9 @@ describe("calculateCacheSavings", () => {
   });
 
   it("calculates savings for codex provider", () => {
-    // 1M cached tokens * $1.25/M * 0.90 discount = $1.125
+    // 1M cached tokens * $2.50/M * 0.90 discount = $2.25
     const savings = calculateCacheSavings({ cachedTokens: 1_000_000, provider: "codex" });
-    expect(savings).toBeCloseTo(1.125);
+    expect(savings).toBeCloseTo(2.25);
   });
 
   it("calculates savings for openrouter provider", () => {

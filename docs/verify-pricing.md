@@ -60,23 +60,17 @@ Provider     Field                 Current    Actual     Status
 claude       inputCostPerMillion   $3.00/M    $3.00/M    ✓ match
 claude       outputCostPerMillion  $15.00/M   $15.00/M   ✓ match
 claude       cacheDiscountRate     90%        90%        ✓ match
-claude       lastVerified          2025-05-04            → updating to 2026-05-08
+claude       lastVerified          2026-05-15            ✓ verified
 
-codex        inputCostPerMillion   $2.50/M    $1.25/M    ✗ MISMATCH
-codex        outputCostPerMillion  $10.00/M   $10.00/M   ✓ match
-codex        cacheDiscountRate     75%        90%        ✗ MISMATCH
+codex        inputCostPerMillion   $2.50/M    $2.50/M    ✓ match
+codex        outputCostPerMillion  $15.00/M   $15.00/M   ✓ match
+codex        cacheDiscountRate     90%        90%        ✓ match
 
 openrouter   inputCostPerMillion   $3.00/M    $3.00/M    ✓ match
 openrouter   outputCostPerMillion  $15.00/M   $15.00/M   ✓ match
 openrouter   cacheDiscountRate     50%                   ? unable to verify
 ──────────────────────────────────────────────────────────────────────
-2 mismatches found in codex provider.
-
-Suggested changes to src/pricing.ts:
-
-  codex.inputCostPerMillion: 2.50 → 1.25
-  codex.cacheDiscountRate: 0.75 → 0.90
-  codex.lastVerified: "2025-05-04" → "2026-05-08"
+All verified pricing matches current provider documentation.
 
 Apply these changes? (y/n)
 ```
