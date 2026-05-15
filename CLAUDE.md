@@ -187,6 +187,17 @@ cli-progress is installed as a dependency but not yet imported in the codebase. 
 - Use `chalk.gray` for timestamps and secondary metadata.
 - Keep output scannable: one concept per line, consistent indentation.
 
+## Provider Adapters
+
+Provider adapters handle communication with different LLM providers (Claude, Gemini, Codex, OpenRouter). All adapters implement the `ProviderAdapter` interface and return `SpawnResult` with structured error information.
+
+**Full documentation**: See [docs/provider-adapters.md](./docs/provider-adapters.md) for:
+- `SpawnResult` interface and field descriptions
+- Error handling patterns and `formatExitDetail()` usage
+- Telemetry integration guidelines
+- Provider-specific implementation notes
+- Testing checklist
+
 ## Security
 
 Reygent implements comprehensive security measures enforced across ALL providers (Claude, Gemini, Codex, OpenRouter).

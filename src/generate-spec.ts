@@ -2,8 +2,11 @@ import { getAgents } from "./config.js";
 import { isDebug } from "./debug.js";
 import { extractJSON } from "./planner.js";
 import type { ActivityEvent } from "./providers/types.js";
-import { spawnAgentStream } from "./spawn.js";
+import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import { TaskError } from "./task.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
+import { emitErrorTask } from "./telemetry-helpers.js";
 
 export interface ClarificationResult {
   needsClarification: true;
@@ -105,11 +108,20 @@ export async function runClarification(
   previousAnswers?: string,
   onActivity?: (event: ActivityEvent) => void,
 ): Promise<ClarificationResponse> {
+  const agents = getAgents();
+  const plannerAgent = agents.find((a) => a.name === "planner");
   const prompt = buildClarificationPrompt(description, previousAnswers);
-  const { stdout: raw, exitCode } = await spawnAgentStream("generate-spec", prompt, 120_000, { quiet: true, onActivity });
+  const clarifyResult = await spawnAgentStream("generate-spec", prompt, 120_000, { quiet: true, onActivity });
+  const { stdout: raw, exitCode, errorMessage, apiErrorStatus } = clarifyResult;
 
   if (exitCode !== 0) {
-    throw new TaskError(`generate-spec: agent exited with code ${exitCode}`);
+    const detail = formatExitDetail(clarifyResult, plannerAgent?.model);
+    emitErrorTask(
+      `generate-spec: agent exited with code ${exitCode}${detail}`,
+      "clarification",
+      { agent: "generate-spec", errorMessage, apiErrorStatus },
+    );
+    throw new TaskError(`generate-spec: agent exited with code ${exitCode}${detail}`);
   }
 
   let parsed: unknown;
@@ -154,11 +166,20 @@ export async function generateSpec(
   clarificationAnswers?: string,
   onActivity?: (event: ActivityEvent) => void,
 ): Promise<string> {
+  const agents = getAgents();
+  const plannerAgent = agents.find((a) => a.name === "planner");
   const prompt = buildGeneratePrompt(description, clarificationAnswers);
-  const { stdout, exitCode } = await spawnAgentStream("generate-spec", prompt, 120_000, { onActivity });
+  const specResult = await spawnAgentStream("generate-spec", prompt, 120_000, { onActivity });
+  const { stdout, exitCode, errorMessage, apiErrorStatus } = specResult;
 
   if (exitCode !== 0) {
-    throw new TaskError(`generate-spec: agent exited with code ${exitCode}`);
+    const detail = formatExitDetail(specResult, plannerAgent?.model);
+    emitErrorTask(
+      `generate-spec: agent exited with code ${exitCode}${detail}`,
+      "generate",
+      { agent: "generate-spec", errorMessage, apiErrorStatus },
+    );
+    throw new TaskError(`generate-spec: agent exited with code ${exitCode}${detail}`);
   }
 
   if (!stdout) {

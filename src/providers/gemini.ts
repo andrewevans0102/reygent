@@ -108,10 +108,14 @@ export const geminiAdapter: ProviderAdapter = {
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
         let cachedTokens: number | undefined;
+        let errorMessage: string | undefined;
+        let apiErrorStatus: number | undefined;
+
         try {
           const parsed = JSON.parse(stdout) as {
             response?: string;
             text?: string;
+            error?: { message?: string; code?: number; status?: number };
             usage_metadata?: {
               prompt_token_count?: number;
               candidates_token_count?: number;
@@ -124,8 +128,47 @@ export const geminiAdapter: ProviderAdapter = {
           inputTokens = parsed.usage_metadata?.prompt_token_count ?? parsed.input_tokens;
           outputTokens = parsed.usage_metadata?.candidates_token_count ?? parsed.output_tokens;
           cachedTokens = parsed.usage_metadata?.cached_content_token_count;
+
+          // Extract error details if present
+          if (parsed.error) {
+            errorMessage = parsed.error.message;
+            // Gemini error codes can be numeric (HTTP status) or string codes
+            // Map known codes to HTTP status for consistent handling
+            let statusCode = parsed.error.status;
+            if (parsed.error.code) {
+              if (typeof parsed.error.code === "number") {
+                // Gemini often returns HTTP status codes directly
+                statusCode = parsed.error.code;
+              } else if (typeof parsed.error.code === "string") {
+                // String error codes - map to HTTP status
+                const code = parsed.error.code.toLowerCase();
+                if (code === "not_found" || code === "model_not_found") {
+                  statusCode = 404;
+                } else if (code === "permission_denied" || code === "unauthenticated") {
+                  statusCode = 403;
+                } else if (code === "invalid_api_key" || code === "invalid_authentication") {
+                  statusCode = 401;
+                } else if (code === "resource_exhausted" || code === "rate_limit_exceeded") {
+                  statusCode = 429;
+                } else if (code === "internal" || code === "server_error") {
+                  statusCode = 500;
+                } else if (code === "invalid_argument") {
+                  statusCode = 400;
+                }
+              }
+            }
+            apiErrorStatus = statusCode;
+          }
         } catch {
           // Raw text output — use as-is
+        }
+
+        // If exitCode non-zero and no structured error, try stderr
+        if (code !== 0 && !errorMessage && stderrChunks.length > 0) {
+          const stderr = stderrChunks.join("").trim();
+          if (stderr) {
+            errorMessage = stderr;
+          }
         }
 
         resolve({
@@ -138,6 +181,8 @@ export const geminiAdapter: ProviderAdapter = {
             cachedTokens,
             provider: "gemini",
           },
+          errorMessage,
+          apiErrorStatus,
         });
       });
     });

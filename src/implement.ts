@@ -2,7 +2,7 @@ import chalk from "chalk";
 import { getAgents } from "./config.js";
 import { extractJSON } from "./planner.js";
 import type { ActivityEvent } from "./providers/types.js";
-import { spawnAgentStream } from "./spawn.js";
+import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import type { SpawnResult } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
 import type {
@@ -15,6 +15,7 @@ import { TaskError } from "./task.js";
 import type { UsageInfo } from "./usage.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
+import { emitErrorTask } from "./telemetry-helpers.js";
 
 export type { SpawnResult };
 
@@ -254,16 +255,11 @@ export async function runImplement(
   const qeAgent = agents.find((a) => a.name === "qe");
 
   if (!devAgent || !qeAgent) {
-    // Emit error.task before throwing
-    const chesstrace = getChesstrace();
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: "Implement: missing dev or qe agent config",
-        stage: options?.stage ?? "implement",
-        agent: "implement",
-      });
-    }
+    emitErrorTask(
+      "Implement: missing dev or qe agent config",
+      options?.stage ?? "implement",
+      { agent: "implement" },
+    );
     throw new TaskError("Implement: missing dev or qe agent config");
   }
 
@@ -315,9 +311,13 @@ export async function runImplement(
         if (devResult.value.exitCode === 0) {
           dev = extractDevOutput(devResult.value.stdout);
         } else {
-          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.value.exitCode}`);
-          const summary = getFailureSummary(devResult.value.stdout);
-          if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          const detail = formatExitDetail(devResult.value, devAgent.model);
+          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.value.exitCode}${detail}`);
+          // Show stdout context when errorMessage is terse (< 50 chars) or missing
+          if (!devResult.value.errorMessage || (devResult.value.errorMessage.length < 50)) {
+            const summary = getFailureSummary(devResult.value.stdout);
+            if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          }
         }
       } else {
         console.log(chalk.red("dev agent failed:"), devResult.reason);
@@ -331,9 +331,13 @@ export async function runImplement(
         if (qeResult.value.exitCode === 0) {
           qe = extractQEOutput(qeResult.value.stdout);
         } else {
-          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.value.exitCode}`);
-          const summary = getFailureSummary(qeResult.value.stdout);
-          if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          const detail = formatExitDetail(qeResult.value, qeAgent.model);
+          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.value.exitCode}${detail}`);
+          // Show stdout context when errorMessage is terse (< 50 chars) or missing
+          if (!qeResult.value.errorMessage || (qeResult.value.errorMessage.length < 50)) {
+            const summary = getFailureSummary(qeResult.value.stdout);
+            if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          }
         }
       } else {
         console.log(chalk.red("qe agent failed:"), qeResult.reason);
@@ -350,9 +354,12 @@ export async function runImplement(
         }
         usages.push({ agent: "dev", usage: devResult.usage });
         if (devResult.exitCode !== 0) {
-          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.exitCode}`);
-          const summary = getFailureSummary(devResult.stdout);
-          if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          const detail = formatExitDetail(devResult);
+          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.exitCode}${detail}`);
+          if (!devResult.errorMessage) {
+            const summary = getFailureSummary(devResult.stdout);
+            if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          }
         }
       } catch (err) {
         console.log(chalk.red("dev agent failed:"), err);
@@ -368,9 +375,12 @@ export async function runImplement(
         }
         usages.push({ agent: "qe", usage: qeResult.usage });
         if (qeResult.exitCode !== 0) {
-          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.exitCode}`);
-          const summary = getFailureSummary(qeResult.stdout);
-          if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          const detail = formatExitDetail(qeResult);
+          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.exitCode}${detail}`);
+          if (!qeResult.errorMessage) {
+            const summary = getFailureSummary(qeResult.stdout);
+            if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          }
         }
       } catch (err) {
         console.log(chalk.red("qe agent failed:"), err);
@@ -381,39 +391,27 @@ export async function runImplement(
   // Only fail if both requested agents failed
   const chesstrace = getChesstrace();
   if ((runDev && dev === null) && (runQE && qe === null)) {
-    // Emit error.task before throwing
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: "Implement: all requested agents failed",
-        stage: options?.stage ?? "implement",
-        agent: "implement",
-      });
-    }
+    emitErrorTask(
+      "Implement: all requested agents failed",
+      options?.stage ?? "implement",
+      { agent: "implement" },
+    );
     throw new TaskError("Implement: all requested agents failed");
   }
   if (runDev && !runQE && dev === null) {
-    // Emit error.task before throwing
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: "Implement: dev agent failed",
-        stage: options?.stage ?? "implement",
-        agent: "dev",
-      });
-    }
+    emitErrorTask(
+      "Implement: dev agent failed",
+      options?.stage ?? "implement",
+      { agent: "dev" },
+    );
     throw new TaskError("Implement: dev agent failed");
   }
   if (!runDev && runQE && qe === null) {
-    // Emit error.task before throwing
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: "Implement: qe agent failed",
-        stage: options?.stage ?? "implement",
-        agent: "qe",
-      });
-    }
+    emitErrorTask(
+      "Implement: qe agent failed",
+      options?.stage ?? "implement",
+      { agent: "qe" },
+    );
     throw new TaskError("Implement: qe agent failed");
   }
 

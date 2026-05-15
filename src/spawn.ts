@@ -6,11 +6,63 @@ import type { UsageInfo } from "./usage.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
 import { loadKnowledge } from "./knowledge/loader.js";
+import { emitErrorTask } from "./telemetry-helpers.js";
 
+/**
+ * Result returned by provider adapter spawn() method.
+ * See Provider Adapter Contract in CLAUDE.md for full details.
+ */
 export interface SpawnResult {
+  /** Agent output text (JSON, markdown, or plain text depending on agent) */
   stdout: string;
+  /** Exit code: 0 for success, non-zero for failure */
   exitCode: number;
+  /** Optional cost/token telemetry for usage tracking */
   usage?: UsageInfo;
+  /** Clean error message from provider API (e.g., "Model not available"). Only present on errors. */
+  errorMessage?: string;
+  /** HTTP status code from API error (e.g., 404, 401, 429). Only present on API errors. */
+  apiErrorStatus?: number;
+}
+
+/**
+ * Check if model name looks malformed (obvious user input error).
+ * Returns true if model is clearly invalid, false if it could be a valid custom model.
+ */
+function looksLikeMalformedModel(model?: string): boolean {
+  if (!model) return false;
+  // Obvious signs of malformation: empty after trim, contains spaces, starts/ends with special chars
+  const trimmed = model.trim();
+  if (trimmed.length === 0) return true;
+  if (/\s/.test(trimmed)) return true;
+  if (/^[^a-zA-Z0-9]|[^a-zA-Z0-9]$/.test(trimmed)) return true;
+  // Very short model names (< 3 chars) are likely typos
+  if (trimmed.length < 3) return true;
+  return false;
+}
+
+/**
+ * Build a detail string from a SpawnResult for error messages.
+ * Includes errorMessage from the provider and raw stdout as fallback.
+ */
+export function formatExitDetail(result: SpawnResult, model?: string): string {
+  if (result.errorMessage) {
+    const status = result.apiErrorStatus ? ` (HTTP ${result.apiErrorStatus})` : "";
+    let detail = `\n  ${result.errorMessage}${status}`;
+    // Only show model selection tip if:
+    // 1. It's a 404 error with "not available" pattern AND
+    // 2. Model name looks malformed (obvious typo/error)
+    // This avoids confusing users who intentionally use custom models not yet synced by provider
+    if (result.apiErrorStatus === 404 && /not available/i.test(result.errorMessage) && looksLikeMalformedModel(model)) {
+      detail += `\n  Tip: edit .reygent/config.json "model" field, or run \`reygent config\` to pick a supported model.`;
+    }
+    return detail;
+  }
+  const trimmed = result.stdout.trim();
+  if (!trimmed) return "";
+  const truncated = trimmed.slice(0, 500);
+  const suffix = trimmed.length > 500 ? "..." : "";
+  return `\n  ${truncated}${suffix}`;
 }
 
 export interface SpawnOptions {
@@ -46,13 +98,12 @@ export async function spawnAgentStream(
         provider: providerName,
         reason,
       });
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: `Provider "${providerName}" is not available: ${reason}`,
-        stage: options?.stage ?? "spawn",
-        agent: name,
-      });
     }
+    emitErrorTask(
+      `Provider "${providerName}" is not available: ${reason}`,
+      options?.stage ?? "spawn",
+      { agent: name },
+    );
     throw new TaskError(`Provider "${providerName}" is not available: ${reason}`);
   }
 
