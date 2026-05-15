@@ -25,16 +25,16 @@ export const PROVIDER_PRICING: Record<ProviderName, ProviderPricing> = {
     supportsCaching: true,
     defaultModel: "claude-sonnet-4-5-20250929",
     pricingUrl: "https://www.anthropic.com/pricing",
-    lastVerified: "2026-05-08",
+    lastVerified: "2026-05-15",
   },
   codex: {
-    inputCostPerMillion: 1.25,
-    outputCostPerMillion: 10.00,
+    inputCostPerMillion: 2.50,
+    outputCostPerMillion: 15.00,
     cacheDiscountRate: 0.90,
     supportsCaching: true,
     defaultModel: "gpt-5.4",
     pricingUrl: "https://openai.com/api/pricing/",
-    lastVerified: "2026-05-08",
+    lastVerified: "2026-05-15",
   },
   openrouter: {
     inputCostPerMillion: 3.00,
@@ -52,6 +52,6 @@ export const PROVIDER_PRICING: Record<ProviderName, ProviderPricing> = {
     supportsCaching: true,
     defaultModel: "gemini-2.5-pro",
     pricingUrl: "https://ai.google.dev/pricing",
-    lastVerified: "2026-05-08",
+    lastVerified: "2026-05-15",
   },
 };

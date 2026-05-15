@@ -167,8 +167,8 @@ describe("UsageTracker telemetry", () => {
       );
       const [_event, data] = costCalls[0];
 
-      // Codex: 100k cached tokens * $1.25/million * 0.90 discount = $0.1125
-      expect(data.cacheSavingsUsd).toBeCloseTo(0.1125, 4);
+      // Codex: 100k cached tokens * $2.50/million * 0.90 discount = $0.225
+      expect(data.cacheSavingsUsd).toBeCloseTo(0.225, 4);
     });
 
     it("uses cacheDiscount when cachedTokens absent", () => {
