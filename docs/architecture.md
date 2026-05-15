@@ -91,8 +91,8 @@ src/
 │   ├── analyzer.ts         # Telemetry pattern analysis, error sanitization
 │   └── loader.ts           # Knowledge file loading and validation
 ├── skills/                 # Skills system internals
-├── providers/
-│   ├── types.ts            # ProviderAdapter interface, SpawnAdapterOptions
+├── providers/              # Provider adapters (see docs/provider-adapters.md)
+│   ├── types.ts            # ProviderAdapter interface, SpawnAdapterOptions, SpawnResult
 │   ├── index.ts            # Provider factory (getProvider), PROVIDER_NAMES
 │   ├── claude.ts           # Claude CLI adapter (stream-json parsing)
 │   ├── gemini.ts           # Gemini CLI adapter
@@ -149,6 +149,14 @@ else                         → readSpec(source)  // treat as file path
 **Markdown**: Reads file, validates non-empty, extracts title from first `# Heading`.
 
 All three return a `SpecPayload` with `{ source, content, title }` (plus `issueKey` or `issueId` for tracker sources).
+
+---
+
+## Provider Adapters
+
+Reygent supports multiple LLM providers through a common `ProviderAdapter` interface. All providers return `SpawnResult` with structured error information (`errorMessage`, `apiErrorStatus`) for consistent error handling.
+
+**For full provider adapter contract**, including error handling patterns, telemetry integration, and implementation checklist, see **[Provider Adapters Documentation](./provider-adapters.md)**.
 
 ---
 
