@@ -153,7 +153,12 @@ export const claudeAdapter: ProviderAdapter = {
         "--verbose",
         "--model", options.model,
       ];
-      if (options.autoApprove) {
+      if (options.allowedTools !== undefined) {
+        // Explicit tool restriction: empty array = no tools allowed
+        if (options.allowedTools.length > 0) {
+          args.push("--allowedTools", ...options.allowedTools);
+        }
+      } else if (options.autoApprove) {
         args.push("--allowedTools", "Bash", "Edit", "Write", "Read", "Glob", "Grep");
       }
 

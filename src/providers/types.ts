@@ -18,6 +18,8 @@ export interface SpawnAdapterOptions {
   timeoutMs: number;
   agentName: string;
   onActivity?: (event: ActivityEvent) => void;
+  /** Restrict which tools the agent can use. Empty array = no tools. */
+  allowedTools?: string[];
 }
 
 export interface SpawnResult {

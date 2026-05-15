@@ -54,6 +54,8 @@ export interface AgentSpawnOptions {
   model?: string;
   onActivity?: (event: ActivityEvent) => void;
   stage?: string;
+  /** Restrict which tools the agent can use. Empty array = no tools. */
+  allowedTools?: string[];
 }
 
 export interface FailureContext {

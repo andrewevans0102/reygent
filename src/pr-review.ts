@@ -409,7 +409,7 @@ export async function runPRReview(
     includedDiffs: included,
     excludedFiles: excluded,
   });
-  const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model });
+  const result = await spawnAgent("pr-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model, allowedTools: [] });
 
   if (result.exitCode !== 0) {
     throw new TaskError(
