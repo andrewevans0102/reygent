@@ -46,12 +46,9 @@ describe("validateModel", () => {
     expect(validateModel("claude-sonnet-4-5")).toBe("claude-sonnet-4-5-20250929");
   });
 
-  it("throws TaskError for unknown model", () => {
-    expect(() => validateModel("gpt-4")).toThrow(TaskError);
-  });
-
-  it("error message includes model name", () => {
-    expect(() => validateModel("bad-model")).toThrow(/bad-model/);
+  it("passes through custom model unchanged", () => {
+    // Custom models warn but are allowed
+    expect(validateModel("gpt-4")).toBe("gpt-4");
   });
 
   it("accepts all SUPPORTED_MODELS", () => {

@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { loadConfig } from "./config.js";
 import { TaskError } from "./task.js";
 import { getProvider } from "./providers/index.js";
@@ -12,6 +13,9 @@ export const DEFAULT_MODEL = getProvider("claude").defaultModel;
 
 let modelOverride: string | null = null;
 let providerOverride: string | null = null;
+
+// Track warned custom models to avoid repeated warnings in same session
+const warnedCustomModels = new Set<string>();
 
 export function setModelOverride(id: string): void {
   modelOverride = id;
@@ -33,6 +37,7 @@ export function resolveAlias(id: string, providerName?: string): string {
  * Validate model ID against a provider's supported models.
  * If provider not specified, uses resolved provider.
  * Pass-through providers (openrouter) accept any model.
+ * Custom models (not in supported list) trigger a warning but are allowed.
  */
 export function validateModel(id: string, providerName?: string): string {
   const name = providerName ?? resolveProvider();
@@ -42,15 +47,26 @@ export function validateModel(id: string, providerName?: string): string {
   // OpenRouter accepts any model slug — pass-through
   if (name === "openrouter") return resolved;
 
+  // Check if model in supported list
   const valid = provider.supportedModels.some((m) => m.id === resolved);
   if (!valid) {
-    const list = provider.supportedModels.map((m) => `  ${m.id} — ${m.label}`).join("\n");
-    const aliases = Object.entries(provider.shortAliases)
-      .map(([alias, full]) => `  ${alias} → ${full}`)
-      .join("\n");
-    let msg = `Unknown model: ${id}\n\nSupported models for ${name}:\n${list}`;
-    if (aliases) msg += `\n\nShort aliases:\n${aliases}`;
-    throw new TaskError(msg);
+    // Allow custom models but warn user only once per model per session
+    const warningKey = `${name}:${resolved}`;
+    if (!warnedCustomModels.has(warningKey)) {
+      const list = provider.supportedModels.map((m) => `  ${m.id} — ${m.label}`).join("\n");
+      const aliases = Object.entries(provider.shortAliases)
+        .map(([alias, full]) => `  ${alias} → ${full}`)
+        .join("\n");
+      console.log(chalk.yellow("Warning:"), `"${id}" not in ${name} supported models list. Using custom model.`);
+      console.log(chalk.gray("Supported models for"), chalk.cyan(name) + chalk.gray(":"));
+      console.log(list);
+      if (aliases) {
+        console.log(chalk.gray("\nShort aliases:"));
+        console.log(aliases);
+      }
+      console.log("");
+      warnedCustomModels.add(warningKey);
+    }
   }
   return resolved;
 }

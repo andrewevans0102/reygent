@@ -224,23 +224,61 @@ async function runConfig(): Promise<void> {
   let selectedModel: string;
 
   if (provider.supportedModels.length === 0) {
-    // OpenRouter or similar — free-text input
+    // OpenRouter or similar — free-text input only
     resetTerminalForInput();
     selectedModel = await pasteableInput({
       message: "Model ID:",
       default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
     });
   } else {
+    // Providers with predefined models — offer list + custom option
     resetTerminalForInput();
     const modelChoices = provider.supportedModels.map((m) => ({
       name: `${m.id} — ${m.label}`,
       value: m.id,
     }));
-    selectedModel = await select({
+    // Add "Custom model" option at end
+    modelChoices.push({
+      name: chalk.gray("Custom model (enter manually)"),
+      value: "__custom__",
+    });
+
+    const modelSelection = await select({
       message: "Default model:",
       choices: modelChoices,
       default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
     });
+
+    if (modelSelection === "__custom__") {
+      resetTerminalForInput();
+      selectedModel = await pasteableInput({
+        message: "Enter model ID:",
+        default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
+      });
+
+      // Basic pattern validation for common typos
+      if (selectedProvider === "claude") {
+        // Claude models typically: claude-{family}-{version}[-{date}]
+        if (!selectedModel.startsWith("claude-") && !selectedModel.includes("projects/")) {
+          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Claude format. Expected: claude-{family}-{version} or Vertex AI full resource name."));
+          console.log(chalk.gray("  Examples: claude-opus-4-6, projects/PROJECT/locations/REGION/publishers/anthropic/models/MODEL"));
+        }
+      } else if (selectedProvider === "gemini") {
+        // Gemini models typically: gemini-{version}-{variant}
+        if (!selectedModel.startsWith("gemini-") && !selectedModel.includes("projects/")) {
+          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Gemini format. Expected: gemini-{version}-{variant} or Vertex AI full resource name."));
+          console.log(chalk.gray("  Examples: gemini-2.5-pro, projects/PROJECT/locations/REGION/publishers/google/models/MODEL"));
+        }
+      } else if (selectedProvider === "codex") {
+        // Codex models typically: gpt-{version}
+        if (!selectedModel.startsWith("gpt-")) {
+          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Codex format. Expected: gpt-{version}"));
+          console.log(chalk.gray("  Examples: gpt-5.4, gpt-6.0"));
+        }
+      }
+    } else {
+      selectedModel = modelSelection;
+    }
   }
 
   // 7. Per-agent overrides — grouped by category
@@ -313,22 +351,58 @@ async function runConfig(): Promise<void> {
       let agentModelChoice: string;
 
       if (agentProviderAdapter.supportedModels.length === 0) {
+        // Provider has no predefined models — free-text input only
         resetTerminalForInput();
         agentModelChoice = await pasteableInput({
           message: `Model ID for ${agent.name}:`,
           default: agent.model ?? agentProviderAdapter.defaultModel,
         });
       } else {
+        // Providers with predefined models — offer list + custom option
         resetTerminalForInput();
         const agentModelChoices = agentProviderAdapter.supportedModels.map((m) => ({
           name: `${m.id} — ${m.label}`,
           value: m.id,
         }));
-        agentModelChoice = await select({
+        // Add "Custom model" option at end
+        agentModelChoices.push({
+          name: chalk.gray("Custom model (enter manually)"),
+          value: "__custom__",
+        });
+
+        const agentModelSelection = await select({
           message: `Model for ${agent.name}:`,
           choices: agentModelChoices,
           default: agent.model ?? agentProviderAdapter.defaultModel,
         });
+
+        if (agentModelSelection === "__custom__") {
+          resetTerminalForInput();
+          agentModelChoice = await pasteableInput({
+            message: `Enter model ID for ${agent.name}:`,
+            default: agent.model ?? agentProviderAdapter.defaultModel,
+          });
+
+          // Basic pattern validation for common typos
+          if (agentProviderChoice === "claude") {
+            if (!agentModelChoice.startsWith("claude-") && !agentModelChoice.includes("projects/")) {
+              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Claude format. Expected: claude-{family}-{version} or Vertex AI full resource name."));
+              console.log(chalk.gray("  Examples: claude-opus-4-6, projects/PROJECT/locations/REGION/publishers/anthropic/models/MODEL"));
+            }
+          } else if (agentProviderChoice === "gemini") {
+            if (!agentModelChoice.startsWith("gemini-") && !agentModelChoice.includes("projects/")) {
+              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Gemini format. Expected: gemini-{version}-{variant} or Vertex AI full resource name."));
+              console.log(chalk.gray("  Examples: gemini-2.5-pro, projects/PROJECT/locations/REGION/publishers/google/models/MODEL"));
+            }
+          } else if (agentProviderChoice === "codex") {
+            if (!agentModelChoice.startsWith("gpt-")) {
+              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Codex format. Expected: gpt-{version}"));
+              console.log(chalk.gray("  Examples: gpt-5.4, gpt-6.0"));
+            }
+          }
+        } else {
+          agentModelChoice = agentModelSelection;
+        }
       }
 
       updatedAgents[agentIndex] = { ...agent, provider: agentProviderChoice, model: agentModelChoice };

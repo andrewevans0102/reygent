@@ -10,7 +10,7 @@ Reygent supports multiple AI providers. Each provider implements the same `Provi
 |---|---|
 | **Type** | CLI-based (`claude` subprocess) |
 | **Default model** | `claude-sonnet-4-5-20250929` |
-| **Supported models** | Sonnet 4.5, Opus 4.6, Haiku 4.5, Sonnet 4, 3.5 Sonnet, 3.5 Haiku, 3 Opus |
+| **Supported models** | Sonnet 4.5, Opus 4.6, Haiku 4.5, Sonnet 4, 3.5 Sonnet, 3.5 Haiku, 3 Opus, custom models |
 | **Requires** | `claude` CLI installed and authenticated |
 
 Claude is the default and most full-featured provider. It spawns the Claude CLI as a subprocess with `--output-format stream-json`, giving agents access to the full tool ecosystem (Read, Write, Edit, Bash, Glob, Grep).
@@ -23,13 +23,68 @@ reygent run --spec spec.md --model claude-haiku-4-5           # use Haiku
 
 **Short aliases:** `claude-sonnet-4-5` → `claude-sonnet-4-5-20250929`, `claude-haiku-4-5` → `claude-haiku-4-5-20251001`, `claude-sonnet-4` → `claude-sonnet-4-20250514`, `claude-3-5-sonnet` → `claude-3-5-sonnet-20241022`, `claude-3-5-haiku` → `claude-3-5-haiku-20241022`, `claude-3-opus` → `claude-3-opus-20240229`
 
+#### Claude via Google Vertex AI
+
+Claude models are available on Google Vertex AI Model Garden. To use Claude through Vertex AI:
+
+**Official documentation:**
+- [Vertex AI Model Garden - Claude](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-claude)
+- [Vertex AI Authentication](https://cloud.google.com/vertex-ai/docs/authentication)
+
+> **Note:** Setup instructions below reflect standard Google Cloud patterns. Always refer to official Google Cloud documentation for the most current and authoritative setup procedures.
+
+**Setup:**
+
+1. Install and authenticate the Google Cloud CLI:
+   ```bash
+   gcloud auth application-default login
+   gcloud config set project YOUR_PROJECT_ID
+   ```
+
+2. Enable Vertex AI API and Model Garden access in your GCP project
+
+3. Set Vertex AI environment variables:
+   ```bash
+   export GOOGLE_CLOUD_PROJECT=your-project-id        # Required: GCP project ID
+   export GOOGLE_CLOUD_REGION=us-central1             # Optional: defaults to us-central1
+   ```
+
+4. Configure the claude CLI to use Vertex AI:
+   ```bash
+   claude config set provider vertex
+   ```
+
+   **Note:** Some versions of the claude CLI auto-detect Vertex AI from environment variables. If your version does not require explicit provider configuration, skip this step. See the [official Anthropic Claude CLI documentation](https://docs.anthropic.com/en/docs/claude-cli) for your version's requirements.
+
+**Vertex AI-specific values:**
+
+| Environment Variable | Purpose | Required |
+|---|---|---|
+| `GOOGLE_CLOUD_PROJECT` | GCP project ID | Yes |
+| `GOOGLE_CLOUD_REGION` | GCP region (e.g., us-central1, europe-west1) | No (defaults vary by CLI) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account key JSON | No (if using gcloud auth) |
+
+**Standard Claude API values:**
+
+| Environment Variable | Purpose |
+|---|---|
+| `ANTHROPIC_API_KEY` | API key for direct Anthropic API access (not Vertex AI) |
+
+**Why use Claude on Vertex AI:**
+- Enterprise SLAs and support through Google Cloud
+- VPC networking and private endpoints
+- Integration with other GCP services (BigQuery, Cloud Storage, etc.)
+- Unified billing with other GCP resources
+- Regional data residency requirements
+- Use existing GCP credits and committed use discounts
+
 ### Gemini
 
 | Property | Value |
 |---|---|
 | **Type** | CLI-based (`gemini` subprocess) |
 | **Default model** | `gemini-2.5-pro` |
-| **Supported models** | Gemini 2.5 Pro, Gemini 2.5 Flash |
+| **Supported models** | Gemini 2.5 Pro, Gemini 2.5 Flash, custom models |
 | **Requires** | `gemini` CLI installed |
 
 ```bash
@@ -39,13 +94,72 @@ reygent run --spec spec.md --provider gemini --model gemini-2.5-flash
 
 **Workspace trust:** Gemini CLI requires the working directory to be "trusted" before it will run. Reygent sets the `GEMINI_CLI_TRUST_WORKSPACE=true` environment variable automatically when spawning Gemini subprocesses, so no manual trust configuration is needed.
 
+#### Google Vertex AI
+
+Google Vertex AI is a managed service for deploying and scaling Gemini models in Google Cloud. To use Gemini with Vertex AI:
+
+**Official documentation:**
+- [Vertex AI Generative AI - Gemini](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini)
+- [Vertex AI Authentication](https://cloud.google.com/vertex-ai/docs/authentication)
+
+> **Note:** Setup instructions below reflect standard Google Cloud patterns. Always refer to official Google Cloud documentation for the most current and authoritative setup procedures.
+
+**Setup:**
+
+1. Install and authenticate the Google Cloud CLI:
+   ```bash
+   gcloud auth application-default login
+   gcloud config set project YOUR_PROJECT_ID
+   ```
+
+2. Set Vertex AI environment variables:
+   ```bash
+   export GOOGLE_CLOUD_PROJECT=your-project-id        # Required: GCP project ID
+   export GOOGLE_CLOUD_REGION=us-central1             # Optional: defaults to us-central1
+   ```
+
+   Alternatively, use a service account:
+   ```bash
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   ```
+
+3. Configure the gemini CLI to use Vertex AI:
+   ```bash
+   gemini config set provider vertex
+   ```
+
+   **Note:** Some versions of the gemini CLI auto-detect Vertex AI from environment variables. If your version does not require explicit provider configuration, skip this step. See the [official Google Gemini CLI documentation](https://ai.google.dev/gemini-api/docs/cli) for your version's requirements.
+
+**Vertex AI-specific values:**
+
+| Environment Variable | Purpose | Required |
+|---|---|---|
+| `GOOGLE_CLOUD_PROJECT` | GCP project ID | Yes |
+| `GOOGLE_CLOUD_REGION` | GCP region (e.g., us-central1, europe-west1) | No (defaults vary by CLI) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account key JSON | No (if using gcloud auth) |
+
+**Standard Gemini API values:**
+
+| Environment Variable | Purpose |
+|---|---|
+| `GEMINI_API_KEY` | API key for standard Gemini API (not Vertex AI) |
+| `GEMINI_CLI_TRUST_WORKSPACE` | Auto-set by Reygent to `true` |
+
+Use Vertex AI when you need:
+- Enterprise SLAs and support
+- VPC networking and private endpoints
+- Integration with other GCP services
+- Custom model fine-tuning
+- Regional data residency requirements
+
 ### Codex
 
 | Property | Value |
 |---|---|
 | **Type** | CLI-based (`codex` subprocess) |
 | **Default model** | `gpt-5.4` |
-| **Supported models** | gpt-5.4 |
+| **Supported models** | gpt-5.4, custom models |
 | **Requires** | `codex` CLI installed |
 
 ```bash
@@ -90,7 +204,22 @@ The model is resolved in this order:
 
 Short aliases are expanded before validation. For example, `claude-sonnet-4-5` is expanded to `claude-sonnet-4-5-20250929`.
 
-Model validation is performed against the provider's supported models list, except for OpenRouter which accepts any model slug.
+### Custom Models
+
+All providers support custom model names via the interactive config (`reygent config`). When selecting a model, choose "Custom model (enter manually)" to specify any model ID your provider supports. Custom models trigger a warning but are allowed — useful for:
+
+- New models not yet in the predefined list
+- Provider-specific model variants (e.g., fine-tuned models)
+- Regional model endpoints (e.g., Vertex AI models in specific regions)
+- Beta/preview models
+
+Example custom models:
+- Claude: `claude-opus-5-0` (when released)
+- Gemini: `gemini-exp-1206` (experimental models)
+- Vertex AI: `projects/PROJECT_ID/locations/us-central1/publishers/google/models/gemini-2.5-pro`
+- Codex: `gpt-6.0` (future models)
+
+OpenRouter accepts any model slug by default (no validation).
 
 ## Per-Project Configuration
 

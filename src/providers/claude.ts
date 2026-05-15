@@ -80,6 +80,9 @@ const SHORT_ALIASES: Record<string, string> = {
 
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 
+// Track Vertex AI detection to log only once per session
+let vertexAiLoggedForClaude = false;
+
 /** Extract token counts from a Claude CLI stream result message. */
 export function extractTokenUsage(msg: StreamResultMessage): {
   inputTokens: number | undefined;
@@ -154,6 +157,22 @@ export const claudeAdapter: ProviderAdapter = {
         args.push("--allowedTools", "Bash", "Edit", "Write", "Read", "Glob", "Grep");
       }
 
+      const name = options.agentName;
+
+      // Detect Vertex AI configuration for Claude via Model Garden
+      const vertexProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+      const vertexRegion = process.env.GOOGLE_CLOUD_REGION;
+      const hasVertexConfig = !!vertexProject;
+
+      // Log Vertex AI detection only once per session to avoid spam
+      if (hasVertexConfig && !options.quiet && !vertexAiLoggedForClaude) {
+        const region = vertexRegion ?? "(using CLI default)";
+        process.stderr.write(
+          chalk.gray(`[${name}] Vertex AI detected: project=${vertexProject}, region=${region}\n`)
+        );
+        vertexAiLoggedForClaude = true;
+      }
+
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
       const child = spawn("claude", args, {
         stdio: [stdinMode, "pipe", "pipe"],
@@ -166,7 +185,6 @@ export const claudeAdapter: ProviderAdapter = {
       let resultApiErrorStatus: number | undefined;
       let resultUsage: UsageInfo | undefined;
       const textChunks: string[] = [];
-      const name = options.agentName;
 
       const timeout = setTimeout(() => {
         // Kill entire process group to catch spawned descendants
