@@ -79,11 +79,17 @@ export async function generateSpecCommand(
             output: process.stdout,
           });
 
-          const termWidth = process.stdout.columns || 80;
+          const termWidth = Math.max(process.stdout.columns || 80, 40);
 
           try {
             for (let i = 0; i < result.questions.length; i++) {
               const question = result.questions[i];
+
+              // Add empty line before first question for consistency
+              if (i === 0) {
+                console.log();
+              }
+
               const counter = chalk.cyan(`Question ${i + 1} of ${result.questions.length}`);
               console.log(counter);
 
