@@ -6,6 +6,7 @@ import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import { TaskError } from "./task.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
+import { emitErrorTask } from "./telemetry-helpers.js";
 
 export interface ClarificationResult {
   needsClarification: true;
@@ -113,17 +114,11 @@ export async function runClarification(
 
   if (exitCode !== 0) {
     const detail = formatExitDetail(clarifyResult);
-    const chesstrace = getChesstrace();
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: `generate-spec: agent exited with code ${exitCode}${detail}`,
-        stage: "clarification",
-        agent: "generate-spec",
-        errorMessage,
-        apiErrorStatus,
-      });
-    }
+    emitErrorTask(
+      `generate-spec: agent exited with code ${exitCode}${detail}`,
+      "clarification",
+      { agent: "generate-spec", errorMessage, apiErrorStatus },
+    );
     throw new TaskError(`generate-spec: agent exited with code ${exitCode}${detail}`);
   }
 
@@ -175,17 +170,11 @@ export async function generateSpec(
 
   if (exitCode !== 0) {
     const detail = formatExitDetail(specResult);
-    const chesstrace = getChesstrace();
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: `generate-spec: agent exited with code ${exitCode}${detail}`,
-        stage: "generate",
-        agent: "generate-spec",
-        errorMessage,
-        apiErrorStatus,
-      });
-    }
+    emitErrorTask(
+      `generate-spec: agent exited with code ${exitCode}${detail}`,
+      "generate",
+      { agent: "generate-spec", errorMessage, apiErrorStatus },
+    );
     throw new TaskError(`generate-spec: agent exited with code ${exitCode}${detail}`);
   }
 

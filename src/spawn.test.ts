@@ -188,8 +188,8 @@ describe("formatExitDetail", () => {
 
     const detail = formatExitDetail(result);
 
-    expect(detail).toBe(`\n  ${"x".repeat(500)}`);
-    expect(detail.length).toBe(503); // \n + 2 spaces + 500 chars
+    expect(detail).toBe(`\n  ${"x".repeat(500)}...`);
+    expect(detail.length).toBe(506); // \n + 2 spaces + 500 chars + 3 dots
   });
 
   it("returns empty string when stdout empty and no errorMessage", () => {

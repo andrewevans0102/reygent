@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { spawnAgentStream, formatExitDetail } from "../../src/spawn.js";
 
-const SKIP_REASON = "ANTHROPIC_API_KEY not set — run locally with real key to test";
-
 describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Error details integration", () => {
   it("API 404 error includes errorMessage, apiErrorStatus, and helpful tip", async () => {
     let caughtError: Error | null = null;
@@ -74,10 +72,4 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Error details integration", () 
       }
     }
   }, 60000);
-});
-
-describe.skipIf(process.env.ANTHROPIC_API_KEY)("Error details integration — skipped", () => {
-  it("skips gracefully when ANTHROPIC_API_KEY not present", () => {
-    console.log(SKIP_REASON);
-  });
 });

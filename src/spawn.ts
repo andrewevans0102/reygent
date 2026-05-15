@@ -6,6 +6,7 @@ import type { UsageInfo } from "./usage.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
 import { loadKnowledge } from "./knowledge/loader.js";
+import { emitErrorTask } from "./telemetry-helpers.js";
 
 /**
  * Result returned by provider adapter spawn() method.
@@ -38,7 +39,10 @@ export function formatExitDetail(result: SpawnResult): string {
     return detail;
   }
   const trimmed = result.stdout.trim();
-  return trimmed ? `\n  ${trimmed.slice(0, 500)}` : "";
+  if (!trimmed) return "";
+  const truncated = trimmed.slice(0, 500);
+  const suffix = trimmed.length > 500 ? "..." : "";
+  return `\n  ${truncated}${suffix}`;
 }
 
 export interface SpawnOptions {
@@ -74,13 +78,12 @@ export async function spawnAgentStream(
         provider: providerName,
         reason,
       });
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: `Provider "${providerName}" is not available: ${reason}`,
-        stage: options?.stage ?? "spawn",
-        agent: name,
-      });
     }
+    emitErrorTask(
+      `Provider "${providerName}" is not available: ${reason}`,
+      options?.stage ?? "spawn",
+      { agent: name },
+    );
     throw new TaskError(`Provider "${providerName}" is not available: ${reason}`);
   }
 

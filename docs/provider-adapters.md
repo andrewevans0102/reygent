@@ -150,10 +150,10 @@ This pattern is used in:
 **Error detection:**
 - Tries to parse JSON output for structured error object
 - Looks for `error.message` and `error.code` fields
-- Maps OpenAI error codes (strings) to HTTP status codes:
-  - `model_not_found` → 404
-  - `invalid_api_key` → 401
-  - `rate_limit_exceeded` → 429
+- Maps OpenAI error codes (strings) to HTTP status codes using partial match:
+  - `.includes("not_found")` or `"model_not_found"` → 404
+  - `.includes("auth")` or `"invalid_api_key"` → 401
+  - `.includes("rate_limit")` or `"rate_limit_exceeded"` → 429
 - Falls back to stderr if exitCode non-zero and no structured error
 
 **Expected JSON format:**

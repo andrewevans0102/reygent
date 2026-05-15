@@ -15,6 +15,7 @@ import { TaskError } from "./task.js";
 import type { UsageInfo } from "./usage.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
+import { emitErrorTask } from "./telemetry-helpers.js";
 
 export type { SpawnResult };
 
@@ -254,16 +255,11 @@ export async function runImplement(
   const qeAgent = agents.find((a) => a.name === "qe");
 
   if (!devAgent || !qeAgent) {
-    // Emit error.task before throwing
-    const chesstrace = getChesstrace();
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: "Implement: missing dev or qe agent config",
-        stage: options?.stage ?? "implement",
-        agent: "implement",
-      });
-    }
+    emitErrorTask(
+      "Implement: missing dev or qe agent config",
+      options?.stage ?? "implement",
+      { agent: "implement" },
+    );
     throw new TaskError("Implement: missing dev or qe agent config");
   }
 
@@ -393,39 +389,27 @@ export async function runImplement(
   // Only fail if both requested agents failed
   const chesstrace = getChesstrace();
   if ((runDev && dev === null) && (runQE && qe === null)) {
-    // Emit error.task before throwing
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: "Implement: all requested agents failed",
-        stage: options?.stage ?? "implement",
-        agent: "implement",
-      });
-    }
+    emitErrorTask(
+      "Implement: all requested agents failed",
+      options?.stage ?? "implement",
+      { agent: "implement" },
+    );
     throw new TaskError("Implement: all requested agents failed");
   }
   if (runDev && !runQE && dev === null) {
-    // Emit error.task before throwing
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: "Implement: dev agent failed",
-        stage: options?.stage ?? "implement",
-        agent: "dev",
-      });
-    }
+    emitErrorTask(
+      "Implement: dev agent failed",
+      options?.stage ?? "implement",
+      { agent: "dev" },
+    );
     throw new TaskError("Implement: dev agent failed");
   }
   if (!runDev && runQE && qe === null) {
-    // Emit error.task before throwing
-    if (chesstrace) {
-      chesstrace.emit(Events.ERROR_TASK, {
-        type: "TaskError",
-        message: "Implement: qe agent failed",
-        stage: options?.stage ?? "implement",
-        agent: "qe",
-      });
-    }
+    emitErrorTask(
+      "Implement: qe agent failed",
+      options?.stage ?? "implement",
+      { agent: "qe" },
+    );
     throw new TaskError("Implement: qe agent failed");
   }
 
