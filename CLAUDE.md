@@ -20,6 +20,7 @@ This file contains Claude Code specific integration notes. For general Reygent d
 
 - Build: `npm run build`
 - Dev: `npm run dev`
+- Docs: `npm run docs:dev` (dev server), `docs:build` (build), `docs:preview` (preview)
 - Verify pricing: Use `/verify-pricing` skill in Claude Code
 
 ## Conventions

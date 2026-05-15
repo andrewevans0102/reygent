@@ -1,5 +1,193 @@
-# QuickStart Guide
+# Quickstart
 
-This guide has moved to the repo root for discoverability.
+Get from zero to your first AI-driven pull request in minutes.
 
-See [QUICKSTART.md](../QUICKSTART.md) for the full quickstart guide.
+## 1. Prerequisites
+
+- [Node.js](https://nodejs.org/) 22+
+- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code/overview) installed and authenticated
+- [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
+- Git configured with push access to your repo
+
+## 2. Install
+
+```bash
+git clone https://github.com/<your-org>/reygent.git
+cd reygent
+npm install
+npm run build
+npm link
+```
+
+Verify it works:
+
+```bash
+reygent --version
+```
+
+## 3. Configure API Keys (Optional)
+
+Only needed if you want to pull specs from an issue tracker instead of a markdown file.
+
+Create a `.env` file in your target project root:
+
+```bash
+# Linear
+LINEAR_API_KEY=lin_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Jira
+JIRA_URL=https://your-company.atlassian.net
+JIRA_EMAIL=you@company.com
+JIRA_API_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+## 4. Initialize Your Project
+
+Navigate to the repo you want reygent to work on:
+
+```bash
+cd /path/to/your-project
+reygent init
+```
+
+This creates `.reygent/config.json` with default agent definitions. You can skip this step — reygent falls back to built-in agents.
+
+## 5. Write a Spec
+
+Create a `spec.md` file describing what you want built:
+
+```markdown
+# Add health-check endpoint
+
+## Requirements
+- GET /health returns 200 with JSON body { "status": "ok" }
+- Responds in under 50ms
+- No authentication required
+
+## Acceptance Criteria
+- Endpoint is reachable at /health
+- Returns correct JSON response
+- Unit test covers success case
+```
+
+Or generate one from a description:
+
+```bash
+reygent generate-spec "Add a health-check endpoint" --output spec.md
+```
+
+Or point directly at a Linear or Jira issue:
+
+```bash
+reygent run --spec ENG-123
+reygent run --spec https://linear.app/your-team/issue/ENG-123/your-issue
+```
+
+Issue keys (e.g. `ENG-123`) are resolved based on which credentials are configured in `.env`. If both Linear and Jira are configured, Linear is tried first.
+
+## 6. Run the Workflow
+
+```bash
+reygent run --spec spec.md
+```
+
+Reygent runs 7 stages automatically:
+
+```
+Plan → Implement → Unit Tests → Functional Tests → Security Review → PR Create → PR Review
+```
+
+You'll be prompted to choose:
+- **Auto-approve mode** — agents run without asking permission for each file edit (faster, runs dev + QE in parallel)
+- **Clarification preference** — whether the planner asks you questions or makes assumptions
+
+### Fully autonomous mode
+
+```bash
+reygent run --spec spec.md --auto-approve --skip-clarification
+```
+
+### Preview without executing
+
+```bash
+reygent run --spec spec.md --dry-run
+```
+
+## 7. Customize Config
+
+Use the interactive config command to set your provider, model, and per-agent overrides:
+
+```bash
+reygent config
+```
+
+This walks you through selecting a provider and model, then lets you customize each agent individually. See the [config command reference](./commands.md#reygent-config) for details.
+
+You can also edit `.reygent/config.json` directly:
+
+```json
+{
+  "agents": [
+    {
+      "name": "dev",
+      "description": "Write, edit, and refactor implementation code",
+      "systemPrompt": "You are the Dev agent. Follow our team's coding standards...",
+      "tools": ["read", "write", "bash", "search"],
+      "role": "developer"
+    }
+  ],
+  "model": "claude-sonnet-4-5-20250929"
+}
+```
+
+You can also override the model per-run:
+
+```bash
+reygent run --spec spec.md --model claude-opus-4-6
+```
+
+## 8. Install Skills from the Registry
+
+Browse and install community skills without manually copying files:
+
+```bash
+# See what's available
+reygent skills list
+
+# Install a skill to your project
+reygent skills add code-reviewer
+
+# Use it
+reygent agent code-reviewer
+
+# Install globally (shared across all projects)
+reygent skills add code-reviewer --global
+
+# Remove when done
+reygent skills remove code-reviewer
+```
+
+See [Skills](./skills.md) for the full guide.
+
+## Useful Commands
+
+| Command | Description |
+|---|---|
+| `reygent init` | Initialize `.reygent/` config in current project |
+| `reygent generate-spec "..."` | Generate spec from description |
+| `reygent spec spec.md` | Load and display a parsed spec |
+| `reygent agent dev` | Start interactive session with an agent |
+| `reygent agent dev --spec spec.md` | Interactive session with spec context |
+| `reygent run --spec spec.md` | Run full 7-stage workflow |
+| `reygent skills list` | Browse available skills in the registry |
+| `reygent skills add <name>` | Install a skill from the registry |
+| `reygent skills remove <name>` | Remove an installed skill |
+
+## Next Steps
+
+- [README](https://github.com/andrewevans0102/reygent) — full documentation, all options, agent details
+- [Commands Reference](./commands.md) — every command and flag
+- [Agents Guide](./agents.md) — how agents work and how to customize them
+- [Workflows](./workflows.md) — visual diagrams of the workflow and retry logic
+- [Skills](./skills.md) — extend reygent with custom skills
+- [Architecture](./architecture.md) — technical deep-dive

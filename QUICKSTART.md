@@ -1,5 +1,7 @@
 # Quickstart
 
+> **📚 Documentation has moved!** Visit the [Reygent documentation site](https://andrewevans0102.github.io/reygent/) for the latest guides and enhanced browsing experience.
+
 Get from zero to your first AI-driven pull request in minutes.
 
 ## 1. Prerequisites
