@@ -13,8 +13,19 @@ function stripAnsi(str: string): string {
  * @param continuationPrefix  Optional string to prepend to continuation lines instead of spaces
  */
 export function wrapText(text: string, indent: number, maxWidth: number, continuationPrefix?: string): string {
+  // Handle edge cases
+  if (!text || text.trim().length === 0) return text || "";
+  if (maxWidth <= 0) return text;
+  if (indent < 0) indent = 0;
+
   const available = maxWidth - indent;
-  if (available <= 20 || stripAnsi(text).length <= available) return text;
+
+  // If available width is too narrow, force wrap anyway (don't return original)
+  // Otherwise check if text fits without wrapping
+  if (available > 20 && stripAnsi(text).length <= available) return text;
+
+  // Minimum available width to prevent pathological cases
+  const minAvailable = Math.max(available, 10);
 
   const words = text.split(" ");
   const wrappedLines: string[] = [];
@@ -23,7 +34,7 @@ export function wrapText(text: string, indent: number, maxWidth: number, continu
   for (const word of words) {
     if (currentLine.length === 0) {
       currentLine = word;
-    } else if (stripAnsi(currentLine).length + 1 + stripAnsi(word).length <= available) {
+    } else if (stripAnsi(currentLine).length + 1 + stripAnsi(word).length <= minAvailable) {
       currentLine += " " + word;
     } else {
       wrappedLines.push(currentLine);
