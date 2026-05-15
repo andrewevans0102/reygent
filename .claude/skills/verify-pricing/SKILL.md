@@ -41,30 +41,25 @@ Provider     Field                Current       Actual        Status
 claude       inputCostPerMillion  $3.00/M       $3.00/M       ✓ match
 claude       outputCostPerMillion $15.00/M      $15.00/M      ✓ match
 claude       cacheDiscountRate    90%           90%           ✓ match
-claude       lastVerified         2025-05-04                  → updating to 2026-05-07
+claude       lastVerified         2026-05-15                  ✓ verified
 
-codex        inputCostPerMillion  $2.50/M       $3.00/M       ✗ MISMATCH
-codex        outputCostPerMillion $10.00/M      ? unable to verify
-codex        cacheDiscountRate    75%           50%           ✗ MISMATCH
+codex        inputCostPerMillion  $2.50/M       $2.50/M       ✓ match
+codex        outputCostPerMillion $15.00/M      $15.00/M      ✓ match
+codex        cacheDiscountRate    90%           90%           ✓ match
+codex        lastVerified         2026-05-15                  ✓ verified
 
-openrouter   inputCostPerMillion  $3.00/M       ? unable to verify
+openrouter   inputCostPerMillion  $3.00/M       $3.00/M       ✓ match
 openrouter   cacheDiscountRate    50%           ? unable to verify
+openrouter   lastVerified         2025-05-04                  → updating to 2026-05-15
 
 gemini       inputCostPerMillion  $1.25/M       $1.25/M       ✓ match
-gemini       outputCostPerMillion $5.00/M       $5.00/M       ✓ match
-gemini       cacheDiscountRate    50%           ? unable to verify
-gemini       lastVerified         2025-05-04                  → updating to 2026-05-07
+gemini       outputCostPerMillion $10.00/M      $10.00/M      ✓ match
+gemini       cacheDiscountRate    90%           90%           ✓ match
+gemini       lastVerified         2026-05-15                  ✓ verified
 
 ──────────────────────────────────────────────────────────────────────
-2 mismatches found in codex provider.
-
-Suggested changes to src/pricing.ts:
-
-  codex.inputCostPerMillion: 2.50 → 3.00
-  codex.cacheDiscountRate: 0.75 → 0.50
-  codex.lastVerified: "2025-05-04" → "2026-05-07"
-
-Apply these changes? (y/n)
+All verified pricing matches current provider documentation.
+Updating lastVerified dates for successfully verified providers.
 ```
 
 If user approves, apply changes to `src/pricing.ts`.

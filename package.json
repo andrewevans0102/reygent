@@ -1,7 +1,8 @@
 {
   "name": "reygent-code",
-  "version": "1.0.1",
+  "version": "1.1.2",
   "description": "Agentic coding tool for software development",
+  "homepage": "https://andrewevans0102.github.io/reygent/",
   "type": "module",
   "main": "./dist/cli.js",
   "module": "./dist/cli.js",

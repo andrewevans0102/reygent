@@ -1,3 +1,35 @@
+## [1.1.2](https://github.com/andrewevans0102/reygent/compare/v1.1.1...v1.1.2) (2026-05-15)
+
+
+### Bug Fixes
+
+* add homepage URL to package.json for npmjs ([8679423](https://github.com/andrewevans0102/reygent/commit/8679423694b579e35dbfbf15b7e9f9e8ac5fa467))
+* address PR review comments ([a689b14](https://github.com/andrewevans0102/reygent/commit/a689b148477f79adfe099ca9ba0a1f920b610c1f))
+* update codex pricing and remove docs deploy path filter ([ba17a0a](https://github.com/andrewevans0102/reygent/commit/ba17a0af8ac503b617d3c43f48eaa8b833912255))
+
+## [1.1.1](https://github.com/andrewevans0102/reygent/compare/v1.1.0...v1.1.1) (2026-05-15)
+
+
+### Bug Fixes
+
+* address PR review comments ([d52799b](https://github.com/andrewevans0102/reygent/commit/d52799b7be294a77bb308b7b6e672af8320a78cc))
+
+# [1.1.0](https://github.com/andrewevans0102/reygent/compare/v1.0.1...v1.1.0) (2026-05-15)
+
+
+### Bug Fixes
+
+* address PR review comments ([689e6dd](https://github.com/andrewevans0102/reygent/commit/689e6dde63bd17a1671454b8763d9a813825caf6))
+* address PR review comments ([3127678](https://github.com/andrewevans0102/reygent/commit/312767853e3ca10b10d69ea6ea1d26155e1838f3))
+* address PR review comments ([401e64d](https://github.com/andrewevans0102/reygent/commit/401e64d92cca83d72c1d8356f3e8c154832ea878))
+
+
+### Features
+
+* add custom model entry and Vertex AI support ([0b1ea8a](https://github.com/andrewevans0102/reygent/commit/0b1ea8a3e6cd07b5508c00bc410e24496a747192))
+* add VitePress documentation site with GitHub Pages deployment ([372146e](https://github.com/andrewevans0102/reygent/commit/372146e48b4c08cf2a201247b6ce4d6a28f9bb44))
+* improve generate-spec clarifying questions UI ([4c28bf8](https://github.com/andrewevans0102/reygent/commit/4c28bf8106fbeba7014b7518e6e5c85bb5ce5b1a))
+
 ## [1.0.1](https://github.com/andrewevans0102/reygent/compare/v1.0.0...v1.0.1) (2026-05-15)
 
 
