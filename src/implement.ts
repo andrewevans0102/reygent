@@ -2,7 +2,7 @@ import chalk from "chalk";
 import { getAgents } from "./config.js";
 import { extractJSON } from "./planner.js";
 import type { ActivityEvent } from "./providers/types.js";
-import { spawnAgentStream } from "./spawn.js";
+import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import type { SpawnResult } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
 import type {
@@ -315,9 +315,12 @@ export async function runImplement(
         if (devResult.value.exitCode === 0) {
           dev = extractDevOutput(devResult.value.stdout);
         } else {
-          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.value.exitCode}`);
-          const summary = getFailureSummary(devResult.value.stdout);
-          if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          const detail = formatExitDetail(devResult.value);
+          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.value.exitCode}${detail}`);
+          if (!devResult.value.errorMessage) {
+            const summary = getFailureSummary(devResult.value.stdout);
+            if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          }
         }
       } else {
         console.log(chalk.red("dev agent failed:"), devResult.reason);
@@ -331,9 +334,12 @@ export async function runImplement(
         if (qeResult.value.exitCode === 0) {
           qe = extractQEOutput(qeResult.value.stdout);
         } else {
-          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.value.exitCode}`);
-          const summary = getFailureSummary(qeResult.value.stdout);
-          if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          const detail = formatExitDetail(qeResult.value);
+          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.value.exitCode}${detail}`);
+          if (!qeResult.value.errorMessage) {
+            const summary = getFailureSummary(qeResult.value.stdout);
+            if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          }
         }
       } else {
         console.log(chalk.red("qe agent failed:"), qeResult.reason);
@@ -350,9 +356,12 @@ export async function runImplement(
         }
         usages.push({ agent: "dev", usage: devResult.usage });
         if (devResult.exitCode !== 0) {
-          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.exitCode}`);
-          const summary = getFailureSummary(devResult.stdout);
-          if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          const detail = formatExitDetail(devResult);
+          console.log(chalk.red("dev agent failed:"), `exit code ${devResult.exitCode}${detail}`);
+          if (!devResult.errorMessage) {
+            const summary = getFailureSummary(devResult.stdout);
+            if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          }
         }
       } catch (err) {
         console.log(chalk.red("dev agent failed:"), err);
@@ -368,9 +377,12 @@ export async function runImplement(
         }
         usages.push({ agent: "qe", usage: qeResult.usage });
         if (qeResult.exitCode !== 0) {
-          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.exitCode}`);
-          const summary = getFailureSummary(qeResult.stdout);
-          if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          const detail = formatExitDetail(qeResult);
+          console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.exitCode}${detail}`);
+          if (!qeResult.errorMessage) {
+            const summary = getFailureSummary(qeResult.stdout);
+            if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
+          }
         }
       } catch (err) {
         console.log(chalk.red("qe agent failed:"), err);

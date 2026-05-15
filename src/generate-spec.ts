@@ -2,7 +2,7 @@ import { getAgents } from "./config.js";
 import { isDebug } from "./debug.js";
 import { extractJSON } from "./planner.js";
 import type { ActivityEvent } from "./providers/types.js";
-import { spawnAgentStream } from "./spawn.js";
+import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import { TaskError } from "./task.js";
 
 export interface ClarificationResult {
@@ -106,10 +106,12 @@ export async function runClarification(
   onActivity?: (event: ActivityEvent) => void,
 ): Promise<ClarificationResponse> {
   const prompt = buildClarificationPrompt(description, previousAnswers);
-  const { stdout: raw, exitCode } = await spawnAgentStream("generate-spec", prompt, 120_000, { quiet: true, onActivity });
+  const clarifyResult = await spawnAgentStream("generate-spec", prompt, 120_000, { quiet: true, onActivity });
+  const { stdout: raw, exitCode } = clarifyResult;
 
   if (exitCode !== 0) {
-    throw new TaskError(`generate-spec: agent exited with code ${exitCode}`);
+    const detail = formatExitDetail(clarifyResult);
+    throw new TaskError(`generate-spec: agent exited with code ${exitCode}${detail}`);
   }
 
   let parsed: unknown;
@@ -155,10 +157,12 @@ export async function generateSpec(
   onActivity?: (event: ActivityEvent) => void,
 ): Promise<string> {
   const prompt = buildGeneratePrompt(description, clarificationAnswers);
-  const { stdout, exitCode } = await spawnAgentStream("generate-spec", prompt, 120_000, { onActivity });
+  const specResult = await spawnAgentStream("generate-spec", prompt, 120_000, { onActivity });
+  const { stdout, exitCode } = specResult;
 
   if (exitCode !== 0) {
-    throw new TaskError(`generate-spec: agent exited with code ${exitCode}`);
+    const detail = formatExitDetail(specResult);
+    throw new TaskError(`generate-spec: agent exited with code ${exitCode}${detail}`);
   }
 
   if (!stdout) {

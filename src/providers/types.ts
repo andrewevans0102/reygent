@@ -24,6 +24,8 @@ export interface SpawnResult {
   stdout: string;
   exitCode: number;
   usage?: UsageInfo;
+  errorMessage?: string;
+  apiErrorStatus?: number;
 }
 
 export interface ModelEntry {

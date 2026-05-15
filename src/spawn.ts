@@ -11,6 +11,25 @@ export interface SpawnResult {
   stdout: string;
   exitCode: number;
   usage?: UsageInfo;
+  errorMessage?: string;
+  apiErrorStatus?: number;
+}
+
+/**
+ * Build a detail string from a SpawnResult for error messages.
+ * Includes errorMessage from the provider and raw stdout as fallback.
+ */
+export function formatExitDetail(result: SpawnResult): string {
+  if (result.errorMessage) {
+    const status = result.apiErrorStatus ? ` (HTTP ${result.apiErrorStatus})` : "";
+    let detail = `\n  ${result.errorMessage}${status}`;
+    if (result.apiErrorStatus === 404 && /not available/i.test(result.errorMessage)) {
+      detail += `\n  Tip: edit .reygent/config.json "model" field, or run \`reygent config\` to pick a supported model.`;
+    }
+    return detail;
+  }
+  const trimmed = result.stdout.trim();
+  return trimmed ? `\n  ${trimmed.slice(0, 500)}` : "";
 }
 
 export interface SpawnOptions {

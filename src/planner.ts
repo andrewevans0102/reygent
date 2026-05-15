@@ -1,6 +1,6 @@
 import { getAgents } from "./config.js";
 import type { ActivityEvent } from "./providers/types.js";
-import { spawnAgentStream } from "./spawn.js";
+import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import type { SpecPayload } from "./spec.js";
 import type { PlannerOutput, PlannerClarification, PlannerResult } from "./task.js";
 import { TaskError } from "./task.js";
@@ -116,20 +116,24 @@ export async function runPlanner(
   const agents = getAgents();
   const plannerAgent = agents.find((a) => a.name === "planner");
   const prompt = buildPrompt(spec, previousAnswers, options);
-  const { stdout: raw, exitCode, usage } = await spawnAgentStream("planner", prompt, 300_000, { quiet: true, onActivity: options?.onActivity, provider: plannerAgent?.provider, model: plannerAgent?.model });
+  const spawnResult = await spawnAgentStream("planner", prompt, 300_000, { quiet: true, onActivity: options?.onActivity, provider: plannerAgent?.provider, model: plannerAgent?.model });
+  const { stdout: raw, exitCode, usage, errorMessage, apiErrorStatus } = spawnResult;
 
   if (exitCode !== 0) {
+    const detail = formatExitDetail(spawnResult);
     // Emit error.task before throwing
     const chesstrace = getChesstrace();
     if (chesstrace) {
       chesstrace.emit(Events.ERROR_TASK, {
         type: "TaskError",
-        message: `Planner: agent exited with code ${exitCode}`,
+        message: `Planner: agent exited with code ${exitCode}${detail}`,
         stage: "plan",
         agent: "planner",
+        errorMessage,
+        apiErrorStatus,
       });
     }
-    throw new TaskError(`Planner: agent exited with code ${exitCode}`);
+    throw new TaskError(`Planner: agent exited with code ${exitCode}${detail}`);
   }
 
   let parsed: unknown;

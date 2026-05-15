@@ -7,7 +7,10 @@ vi.mock("./config.js", () => ({
 }));
 vi.mock("./debug.js", () => ({ isDebug: vi.fn(() => false) }));
 vi.mock("./planner.js", () => ({ extractJSON: vi.fn((s: string) => s) }));
-vi.mock("./spawn.js", () => ({ spawnAgentStream: vi.fn() }));
+vi.mock("./spawn.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spawn.js")>();
+  return { ...actual, spawnAgentStream: vi.fn() };
+});
 
 import { runClarification, generateSpec } from "./generate-spec.js";
 import { spawnAgentStream } from "./spawn.js";

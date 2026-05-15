@@ -21,6 +21,8 @@ export interface StreamResultMessage {
   type: "result";
   subtype: string;
   result: string;
+  is_error?: boolean;
+  api_error_status?: number;
   total_cost_usd?: number;
   duration_ms?: number;
   num_turns?: number;
@@ -160,6 +162,8 @@ export const claudeAdapter: ProviderAdapter = {
       registerChildProcess(child);
 
       let resultText = "";
+      let resultErrorMessage: string | undefined;
+      let resultApiErrorStatus: number | undefined;
       let resultUsage: UsageInfo | undefined;
       const textChunks: string[] = [];
       const name = options.agentName;
@@ -186,7 +190,13 @@ export const claudeAdapter: ProviderAdapter = {
         if (stdoutEnded && stderrEnded && processExitCode !== null) {
           clearTimeout(timeout);
           const stdout = resultText || textChunks.join("\n");
-          resolve({ stdout, exitCode: processExitCode, usage: resultUsage });
+          resolve({
+            stdout,
+            exitCode: processExitCode,
+            usage: resultUsage,
+            errorMessage: resultErrorMessage,
+            apiErrorStatus: resultApiErrorStatus,
+          });
         }
       };
 
@@ -223,6 +233,10 @@ export const claudeAdapter: ProviderAdapter = {
         } else if (event.type === "result") {
           const msg = event as StreamResultMessage;
           resultText = msg.result;
+          if (msg.is_error) {
+            resultErrorMessage = msg.result;
+            resultApiErrorStatus = msg.api_error_status;
+          }
 
           const { inputTokens, outputTokens, cachedTokens, cacheWriteTokens } = extractTokenUsage(msg);
           const hasUsage =
