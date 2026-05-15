@@ -94,8 +94,31 @@ export function splitDiffByFile(rawDiff: string): FileDiff[] {
 }
 
 /**
+ * Generated/lock files that provide no useful review context and confuse
+ * LLM agents (agents try to stat paths found in lock file JSON).
+ * These are always excluded from diff budget selection.
+ */
+const EXCLUDED_DIFF_PATTERNS = [
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "bun.lockb",
+  "Gemfile.lock",
+  "Pipfile.lock",
+  "poetry.lock",
+  "composer.lock",
+  "Cargo.lock",
+];
+
+function isExcludedFile(filePath: string): boolean {
+  const basename = filePath.split("/").pop() ?? filePath;
+  return EXCLUDED_DIFF_PATTERNS.includes(basename);
+}
+
+/**
  * Greedily select file diffs that fit within a token budget.
  * Returns included diffs and names of excluded files.
+ * Lock/generated files are always excluded.
  */
 export function selectDiffsWithinBudget(
   files: FileDiff[],
@@ -108,6 +131,10 @@ export function selectDiffsWithinBudget(
   let used = 0;
 
   for (const f of files) {
+    if (isExcludedFile(f.file)) {
+      excluded.push(f.file);
+      continue;
+    }
     if (used + f.tokens <= available) {
       included.push(f);
       used += f.tokens;

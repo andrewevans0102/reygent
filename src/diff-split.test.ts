@@ -132,6 +132,23 @@ describe("selectDiffsWithinBudget", () => {
     expect(excluded).toHaveLength(0);
   });
 
+  it("always excludes lock files", () => {
+    const files = [
+      makeFile("src/index.ts", 100),
+      makeFile("package-lock.json", 200),
+      makeFile("yarn.lock", 150),
+      makeFile("pnpm-lock.yaml", 100),
+      makeFile("nested/path/Cargo.lock", 50),
+    ];
+    const { included, excluded } = selectDiffsWithinBudget(files, 10000, 0);
+    expect(included).toHaveLength(1);
+    expect(included[0].file).toBe("src/index.ts");
+    expect(excluded).toContain("package-lock.json");
+    expect(excluded).toContain("yarn.lock");
+    expect(excluded).toContain("pnpm-lock.yaml");
+    expect(excluded).toContain("nested/path/Cargo.lock");
+  });
+
   it("respects reserved tokens", () => {
     const files = [makeFile("a.ts", 100)];
     // budget=150, reserved=100 → available=50, file needs 100 → excluded
