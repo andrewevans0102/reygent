@@ -8,6 +8,7 @@ import { createLiveStatus } from "../live-status.js";
 import { TaskError } from "../task.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 import { withTelemetry } from "../telemetry-lifecycle.js";
+import { wrapText } from "../format.js";
 
 async function prompt(question: string, fallback?: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -70,7 +71,7 @@ export async function generateSpecCommand(
         if ("needsClarification" in result && result.needsClarification) {
           clarifyStatus.stop();
           resetTerminalForInput();
-          console.log(chalk.yellow("\nClarifying questions:\n"));
+          console.log(chalk.yellow("\n━━━ Clarifying Questions ━━━\n"));
 
           const answers: string[] = [];
           const rl = createInterface({
@@ -78,19 +79,33 @@ export async function generateSpecCommand(
             output: process.stdout,
           });
 
+          const termWidth = process.stdout.columns || 80;
+
           try {
             for (let i = 0; i < result.questions.length; i++) {
               const question = result.questions[i];
+              const counter = chalk.cyan(`Question ${i + 1} of ${result.questions.length}`);
+              console.log(counter);
+
+              // Wrap question text to terminal width with 2-space indent
+              const wrapped = wrapText(question, 2, termWidth, "  ");
+              console.log(`  ${wrapped}`);
+
               const answer = await new Promise<string>((resolve) => {
-                rl.question(`  [${i + 1}/${result.questions.length}] ${question}\n  > `, resolve);
+                rl.question(chalk.gray("> "), resolve);
               });
 
               if (answer.trim().toLowerCase() === "abort" || answer.trim().toLowerCase() === "cancel") {
-                console.log(chalk.red("Aborted."));
+                console.log(chalk.red("\nAborted."));
                 process.exit(0);
               }
 
               answers.push(`Q: ${question}\nA: ${answer}`);
+
+              // Add spacing between questions except after last one
+              if (i < result.questions.length - 1) {
+                console.log();
+              }
             }
           } finally {
             rl.close();
@@ -99,7 +114,7 @@ export async function generateSpecCommand(
           clarificationAnswers = answers.join("\n\n");
 
           if (attempts < maxAttempts) {
-            console.log(chalk.blue("\nRe-checking with your answers...\n"));
+            console.log(chalk.blue("\n━━━ Re-checking with your answers ━━━\n"));
           }
         }
       }
