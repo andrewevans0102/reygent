@@ -7,11 +7,20 @@ import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
 import { loadKnowledge } from "./knowledge/loader.js";
 
+/**
+ * Result returned by provider adapter spawn() method.
+ * See Provider Adapter Contract in CLAUDE.md for full details.
+ */
 export interface SpawnResult {
+  /** Agent output text (JSON, markdown, or plain text depending on agent) */
   stdout: string;
+  /** Exit code: 0 for success, non-zero for failure */
   exitCode: number;
+  /** Optional cost/token telemetry for usage tracking */
   usage?: UsageInfo;
+  /** Clean error message from provider API (e.g., "Model not available"). Only present on errors. */
   errorMessage?: string;
+  /** HTTP status code from API error (e.g., 404, 401, 429). Only present on API errors. */
   apiErrorStatus?: number;
 }
 

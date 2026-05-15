@@ -187,6 +187,87 @@ cli-progress is installed as a dependency but not yet imported in the codebase. 
 - Use `chalk.gray` for timestamps and secondary metadata.
 - Keep output scannable: one concept per line, consistent indentation.
 
+## Provider Adapter Contract
+
+Provider adapters (Claude, Gemini, Codex, OpenRouter) implement the `ProviderAdapter` interface defined in `src/providers/types.ts`. The `spawn()` method returns a `SpawnResult` with the following structure:
+
+### SpawnResult Interface
+
+```typescript
+interface SpawnResult {
+  stdout: string;          // Agent output text
+  exitCode: number;        // 0 for success, non-zero for failure
+  usage?: UsageInfo;       // Optional cost/token metrics
+  errorMessage?: string;   // Clean error message from provider (e.g., "Model not available")
+  apiErrorStatus?: number; // HTTP status code from API error (e.g., 404, 401, 429)
+}
+```
+
+### Field Descriptions
+
+- **stdout**: Primary output text from agent. May contain JSON, markdown, or plain text depending on agent type.
+- **exitCode**: Standard exit code convention. 0 = success, non-zero = failure.
+- **usage**: Optional telemetry for cost tracking (USD, tokens, duration). See `src/usage.ts` for full interface.
+- **errorMessage**: Optional clean error message from provider. Only present when `exitCode !== 0` and provider returned structured error info. Preferred over parsing stdout for error details.
+- **apiErrorStatus**: Optional HTTP status code from API errors. Only present when provider API returned an error (404 model not found, 401 auth failure, 429 rate limit, etc.).
+
+### Error Handling Pattern
+
+When `exitCode !== 0`, consumers should use `formatExitDetail()` from `src/spawn.ts` to build user-friendly error messages:
+
+```typescript
+import { formatExitDetail } from "./spawn.js";
+
+const result = await spawnAgentStream("dev", prompt, 120_000);
+if (result.exitCode !== 0) {
+  const detail = formatExitDetail(result);
+  throw new TaskError(`Agent failed with code ${result.exitCode}${detail}`);
+}
+```
+
+**formatExitDetail()** behavior:
+- Prefers `errorMessage` + `apiErrorStatus` if present (e.g., "Model not available (HTTP 404)")
+- Falls back to first 500 chars of `stdout` if no `errorMessage`
+- Adds helpful tips for common errors (e.g., 404 model errors suggest running `reygent config`)
+- Returns empty string if no error info available
+
+### Telemetry Integration
+
+When emitting `Events.ERROR_TASK` to chesstrace, always include `errorMessage` and `apiErrorStatus` fields:
+
+```typescript
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
+
+if (exitCode !== 0) {
+  const chesstrace = getChesstrace();
+  if (chesstrace) {
+    chesstrace.emit(Events.ERROR_TASK, {
+      type: "TaskError",
+      message: `Agent failed: ${formatExitDetail(result)}`,
+      stage: "plan",
+      agent: "planner",
+      errorMessage: result.errorMessage,
+      apiErrorStatus: result.apiErrorStatus,
+    });
+  }
+}
+```
+
+This pattern is used in:
+- `src/planner.ts` (planning stage)
+- `src/generate-spec.ts` (clarification and generation stages)
+- `src/implement.ts` (implementation stage)
+
+### Provider Implementation Notes
+
+**Claude provider** (`src/providers/claude.ts`):
+- Parses `StreamResultMessage` from agent stdout
+- Sets `errorMessage` and `apiErrorStatus` when `is_error: true` flag present
+- Example: `{ type: "result", is_error: true, result: "Model not available", api_error_status: 404 }`
+
+**Other providers**: Should follow same pattern when API errors occur. Check provider CLI/library for error response structure.
+
 ## Security
 
 Reygent implements comprehensive security measures enforced across ALL providers (Claude, Gemini, Codex, OpenRouter).

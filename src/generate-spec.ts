@@ -4,6 +4,8 @@ import { extractJSON } from "./planner.js";
 import type { ActivityEvent } from "./providers/types.js";
 import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import { TaskError } from "./task.js";
+import { getChesstrace } from "./chesstrace/index.js";
+import { Events } from "./chesstrace/events.js";
 
 export interface ClarificationResult {
   needsClarification: true;
@@ -107,10 +109,21 @@ export async function runClarification(
 ): Promise<ClarificationResponse> {
   const prompt = buildClarificationPrompt(description, previousAnswers);
   const clarifyResult = await spawnAgentStream("generate-spec", prompt, 120_000, { quiet: true, onActivity });
-  const { stdout: raw, exitCode } = clarifyResult;
+  const { stdout: raw, exitCode, errorMessage, apiErrorStatus } = clarifyResult;
 
   if (exitCode !== 0) {
     const detail = formatExitDetail(clarifyResult);
+    const chesstrace = getChesstrace();
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: `generate-spec: agent exited with code ${exitCode}${detail}`,
+        stage: "clarification",
+        agent: "generate-spec",
+        errorMessage,
+        apiErrorStatus,
+      });
+    }
     throw new TaskError(`generate-spec: agent exited with code ${exitCode}${detail}`);
   }
 
@@ -158,10 +171,21 @@ export async function generateSpec(
 ): Promise<string> {
   const prompt = buildGeneratePrompt(description, clarificationAnswers);
   const specResult = await spawnAgentStream("generate-spec", prompt, 120_000, { onActivity });
-  const { stdout, exitCode } = specResult;
+  const { stdout, exitCode, errorMessage, apiErrorStatus } = specResult;
 
   if (exitCode !== 0) {
     const detail = formatExitDetail(specResult);
+    const chesstrace = getChesstrace();
+    if (chesstrace) {
+      chesstrace.emit(Events.ERROR_TASK, {
+        type: "TaskError",
+        message: `generate-spec: agent exited with code ${exitCode}${detail}`,
+        stage: "generate",
+        agent: "generate-spec",
+        errorMessage,
+        apiErrorStatus,
+      });
+    }
     throw new TaskError(`generate-spec: agent exited with code ${exitCode}${detail}`);
   }
 

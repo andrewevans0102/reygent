@@ -15,10 +15,11 @@ vi.mock("./model.js", () => ({
   resolveProvider: vi.fn(() => "claude"),
 }));
 
-import { spawnAgentStream } from "./spawn.js";
+import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import { getProvider } from "./providers/index.js";
 import { resolveModel, resolveProvider } from "./model.js";
 import { TaskError } from "./task.js";
+import type { SpawnResult } from "./spawn.js";
 
 describe("spawnAgentStream", () => {
   beforeEach(() => {
@@ -109,5 +110,107 @@ describe("spawnAgentStream", () => {
     const result = await spawnAgentStream("dev", "do stuff", 30_000);
 
     expect(result).toEqual(expected);
+  });
+});
+
+describe("formatExitDetail", () => {
+  it("returns errorMessage with HTTP status when both present", () => {
+    const result: SpawnResult = {
+      stdout: "ignored output",
+      exitCode: 1,
+      errorMessage: "Authentication failed",
+      apiErrorStatus: 401,
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe("\n  Authentication failed (HTTP 401)");
+  });
+
+  it("returns errorMessage without HTTP status when status missing", () => {
+    const result: SpawnResult = {
+      stdout: "ignored output",
+      exitCode: 1,
+      errorMessage: "API rate limit exceeded",
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe("\n  API rate limit exceeded");
+  });
+
+  it("includes model selection tip for 404 with 'not available' message", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Model is not available in your region",
+      apiErrorStatus: 404,
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toContain("Model is not available in your region (HTTP 404)");
+    expect(detail).toContain("Tip: edit .reygent/config.json");
+    expect(detail).toContain("or run `reygent config`");
+  });
+
+  it("does not include tip for 404 without 'not available' keyword", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Resource missing",
+      apiErrorStatus: 404,
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe("\n  Resource missing (HTTP 404)");
+    expect(detail).not.toContain("Tip:");
+  });
+
+  it("falls back to stdout when errorMessage missing", () => {
+    const result: SpawnResult = {
+      stdout: "Task failed: invalid input",
+      exitCode: 1,
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe("\n  Task failed: invalid input");
+  });
+
+  it("truncates stdout to 500 chars when no errorMessage", () => {
+    const longOutput = "x".repeat(600);
+    const result: SpawnResult = {
+      stdout: longOutput,
+      exitCode: 1,
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe(`\n  ${"x".repeat(500)}`);
+    expect(detail.length).toBe(503); // \n + 2 spaces + 500 chars
+  });
+
+  it("returns empty string when stdout empty and no errorMessage", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe("");
+  });
+
+  it("trims whitespace from stdout before checking empty", () => {
+    const result: SpawnResult = {
+      stdout: "   \n\t   ",
+      exitCode: 1,
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe("");
   });
 });
