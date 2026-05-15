@@ -13,6 +13,9 @@ const SHORT_ALIASES: Record<string, string> = {};
 
 const DEFAULT_MODEL = "gemini-2.5-pro";
 
+// Track Vertex AI detection to log only once per session
+let vertexAiLoggedForGemini = false;
+
 let availabilityCache: { available: boolean; reason?: string } | null = null;
 
 export const geminiAdapter: ProviderAdapter = {
@@ -59,12 +62,13 @@ export const geminiAdapter: ProviderAdapter = {
       const vertexRegion = process.env.GOOGLE_CLOUD_REGION;
       const hasVertexConfig = !!vertexProject;
 
-      // Log Vertex AI detection in debug mode or when first agent runs
-      if (hasVertexConfig && !options.quiet) {
+      // Log Vertex AI detection only once per session to avoid spam
+      if (hasVertexConfig && !options.quiet && !vertexAiLoggedForGemini) {
         const region = vertexRegion ?? "(using CLI default)";
         process.stderr.write(
           chalk.gray(`[${name}] Vertex AI detected: project=${vertexProject}, region=${region}\n`)
         );
+        vertexAiLoggedForGemini = true;
       }
 
       // Gemini CLI requires workspace trust for non-interactive spawns;

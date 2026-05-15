@@ -14,6 +14,9 @@ export const DEFAULT_MODEL = getProvider("claude").defaultModel;
 let modelOverride: string | null = null;
 let providerOverride: string | null = null;
 
+// Track warned custom models to avoid repeated warnings in same session
+const warnedCustomModels = new Set<string>();
+
 export function setModelOverride(id: string): void {
   modelOverride = id;
 }
@@ -47,19 +50,23 @@ export function validateModel(id: string, providerName?: string): string {
   // Check if model in supported list
   const valid = provider.supportedModels.some((m) => m.id === resolved);
   if (!valid) {
-    // Allow custom models but warn user
-    const list = provider.supportedModels.map((m) => `  ${m.id} — ${m.label}`).join("\n");
-    const aliases = Object.entries(provider.shortAliases)
-      .map(([alias, full]) => `  ${alias} → ${full}`)
-      .join("\n");
-    console.log(chalk.yellow("Warning:"), `"${id}" not in ${name} supported models list. Using custom model.`);
-    console.log(chalk.gray("Supported models for"), chalk.cyan(name) + chalk.gray(":"));
-    console.log(list);
-    if (aliases) {
-      console.log(chalk.gray("\nShort aliases:"));
-      console.log(aliases);
+    // Allow custom models but warn user only once per model per session
+    const warningKey = `${name}:${resolved}`;
+    if (!warnedCustomModels.has(warningKey)) {
+      const list = provider.supportedModels.map((m) => `  ${m.id} — ${m.label}`).join("\n");
+      const aliases = Object.entries(provider.shortAliases)
+        .map(([alias, full]) => `  ${alias} → ${full}`)
+        .join("\n");
+      console.log(chalk.yellow("Warning:"), `"${id}" not in ${name} supported models list. Using custom model.`);
+      console.log(chalk.gray("Supported models for"), chalk.cyan(name) + chalk.gray(":"));
+      console.log(list);
+      if (aliases) {
+        console.log(chalk.gray("\nShort aliases:"));
+        console.log(aliases);
+      }
+      console.log("");
+      warnedCustomModels.add(warningKey);
     }
-    console.log("");
   }
   return resolved;
 }

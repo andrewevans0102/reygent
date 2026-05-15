@@ -49,10 +49,12 @@ Claude models are available on Google Vertex AI Model Garden. To use Claude thro
    export GOOGLE_CLOUD_REGION=us-central1             # Optional: defaults to us-central1
    ```
 
-4. Configure the claude CLI to use Vertex AI (if needed by your claude CLI version):
+4. Configure the claude CLI to use Vertex AI:
    ```bash
    claude config set provider vertex
    ```
+
+   **Note:** Some versions of the claude CLI auto-detect Vertex AI from environment variables. If your version does not require explicit provider configuration, skip this step. See the [official Anthropic Claude CLI documentation](https://docs.anthropic.com/en/docs/claude-cli) for your version's requirements.
 
 **Vertex AI-specific values:**
 
@@ -122,10 +124,12 @@ Google Vertex AI is a managed service for deploying and scaling Gemini models in
    export GOOGLE_CLOUD_PROJECT=your-project-id
    ```
 
-3. Configure the gemini CLI to use Vertex AI (if needed by your gemini CLI version):
+3. Configure the gemini CLI to use Vertex AI:
    ```bash
    gemini config set provider vertex
    ```
+
+   **Note:** Some versions of the gemini CLI auto-detect Vertex AI from environment variables. If your version does not require explicit provider configuration, skip this step. See the [official Google Gemini CLI documentation](https://ai.google.dev/gemini-api/docs/cli) for your version's requirements.
 
 **Vertex AI-specific values:**
 

@@ -255,6 +255,27 @@ async function runConfig(): Promise<void> {
         message: "Enter model ID:",
         default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
       });
+
+      // Basic pattern validation for common typos
+      if (selectedProvider === "claude") {
+        // Claude models typically: claude-{family}-{version}[-{date}]
+        if (!selectedModel.startsWith("claude-") && !selectedModel.includes("projects/")) {
+          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Claude format. Expected: claude-{family}-{version} or Vertex AI full resource name."));
+          console.log(chalk.gray("  Examples: claude-opus-4-6, projects/PROJECT/locations/REGION/publishers/anthropic/models/MODEL"));
+        }
+      } else if (selectedProvider === "gemini") {
+        // Gemini models typically: gemini-{version}-{variant}
+        if (!selectedModel.startsWith("gemini-") && !selectedModel.includes("projects/")) {
+          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Gemini format. Expected: gemini-{version}-{variant} or Vertex AI full resource name."));
+          console.log(chalk.gray("  Examples: gemini-2.5-pro, projects/PROJECT/locations/REGION/publishers/google/models/MODEL"));
+        }
+      } else if (selectedProvider === "codex") {
+        // Codex models typically: gpt-{version}
+        if (!selectedModel.startsWith("gpt-")) {
+          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Codex format. Expected: gpt-{version}"));
+          console.log(chalk.gray("  Examples: gpt-5.4, gpt-6.0"));
+        }
+      }
     } else {
       selectedModel = modelSelection;
     }
@@ -361,6 +382,24 @@ async function runConfig(): Promise<void> {
             message: `Enter model ID for ${agent.name}:`,
             default: agent.model ?? agentProviderAdapter.defaultModel,
           });
+
+          // Basic pattern validation for common typos
+          if (agentProviderChoice === "claude") {
+            if (!agentModelChoice.startsWith("claude-") && !agentModelChoice.includes("projects/")) {
+              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Claude format. Expected: claude-{family}-{version} or Vertex AI full resource name."));
+              console.log(chalk.gray("  Examples: claude-opus-4-6, projects/PROJECT/locations/REGION/publishers/anthropic/models/MODEL"));
+            }
+          } else if (agentProviderChoice === "gemini") {
+            if (!agentModelChoice.startsWith("gemini-") && !agentModelChoice.includes("projects/")) {
+              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Gemini format. Expected: gemini-{version}-{variant} or Vertex AI full resource name."));
+              console.log(chalk.gray("  Examples: gemini-2.5-pro, projects/PROJECT/locations/REGION/publishers/google/models/MODEL"));
+            }
+          } else if (agentProviderChoice === "codex") {
+            if (!agentModelChoice.startsWith("gpt-")) {
+              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Codex format. Expected: gpt-{version}"));
+              console.log(chalk.gray("  Examples: gpt-5.4, gpt-6.0"));
+            }
+          }
         } else {
           agentModelChoice = agentModelSelection;
         }

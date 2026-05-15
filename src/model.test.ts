@@ -46,14 +46,9 @@ describe("validateModel", () => {
     expect(validateModel("claude-sonnet-4-5")).toBe("claude-sonnet-4-5-20250929");
   });
 
-  it("accepts unknown model with warning (custom models)", () => {
-    // Custom models now warn but are allowed
+  it("passes through custom model unchanged", () => {
+    // Custom models warn but are allowed
     expect(validateModel("gpt-4")).toBe("gpt-4");
-  });
-
-  it("accepts custom model and returns it unchanged", () => {
-    // Custom models pass through validation with warning
-    expect(validateModel("bad-model")).toBe("bad-model");
   });
 
   it("accepts all SUPPORTED_MODELS", () => {

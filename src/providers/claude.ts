@@ -80,6 +80,9 @@ const SHORT_ALIASES: Record<string, string> = {
 
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 
+// Track Vertex AI detection to log only once per session
+let vertexAiLoggedForClaude = false;
+
 /** Extract token counts from a Claude CLI stream result message. */
 export function extractTokenUsage(msg: StreamResultMessage): {
   inputTokens: number | undefined;
@@ -161,12 +164,13 @@ export const claudeAdapter: ProviderAdapter = {
       const vertexRegion = process.env.GOOGLE_CLOUD_REGION;
       const hasVertexConfig = !!vertexProject;
 
-      // Log Vertex AI detection when configured
-      if (hasVertexConfig && !options.quiet) {
+      // Log Vertex AI detection only once per session to avoid spam
+      if (hasVertexConfig && !options.quiet && !vertexAiLoggedForClaude) {
         const region = vertexRegion ?? "(using CLI default)";
         process.stderr.write(
           chalk.gray(`[${name}] Vertex AI detected: project=${vertexProject}, region=${region}\n`)
         );
+        vertexAiLoggedForClaude = true;
       }
 
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
