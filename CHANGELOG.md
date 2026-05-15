@@ -1,3 +1,11 @@
+## [1.1.3](https://github.com/andrewevans0102/reygent/compare/v1.1.2...v1.1.3) (2026-05-15)
+
+
+### Bug Fixes
+
+* disable tool use for planner and reviewer agents ([1d49231](https://github.com/andrewevans0102/reygent/commit/1d49231a2685da30c045ffb6b14b37e9a013fee3))
+* prevent false security classification and lock file confusion in reviews ([6dde7a7](https://github.com/andrewevans0102/reygent/commit/6dde7a7d653e36324ada213e8b1ddc3ff2307f30))
+
 ## [1.1.2](https://github.com/andrewevans0102/reygent/compare/v1.1.1...v1.1.2) (2026-05-15)
 
 
