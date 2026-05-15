@@ -4,7 +4,7 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 export default withMermaid(defineConfig({
   title: 'Reygent',
   description: 'Agentic coding tool for software development',
-  base: '/reygent/', // Remove base for custom domain, uncomment for GitHub Pages default
+  base: process.env.VITE_BASE || '/reygent/', // Override with VITE_BASE env var for custom domains
 
   themeConfig: {
     logo: '/ReygentLogo.png',
@@ -75,11 +75,6 @@ export default withMermaid(defineConfig({
     }
   },
 
-  markdown: {
-    config: (md) => {
-      // Mermaid support enabled via vitepress-plugin-mermaid
-    }
-  },
 
   mermaid: {
     // Mermaid config options

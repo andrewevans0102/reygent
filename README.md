@@ -1,6 +1,6 @@
 # Reygent
 
-![Reygent Logo](https://raw.githubusercontent.com/andrewevans0102/reygent/master/README_IMAGES/ReygentLogo.png)
+![Reygent Logo](./README_IMAGES/ReygentLogo.png)
 
 ![CI](https://github.com/andrewevans0102/reygent/actions/workflows/main.yml/badge.svg?branch=master)
 
@@ -254,9 +254,12 @@ See [Telemetry Guide](./docs/telemetry.md), [Chesstrace Internals](./docs/chesst
 git clone https://github.com/your-org/reygent.git
 cd reygent
 npm install
-npm run build    # Compile to dist/
-npm run dev      # Watch mode
-npm test         # Run tests
+npm run build         # Compile to dist/
+npm run dev           # Watch mode
+npm test              # Run tests
+npm run docs:dev      # Start VitePress dev server
+npm run docs:build    # Build documentation site
+npm run docs:preview  # Preview built docs locally
 ```
 
 ## License
