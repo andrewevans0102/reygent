@@ -139,7 +139,7 @@ describe("formatExitDetail", () => {
     expect(detail).toBe("\n  API rate limit exceeded");
   });
 
-  it("includes model selection tip for 404 with 'not available' message", () => {
+  it("includes model selection tip for 404 with 'not available' message and malformed model", () => {
     const result: SpawnResult = {
       stdout: "",
       exitCode: 1,
@@ -147,11 +147,25 @@ describe("formatExitDetail", () => {
       apiErrorStatus: 404,
     };
 
-    const detail = formatExitDetail(result);
+    const detail = formatExitDetail(result, "x");
 
     expect(detail).toContain("Model is not available in your region (HTTP 404)");
     expect(detail).toContain("Tip: edit .reygent/config.json");
     expect(detail).toContain("or run `reygent config`");
+  });
+
+  it("does not include tip for 404 with valid-looking custom model", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Model is not available in your region",
+      apiErrorStatus: 404,
+    };
+
+    const detail = formatExitDetail(result, "custom-model-v1");
+
+    expect(detail).toContain("Model is not available in your region (HTTP 404)");
+    expect(detail).not.toContain("Tip:");
   });
 
   it("does not include tip for 404 without 'not available' keyword", () => {
@@ -212,5 +226,95 @@ describe("formatExitDetail", () => {
     const detail = formatExitDetail(result);
 
     expect(detail).toBe("");
+  });
+
+  it("handles empty errorMessage string", () => {
+    const result: SpawnResult = {
+      stdout: "Fallback output",
+      exitCode: 1,
+      errorMessage: "",
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe("\n  Fallback output");
+  });
+
+  it("handles very long apiErrorStatus", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Server error",
+      apiErrorStatus: 999999,
+    };
+
+    const detail = formatExitDetail(result);
+
+    expect(detail).toBe("\n  Server error (HTTP 999999)");
+  });
+
+  it("handles malformed model with spaces", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Model not available",
+      apiErrorStatus: 404,
+    };
+
+    const detail = formatExitDetail(result, "bad model name");
+
+    expect(detail).toContain("Tip:");
+  });
+
+  it("handles malformed model starting with special char", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Model not available",
+      apiErrorStatus: 404,
+    };
+
+    const detail = formatExitDetail(result, "-badmodel");
+
+    expect(detail).toContain("Tip:");
+  });
+
+  it("handles malformed model ending with special char", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Model not available",
+      apiErrorStatus: 404,
+    };
+
+    const detail = formatExitDetail(result, "badmodel-");
+
+    expect(detail).toContain("Tip:");
+  });
+
+  it("handles very short model name (< 3 chars)", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Model not available",
+      apiErrorStatus: 404,
+    };
+
+    const detail = formatExitDetail(result, "ab");
+
+    expect(detail).toContain("Tip:");
+  });
+
+  it("does not show tip when model undefined", () => {
+    const result: SpawnResult = {
+      stdout: "",
+      exitCode: 1,
+      errorMessage: "Model not available",
+      apiErrorStatus: 404,
+    };
+
+    const detail = formatExitDetail(result, undefined);
+
+    expect(detail).not.toContain("Tip:");
   });
 });

@@ -133,13 +133,26 @@ export const codexAdapter: ProviderAdapter = {
           if (parsed.error) {
             errorMessage = parsed.error.message;
             // OpenAI error codes are strings like "model_not_found", map common ones to HTTP status
+            // Try exact match first, then fallback to partial match
             if (typeof parsed.error.code === "string") {
-              if (parsed.error.code.includes("not_found") || parsed.error.code === "model_not_found") {
+              const code = parsed.error.code;
+              // Exact matches for known codes
+              if (code === "model_not_found" || code === "invalid_model") {
                 apiErrorStatus = 404;
-              } else if (parsed.error.code.includes("auth") || parsed.error.code === "invalid_api_key") {
+              } else if (code === "invalid_api_key" || code === "invalid_request_error") {
                 apiErrorStatus = 401;
-              } else if (parsed.error.code === "rate_limit_exceeded") {
+              } else if (code === "rate_limit_exceeded") {
                 apiErrorStatus = 429;
+              } else if (code === "insufficient_quota") {
+                apiErrorStatus = 402;
+              } else if (code === "server_error") {
+                apiErrorStatus = 500;
+              }
+              // Fallback: partial match for unexpected variations
+              else if (code.includes("not_found")) {
+                apiErrorStatus = 404;
+              } else if (code.includes("auth") || code.includes("unauthorized")) {
+                apiErrorStatus = 401;
               }
             }
             apiErrorStatus = apiErrorStatus ?? parsed.error.status;

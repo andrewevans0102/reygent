@@ -10,7 +10,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Error details integration", () 
       result = await spawnAgentStream(
         "test-agent",
         "Test.",
-        30000,
+        5000,
         { provider: "claude", model: "model-does-not-exist-404" }
       );
     } catch (err) {
@@ -31,8 +31,8 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Error details integration", () 
         expect(result!.errorMessage).toBeTruthy();
         expect(result!.apiErrorStatus).toBeDefined();
 
-        // Format detail and verify helpful tip present for 404 model errors
-        const detail = formatExitDetail(result!);
+        // Format detail and verify helpful tip present for 404 model errors with malformed model names
+        const detail = formatExitDetail(result!, "model-does-not-exist-404");
         if (result!.apiErrorStatus === 404 && /not available/i.test(result!.errorMessage)) {
           expect(detail).toContain("Tip:");
           expect(detail).toContain("reygent config");
@@ -49,7 +49,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Error details integration", () 
       result = await spawnAgentStream(
         "test-agent",
         "Test.",
-        30000,
+        5000,
         { provider: "claude", model: "model-does-not-exist-404" }
       );
     } catch {
@@ -58,7 +58,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Error details integration", () 
     }
 
     if (result && result.exitCode !== 0) {
-      const detail = formatExitDetail(result);
+      const detail = formatExitDetail(result, "model-does-not-exist-404");
       expect(detail).toBeTruthy();
 
       // Detail should prefer errorMessage over stdout when available

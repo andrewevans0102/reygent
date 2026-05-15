@@ -108,12 +108,14 @@ export async function runClarification(
   previousAnswers?: string,
   onActivity?: (event: ActivityEvent) => void,
 ): Promise<ClarificationResponse> {
+  const agents = getAgents();
+  const plannerAgent = agents.find((a) => a.name === "planner");
   const prompt = buildClarificationPrompt(description, previousAnswers);
   const clarifyResult = await spawnAgentStream("generate-spec", prompt, 120_000, { quiet: true, onActivity });
   const { stdout: raw, exitCode, errorMessage, apiErrorStatus } = clarifyResult;
 
   if (exitCode !== 0) {
-    const detail = formatExitDetail(clarifyResult);
+    const detail = formatExitDetail(clarifyResult, plannerAgent?.model);
     emitErrorTask(
       `generate-spec: agent exited with code ${exitCode}${detail}`,
       "clarification",
@@ -164,12 +166,14 @@ export async function generateSpec(
   clarificationAnswers?: string,
   onActivity?: (event: ActivityEvent) => void,
 ): Promise<string> {
+  const agents = getAgents();
+  const plannerAgent = agents.find((a) => a.name === "planner");
   const prompt = buildGeneratePrompt(description, clarificationAnswers);
   const specResult = await spawnAgentStream("generate-spec", prompt, 120_000, { onActivity });
   const { stdout, exitCode, errorMessage, apiErrorStatus } = specResult;
 
   if (exitCode !== 0) {
-    const detail = formatExitDetail(specResult);
+    const detail = formatExitDetail(specResult, plannerAgent?.model);
     emitErrorTask(
       `generate-spec: agent exited with code ${exitCode}${detail}`,
       "generate",

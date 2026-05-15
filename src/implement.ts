@@ -311,9 +311,10 @@ export async function runImplement(
         if (devResult.value.exitCode === 0) {
           dev = extractDevOutput(devResult.value.stdout);
         } else {
-          const detail = formatExitDetail(devResult.value);
+          const detail = formatExitDetail(devResult.value, devAgent.model);
           console.log(chalk.red("dev agent failed:"), `exit code ${devResult.value.exitCode}${detail}`);
-          if (!devResult.value.errorMessage) {
+          // Show stdout context when errorMessage is terse (< 50 chars) or missing
+          if (!devResult.value.errorMessage || (devResult.value.errorMessage.length < 50)) {
             const summary = getFailureSummary(devResult.value.stdout);
             if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
           }
@@ -330,9 +331,10 @@ export async function runImplement(
         if (qeResult.value.exitCode === 0) {
           qe = extractQEOutput(qeResult.value.stdout);
         } else {
-          const detail = formatExitDetail(qeResult.value);
+          const detail = formatExitDetail(qeResult.value, qeAgent.model);
           console.log(chalk.red("qe agent failed:"), `exit code ${qeResult.value.exitCode}${detail}`);
-          if (!qeResult.value.errorMessage) {
+          // Show stdout context when errorMessage is terse (< 50 chars) or missing
+          if (!qeResult.value.errorMessage || (qeResult.value.errorMessage.length < 50)) {
             const summary = getFailureSummary(qeResult.value.stdout);
             if (summary) console.log(chalk.gray("  ↳"), chalk.gray(summary));
           }

@@ -128,6 +128,15 @@ This pattern is used in:
 **Error detection:**
 - Tries to parse JSON output for structured error object
 - Looks for `error.message` and `error.code`/`error.status` fields
+- Maps Gemini error codes to HTTP status codes:
+  - Numeric codes are used directly (e.g., `404`, `429`, `500`)
+  - String codes are mapped to HTTP status:
+    - `"not_found"`, `"model_not_found"` → 404
+    - `"permission_denied"`, `"unauthenticated"` → 403
+    - `"invalid_api_key"`, `"invalid_authentication"` → 401
+    - `"resource_exhausted"`, `"rate_limit_exceeded"` → 429
+    - `"internal"`, `"server_error"` → 500
+    - `"invalid_argument"` → 400
 - Falls back to stderr if exitCode non-zero and no structured error
 
 **Expected JSON format:**
@@ -140,7 +149,18 @@ This pattern is used in:
   },
   "error": {
     "message": "Model not found",
-    "code": 404
+    "code": 404,
+    "status": 404
+  }
+}
+```
+
+**Alternative error format (string codes):**
+```json
+{
+  "error": {
+    "message": "Permission denied",
+    "code": "permission_denied"
   }
 }
 ```
@@ -150,10 +170,16 @@ This pattern is used in:
 **Error detection:**
 - Tries to parse JSON output for structured error object
 - Looks for `error.message` and `error.code` fields
-- Maps OpenAI error codes (strings) to HTTP status codes using partial match:
-  - `.includes("not_found")` or `"model_not_found"` → 404
-  - `.includes("auth")` or `"invalid_api_key"` → 401
-  - `.includes("rate_limit")` or `"rate_limit_exceeded"` → 429
+- Maps OpenAI error codes (strings) to HTTP status codes using **exact match first**, then fallback to partial match:
+  - **Exact matches:**
+    - `"model_not_found"`, `"invalid_model"` → 404
+    - `"invalid_api_key"`, `"invalid_request_error"` → 401
+    - `"rate_limit_exceeded"` → 429
+    - `"insufficient_quota"` → 402
+    - `"server_error"` → 500
+  - **Fallback (partial match):**
+    - `.includes("not_found")` → 404
+    - `.includes("auth")`, `.includes("unauthorized")` → 401
 - Falls back to stderr if exitCode non-zero and no structured error
 
 **Expected JSON format:**
@@ -162,11 +188,26 @@ This pattern is used in:
   "response": "agent output text",
   "usage": {
     "prompt_tokens": 100,
-    "completion_tokens": 50
+    "completion_tokens": 50,
+    "prompt_tokens_details": {
+      "cached_tokens": 20
+    }
   },
   "error": {
     "message": "Model not found",
-    "code": "model_not_found"
+    "code": "model_not_found",
+    "status": 404
+  }
+}
+```
+
+**Error codes list (OpenAI format):**
+```json
+{
+  "error": {
+    "message": "The model `gpt-5.4` does not exist",
+    "code": "model_not_found",
+    "type": "invalid_request_error"
   }
 }
 ```
@@ -200,7 +241,7 @@ it("surfaces errorMessage and apiErrorStatus on model not found", async () => {
   const result = await spawnAgentStream(
     "test-agent",
     "Test.",
-    30000,
+    5000, // Most providers fail fast on 404 (<5s)
     { provider: "gemini", model: "invalid-model" }
   );
 
@@ -208,7 +249,7 @@ it("surfaces errorMessage and apiErrorStatus on model not found", async () => {
   expect(result.errorMessage).toBeDefined();
   expect(result.apiErrorStatus).toBe(404);
 
-  const detail = formatExitDetail(result);
+  const detail = formatExitDetail(result, "invalid-model");
   expect(detail).toContain("Tip:");
 });
 ```

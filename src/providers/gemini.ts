@@ -132,7 +132,32 @@ export const geminiAdapter: ProviderAdapter = {
           // Extract error details if present
           if (parsed.error) {
             errorMessage = parsed.error.message;
-            apiErrorStatus = parsed.error.code ?? parsed.error.status;
+            // Gemini error codes can be numeric (HTTP status) or string codes
+            // Map known codes to HTTP status for consistent handling
+            let statusCode = parsed.error.status;
+            if (parsed.error.code) {
+              if (typeof parsed.error.code === "number") {
+                // Gemini often returns HTTP status codes directly
+                statusCode = parsed.error.code;
+              } else if (typeof parsed.error.code === "string") {
+                // String error codes - map to HTTP status
+                const code = parsed.error.code.toLowerCase();
+                if (code === "not_found" || code === "model_not_found") {
+                  statusCode = 404;
+                } else if (code === "permission_denied" || code === "unauthenticated") {
+                  statusCode = 403;
+                } else if (code === "invalid_api_key" || code === "invalid_authentication") {
+                  statusCode = 401;
+                } else if (code === "resource_exhausted" || code === "rate_limit_exceeded") {
+                  statusCode = 429;
+                } else if (code === "internal" || code === "server_error") {
+                  statusCode = 500;
+                } else if (code === "invalid_argument") {
+                  statusCode = 400;
+                }
+              }
+            }
+            apiErrorStatus = statusCode;
           }
         } catch {
           // Raw text output — use as-is

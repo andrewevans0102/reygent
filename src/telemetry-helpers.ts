@@ -1,5 +1,6 @@
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
+import { isDebug } from "./debug.js";
 
 export interface ErrorTaskOptions {
   agent?: string;
@@ -27,8 +28,13 @@ export function emitErrorTask(
         ...(options?.errorMessage && { errorMessage: options.errorMessage }),
         ...(options?.apiErrorStatus && { apiErrorStatus: options.apiErrorStatus }),
       });
-    } catch {
+    } catch (err) {
       // Swallow emit errors to prevent telemetry from breaking main logic
+      // Log to stderr in debug mode to help diagnose broken telemetry backends
+      if (isDebug()) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[DEBUG] Telemetry emit failed (ERROR_TASK): ${errMsg}`);
+      }
     }
   }
 }

@@ -121,7 +121,7 @@ export async function runPlanner(
   const { stdout: raw, exitCode, usage, errorMessage, apiErrorStatus } = spawnResult;
 
   if (exitCode !== 0) {
-    const detail = formatExitDetail(spawnResult);
+    const detail = formatExitDetail(spawnResult, plannerAgent?.model);
     emitErrorTask(
       `Planner: agent exited with code ${exitCode}${detail}`,
       "plan",

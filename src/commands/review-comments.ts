@@ -31,6 +31,7 @@ import type { FileDiff } from "../diff-split.js";
 interface ReviewCommentsOptions {
   insecure?: boolean;
   autoApprove?: boolean;
+  retryCommits?: number;
 }
 
 interface ReviewComment {
@@ -887,6 +888,7 @@ export async function reviewCommentsCommand(
     const pushSpinner = createLiveStatus("committing and pushing...");
     const trace = getChesstrace();
     const commitMessage = "fix: address PR review comments";
+    const maxRetries = options.retryCommits ?? 3;
     let committed = false;
     try {
       await exec("git", ["add", "-A"]);
@@ -911,16 +913,23 @@ export async function reviewCommentsCommand(
           pushSpinner.warn(chalk.yellow("Nothing to commit or push."));
         }
       } else {
-        // Pre-commit hook likely failed and may have modified files — re-stage and retry once
-        pushSpinner.text = "pre-commit hook failed, re-staging and retrying...";
-        try {
-          await exec("git", ["add", "-A"]);
-          await exec("git", ["commit", "-m", commitMessage]);
-          committed = true;
-        } catch (retryErr) {
-          const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-          try { trace.emit(Events.GIT_ERROR, { operation: "commit", error: retryMsg }); } catch { /* swallow */ }
-          pushSpinner.fail(chalk.red(`Commit failed: ${retryMsg}`));
+        // Pre-commit hook likely failed and may have modified files — retry with re-staging
+        let retryCount = 0;
+        while (retryCount < maxRetries) {
+          retryCount++;
+          pushSpinner.text = `pre-commit hook failed, re-staging and retrying (${retryCount}/${maxRetries})...`;
+          try {
+            await exec("git", ["add", "-A"]);
+            await exec("git", ["commit", "-m", commitMessage]);
+            committed = true;
+            break;
+          } catch (retryErr) {
+            const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            if (retryCount >= maxRetries) {
+              try { trace.emit(Events.GIT_ERROR, { operation: "commit", error: retryMsg, retriesExhausted: maxRetries }); } catch { /* swallow */ }
+              pushSpinner.fail(chalk.red(`Commit failed after ${maxRetries} retries: ${retryMsg}`));
+            }
+          }
         }
       }
     }

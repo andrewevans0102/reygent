@@ -106,6 +106,13 @@ program
   .description("Fetch PR/MR review comments and address them with an agent")
   .option("--insecure", "Skip SSL certificate verification for API calls", false)
   .option("--auto-approve", "Auto-approve plan and execute without prompting", false)
+  .option("--retry-commits <count>", "Max retries for pre-commit hook failures (default: 3)", (val) => {
+    const num = parseInt(val, 10);
+    if (isNaN(num) || num < 0 || num > 10) {
+      throw new Error("--retry-commits must be between 0 and 10");
+    }
+    return num;
+  })
   .action(reviewCommentsCommand);
 
 program
