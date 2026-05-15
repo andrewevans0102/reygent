@@ -1,3 +1,12 @@
+## [1.1.2](https://github.com/andrewevans0102/reygent/compare/v1.1.1...v1.1.2) (2026-05-15)
+
+
+### Bug Fixes
+
+* add homepage URL to package.json for npmjs ([8679423](https://github.com/andrewevans0102/reygent/commit/8679423694b579e35dbfbf15b7e9f9e8ac5fa467))
+* address PR review comments ([a689b14](https://github.com/andrewevans0102/reygent/commit/a689b148477f79adfe099ca9ba0a1f920b610c1f))
+* update codex pricing and remove docs deploy path filter ([ba17a0a](https://github.com/andrewevans0102/reygent/commit/ba17a0af8ac503b617d3c43f48eaa8b833912255))
+
 ## [1.1.1](https://github.com/andrewevans0102/reygent/compare/v1.1.0...v1.1.1) (2026-05-15)
 
 
