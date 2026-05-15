@@ -43,7 +43,7 @@ export const PROVIDER_PRICING: Record<ProviderName, ProviderPricing> = {
     supportsCaching: true,
     defaultModel: "anthropic/claude-sonnet-4-5",
     pricingUrl: "https://openrouter.ai/models",
-    lastVerified: "2025-05-04",
+    lastVerified: "2026-05-15",
   },
   gemini: {
     inputCostPerMillion: 1.25,
