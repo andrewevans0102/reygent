@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/andrewevans0102/reygent/compare/v1.1.0...v1.1.1) (2026-05-15)
+
+
+### Bug Fixes
+
+* address PR review comments ([d52799b](https://github.com/andrewevans0102/reygent/commit/d52799b7be294a77bb308b7b6e672af8320a78cc))
+
 # [1.1.0](https://github.com/andrewevans0102/reygent/compare/v1.0.1...v1.1.0) (2026-05-15)
 
 
