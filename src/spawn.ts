@@ -73,6 +73,8 @@ export interface SpawnOptions {
   systemPrompt?: string;
   onActivity?: (event: ActivityEvent) => void;
   stage?: string;
+  /** Restrict which tools the agent can use. Empty array = no tools. */
+  allowedTools?: string[];
 }
 
 /**
@@ -182,6 +184,7 @@ export async function spawnAgentStream(
       timeoutMs,
       agentName: name,
       onActivity: options?.onActivity,
+      allowedTools: options?.allowedTools,
     });
 
     // Clear timeout immediately after spawn completes

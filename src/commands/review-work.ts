@@ -408,7 +408,7 @@ async function runAgentReview(
     excludedFiles: excluded,
     spec,
   });
-  const result = await spawnAgent("pr-review", prompt, { quiet: true, onActivity, provider: agent.provider, model: agent.model });
+  const result = await spawnAgent("pr-review", prompt, { quiet: true, onActivity, provider: agent.provider, model: agent.model, allowedTools: [] });
 
   if (result.exitCode !== 0) {
     throw new TaskError(
