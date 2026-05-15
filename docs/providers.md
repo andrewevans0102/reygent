@@ -27,6 +27,10 @@ reygent run --spec spec.md --model claude-haiku-4-5           # use Haiku
 
 Claude models are available on Google Vertex AI Model Garden. To use Claude through Vertex AI:
 
+**Official documentation:**
+- [Vertex AI Model Garden - Claude](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-claude)
+- [Vertex AI Authentication](https://cloud.google.com/vertex-ai/docs/authentication)
+
 **Setup:**
 
 1. Install and authenticate the Google Cloud CLI:
@@ -89,6 +93,10 @@ reygent run --spec spec.md --provider gemini --model gemini-2.5-flash
 #### Google Vertex AI
 
 Google Vertex AI is a managed service for deploying and scaling Gemini models in Google Cloud. To use Gemini with Vertex AI:
+
+**Official documentation:**
+- [Vertex AI Generative AI - Gemini](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini)
+- [Vertex AI Authentication](https://cloud.google.com/vertex-ai/docs/authentication)
 
 **Setup:**
 
