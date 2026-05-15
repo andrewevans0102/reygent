@@ -81,8 +81,10 @@ export const codexAdapter: ProviderAdapter = {
         stdout += chunk.toString();
       });
 
+      const stderrChunks: string[] = [];
       child.stderr!.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
+        stderrChunks.push(text);
         if (options.onActivity) {
           const line = text.trim();
           if (line) options.onActivity({ agent: name, detail: line.slice(0, 80) });
@@ -105,10 +107,14 @@ export const codexAdapter: ProviderAdapter = {
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
         let cachedTokens: number | undefined;
+        let errorMessage: string | undefined;
+        let apiErrorStatus: number | undefined;
+
         try {
           const parsed = JSON.parse(stdout) as {
             response?: string;
             text?: string;
+            error?: { message?: string; code?: string; status?: number };
             usage?: {
               prompt_tokens?: number;
               completion_tokens?: number;
@@ -122,8 +128,45 @@ export const codexAdapter: ProviderAdapter = {
           inputTokens = parsed.usage?.prompt_tokens ?? parsed.input_tokens;
           outputTokens = parsed.usage?.completion_tokens ?? parsed.output_tokens;
           cachedTokens = parsed.usage?.prompt_tokens_details?.cached_tokens ?? parsed.cached_tokens;
+
+          // Extract error details if present
+          if (parsed.error) {
+            errorMessage = parsed.error.message;
+            // OpenAI error codes are strings like "model_not_found", map common ones to HTTP status
+            // Try exact match first, then fallback to partial match
+            if (typeof parsed.error.code === "string") {
+              const code = parsed.error.code;
+              // Exact matches for known codes
+              if (code === "model_not_found" || code === "invalid_model") {
+                apiErrorStatus = 404;
+              } else if (code === "invalid_api_key" || code === "invalid_request_error") {
+                apiErrorStatus = 401;
+              } else if (code === "rate_limit_exceeded") {
+                apiErrorStatus = 429;
+              } else if (code === "insufficient_quota") {
+                apiErrorStatus = 402;
+              } else if (code === "server_error") {
+                apiErrorStatus = 500;
+              }
+              // Fallback: partial match for unexpected variations
+              else if (code.includes("not_found")) {
+                apiErrorStatus = 404;
+              } else if (code.includes("auth") || code.includes("unauthorized")) {
+                apiErrorStatus = 401;
+              }
+            }
+            apiErrorStatus = apiErrorStatus ?? parsed.error.status;
+          }
         } catch {
           // Raw text output — use as-is
+        }
+
+        // If exitCode non-zero and no structured error, try stderr
+        if (code !== 0 && !errorMessage && stderrChunks.length > 0) {
+          const stderr = stderrChunks.join("").trim();
+          if (stderr) {
+            errorMessage = stderr;
+          }
         }
 
         resolve({
@@ -137,6 +180,8 @@ export const codexAdapter: ProviderAdapter = {
             // Note: cacheWriteTokens not extracted — OpenAI doesn't currently expose this field
             provider: "codex",
           },
+          errorMessage,
+          apiErrorStatus,
         });
       });
     });

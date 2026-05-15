@@ -31,6 +31,7 @@ import type { FileDiff } from "../diff-split.js";
 interface ReviewCommentsOptions {
   insecure?: boolean;
   autoApprove?: boolean;
+  retryCommits?: number;
 }
 
 interface ReviewComment {
@@ -886,15 +887,15 @@ export async function reviewCommentsCommand(
     console.log();
     const pushSpinner = createLiveStatus("committing and pushing...");
     const trace = getChesstrace();
+    const commitMessage = "fix: address PR review comments";
+    const maxRetries = options.retryCommits ?? 3;
+    let committed = false;
     try {
       await exec("git", ["add", "-A"]);
-      await exec("git", ["commit", "-m", "fix: address PR review comments"]);
-      try { trace.emit(Events.GIT_COMMIT, { branch, messageSubject: "fix: address PR review comments" }); } catch { /* swallow */ }
-      await exec("git", ["push", "origin", branch]);
-      try { trace.emit(Events.GIT_PUSH, { branch }); } catch { /* swallow */ }
-      pushSpinner.succeed(chalk.green("Changes committed and pushed."));
-    } catch (pushErr) {
-      const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+      await exec("git", ["commit", "-m", commitMessage]);
+      committed = true;
+    } catch (commitErr) {
+      const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
       if (msg.includes("nothing to commit")) {
         // Agent may have committed already — check if we have unpushed commits
         try {
@@ -912,8 +913,37 @@ export async function reviewCommentsCommand(
           pushSpinner.warn(chalk.yellow("Nothing to commit or push."));
         }
       } else {
-        try { trace.emit(Events.GIT_ERROR, { operation: "commit-push", error: msg }); } catch { /* swallow */ }
-        pushSpinner.fail(chalk.red(`Push failed: ${msg}`));
+        // Pre-commit hook likely failed and may have modified files — retry with re-staging
+        let retryCount = 0;
+        while (retryCount < maxRetries) {
+          retryCount++;
+          pushSpinner.text = `pre-commit hook failed, re-staging and retrying (${retryCount}/${maxRetries})...`;
+          try {
+            await exec("git", ["add", "-A"]);
+            await exec("git", ["commit", "-m", commitMessage]);
+            committed = true;
+            break;
+          } catch (retryErr) {
+            const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            if (retryCount >= maxRetries) {
+              try { trace.emit(Events.GIT_ERROR, { operation: "commit", error: retryMsg, retriesExhausted: maxRetries }); } catch { /* swallow */ }
+              pushSpinner.fail(chalk.red(`Commit failed after ${maxRetries} retries: ${retryMsg}`));
+            }
+          }
+        }
+      }
+    }
+
+    if (committed) {
+      try { trace.emit(Events.GIT_COMMIT, { branch, messageSubject: commitMessage }); } catch { /* swallow */ }
+      try {
+        await exec("git", ["push", "origin", branch]);
+        try { trace.emit(Events.GIT_PUSH, { branch }); } catch { /* swallow */ }
+        pushSpinner.succeed(chalk.green("Changes committed and pushed."));
+      } catch (pushErr) {
+        const pushMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+        try { trace.emit(Events.GIT_ERROR, { operation: "push", error: pushMsg }); } catch { /* swallow */ }
+        pushSpinner.fail(chalk.red(`Push failed: ${pushMsg}`));
       }
     }
 

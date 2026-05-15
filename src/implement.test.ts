@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("./config.js", () => ({ getAgents: vi.fn() }));
 vi.mock("./planner.js", () => ({ extractJSON: vi.fn((s: string) => s) }));
-vi.mock("./spawn.js", () => ({ spawnAgentStream: vi.fn() }));
+vi.mock("./spawn.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spawn.js")>();
+  return { ...actual, spawnAgentStream: vi.fn() };
+});
 vi.mock("chalk", () => {
   const handler: ProxyHandler<object> = {
     get: (_target, _prop) => {
