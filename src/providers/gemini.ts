@@ -53,6 +53,20 @@ export const geminiAdapter: ProviderAdapter = {
 
       const name = options.agentName;
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
+
+      // Detect Vertex AI configuration
+      const vertexProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+      const vertexRegion = process.env.GOOGLE_CLOUD_REGION;
+      const hasVertexConfig = !!vertexProject;
+
+      // Log Vertex AI detection in debug mode or when first agent runs
+      if (hasVertexConfig && !options.quiet) {
+        const region = vertexRegion ?? "(using CLI default)";
+        process.stderr.write(
+          chalk.gray(`[${name}] Vertex AI detected: project=${vertexProject}, region=${region}\n`)
+        );
+      }
+
       // Gemini CLI requires workspace trust for non-interactive spawns;
       // without this it exits 55 when stdin is not a TTY.
       const child = spawn("gemini", args, {

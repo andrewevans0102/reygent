@@ -11,9 +11,17 @@ Reygent reads a spec (markdown file, Jira issue, or Linear issue), then runs the
 ## Prerequisites
 
 - **Node.js** 22+
-- **Claude CLI** (`claude`) installed and authenticated
+- **AI Provider** — one of:
+  - **Claude CLI** (`claude`) installed and authenticated (default, recommended)
+    - Direct via Anthropic API, or via Google Vertex AI Model Garden
+  - **Gemini CLI** (`gemini`) for Google Gemini models
+    - Direct via Google AI API, or via Google Vertex AI
+  - **Codex CLI** (`codex`) for GPT models
+  - **OpenRouter API key** for 200+ model access (API-only, limited tool support)
 - **GitHub CLI** (`gh`) installed and authenticated (for PR operations)
 - **Git** configured in your project
+
+See the **[Providers Guide](./docs/providers.md)** for provider setup details, including **Google Vertex AI** configuration for Claude and Gemini.
 
 ## Install
 

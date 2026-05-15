@@ -154,6 +154,21 @@ export const claudeAdapter: ProviderAdapter = {
         args.push("--allowedTools", "Bash", "Edit", "Write", "Read", "Glob", "Grep");
       }
 
+      const name = options.agentName;
+
+      // Detect Vertex AI configuration for Claude via Model Garden
+      const vertexProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+      const vertexRegion = process.env.GOOGLE_CLOUD_REGION;
+      const hasVertexConfig = !!vertexProject;
+
+      // Log Vertex AI detection when configured
+      if (hasVertexConfig && !options.quiet) {
+        const region = vertexRegion ?? "(using CLI default)";
+        process.stderr.write(
+          chalk.gray(`[${name}] Vertex AI detected: project=${vertexProject}, region=${region}\n`)
+        );
+      }
+
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
       const child = spawn("claude", args, {
         stdio: [stdinMode, "pipe", "pipe"],
@@ -166,7 +181,6 @@ export const claudeAdapter: ProviderAdapter = {
       let resultApiErrorStatus: number | undefined;
       let resultUsage: UsageInfo | undefined;
       const textChunks: string[] = [];
-      const name = options.agentName;
 
       const timeout = setTimeout(() => {
         // Kill entire process group to catch spawned descendants

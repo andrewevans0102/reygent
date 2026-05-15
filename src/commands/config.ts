@@ -224,23 +224,40 @@ async function runConfig(): Promise<void> {
   let selectedModel: string;
 
   if (provider.supportedModels.length === 0) {
-    // OpenRouter or similar — free-text input
+    // OpenRouter or similar — free-text input only
     resetTerminalForInput();
     selectedModel = await pasteableInput({
       message: "Model ID:",
       default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
     });
   } else {
+    // Providers with predefined models — offer list + custom option
     resetTerminalForInput();
     const modelChoices = provider.supportedModels.map((m) => ({
       name: `${m.id} — ${m.label}`,
       value: m.id,
     }));
-    selectedModel = await select({
+    // Add "Custom model" option at end
+    modelChoices.push({
+      name: chalk.gray("Custom model (enter manually)"),
+      value: "__custom__",
+    });
+
+    const modelSelection = await select({
       message: "Default model:",
       choices: modelChoices,
       default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
     });
+
+    if (modelSelection === "__custom__") {
+      resetTerminalForInput();
+      selectedModel = await pasteableInput({
+        message: "Enter model ID:",
+        default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
+      });
+    } else {
+      selectedModel = modelSelection;
+    }
   }
 
   // 7. Per-agent overrides — grouped by category
@@ -313,22 +330,40 @@ async function runConfig(): Promise<void> {
       let agentModelChoice: string;
 
       if (agentProviderAdapter.supportedModels.length === 0) {
+        // Provider has no predefined models — free-text input only
         resetTerminalForInput();
         agentModelChoice = await pasteableInput({
           message: `Model ID for ${agent.name}:`,
           default: agent.model ?? agentProviderAdapter.defaultModel,
         });
       } else {
+        // Providers with predefined models — offer list + custom option
         resetTerminalForInput();
         const agentModelChoices = agentProviderAdapter.supportedModels.map((m) => ({
           name: `${m.id} — ${m.label}`,
           value: m.id,
         }));
-        agentModelChoice = await select({
+        // Add "Custom model" option at end
+        agentModelChoices.push({
+          name: chalk.gray("Custom model (enter manually)"),
+          value: "__custom__",
+        });
+
+        const agentModelSelection = await select({
           message: `Model for ${agent.name}:`,
           choices: agentModelChoices,
           default: agent.model ?? agentProviderAdapter.defaultModel,
         });
+
+        if (agentModelSelection === "__custom__") {
+          resetTerminalForInput();
+          agentModelChoice = await pasteableInput({
+            message: `Enter model ID for ${agent.name}:`,
+            default: agent.model ?? agentProviderAdapter.defaultModel,
+          });
+        } else {
+          agentModelChoice = agentModelSelection;
+        }
       }
 
       updatedAgents[agentIndex] = { ...agent, provider: agentProviderChoice, model: agentModelChoice };
