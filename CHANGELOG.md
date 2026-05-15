@@ -1,3 +1,14 @@
+## [1.0.1](https://github.com/andrewevans0102/reygent/compare/v1.0.0...v1.0.1) (2026-05-15)
+
+
+### Bug Fixes
+
+* address PR review comments ([10dbd8c](https://github.com/andrewevans0102/reygent/commit/10dbd8c8d4fc44492ab2991329fcc99bc6acbb3d))
+* address PR review comments ([7fbcdbe](https://github.com/andrewevans0102/reygent/commit/7fbcdbe36a0acd9cb5c90c57e6f41fe65dedc07e))
+* extend error handling to all providers, move docs to proper location ([3a0f6f8](https://github.com/andrewevans0102/reygent/commit/3a0f6f8c4eb9f7a04e70101fe740683d6302f960))
+* extract emitErrorTask helper, improve commit retry and truncation ([852cdec](https://github.com/andrewevans0102/reygent/commit/852cdec13aef585f5d8bcde667dcbd26ad77ba05))
+* surface agent error details instead of bare exit codes ([7b6d6f6](https://github.com/andrewevans0102/reygent/commit/7b6d6f678a3204d2d41b1e7a2363d7649d20476f))
+
 # 1.0.0 (2026-05-15)
 
 
