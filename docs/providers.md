@@ -31,6 +31,8 @@ Claude models are available on Google Vertex AI Model Garden. To use Claude thro
 - [Vertex AI Model Garden - Claude](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-claude)
 - [Vertex AI Authentication](https://cloud.google.com/vertex-ai/docs/authentication)
 
+> **Note:** Setup instructions below reflect standard Google Cloud patterns. Always refer to official Google Cloud documentation for the most current and authoritative setup procedures.
+
 **Setup:**
 
 1. Install and authenticate the Google Cloud CLI:
@@ -97,6 +99,8 @@ Google Vertex AI is a managed service for deploying and scaling Gemini models in
 **Official documentation:**
 - [Vertex AI Generative AI - Gemini](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini)
 - [Vertex AI Authentication](https://cloud.google.com/vertex-ai/docs/authentication)
+
+> **Note:** Setup instructions below reflect standard Google Cloud patterns. Always refer to official Google Cloud documentation for the most current and authoritative setup procedures.
 
 **Setup:**
 
