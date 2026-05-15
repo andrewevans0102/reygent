@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { constants } from "node:os";
 import chalk from "chalk";
-import { registerChild } from "../child-registry.js";
+import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
 import type { UsageInfo } from "../usage.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
@@ -157,7 +157,7 @@ export const claudeAdapter: ProviderAdapter = {
         stdio: [stdinMode, "pipe", "pipe"],
         detached: false, // Keep in same process group so we can kill descendants
       });
-      registerChild(child);
+      registerChildProcess(child);
 
       let resultText = "";
       let resultUsage: UsageInfo | undefined;
@@ -295,7 +295,7 @@ export const claudeAdapter: ProviderAdapter = {
           detached: false, // Keep in same process group so we can kill descendants
         },
       );
-      registerChild(child);
+      registerChildProcess(child);
 
       child.on("error", (err) => {
         reject(

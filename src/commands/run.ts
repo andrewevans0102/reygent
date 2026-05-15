@@ -32,6 +32,7 @@ import { findProjectRoot } from "../project-detection.js";
 import { DualBackend } from "../chesstrace/backends/dual.js";
 import { existsSync, mkdirSync } from "node:fs";
 import { isTestEnvironment } from "../test-env.js";
+import { promptForRetry } from "../retry-prompt.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -91,7 +92,7 @@ async function updateKnowledgeFromTelemetry(): Promise<void> {
       return;
     }
 
-    const backend = new SqliteBackend("local", `${projectRoot}/.reygent/telemetry.db`);
+    const backend = new SqliteBackend("local", `${projectRoot}/.reygent/chesstrace.db`);
     await backend.init();
 
     const since = Date.now() - 7 * 24 * 60 * 60 * 1000; // Last 7 days
@@ -281,44 +282,17 @@ async function retryGate(opts: RetryGateOptions): Promise<import("../task.js").G
     attempt++;
     const lastOutput = context.gates?.[gateName === "unit tests" ? "unitTests" : "functionalTests"]?.output ?? "";
 
-    // Check maxRetries boundary before prompting user or continuing
-    if (autoApprove && attempt > maxRetries) {
-      // All retries exhausted in auto mode
-      const chesstrace = getChesstrace();
-      if (chesstrace) {
-        try {
-          chesstrace.emit(Events.ERROR_TASK, {
-            type: "TaskError",
-            message: `${gateName} failed after ${maxRetries} retries`,
-            stage: stageName,
-            agent: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
-          });
-        } catch {
-          // Swallow emit errors
-        }
-      }
-      throw new TaskError(`${gateName} failed after ${maxRetries} retries`);
-    }
-
-    // Prompt user whether to retry (unless autoApprove enabled)
-    if (!autoApprove) {
-      resetTerminalForInput();
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      const attemptInfo = maxRetries > 0
-        ? `(attempt ${attempt}/${maxRetries})`
-        : `(attempt ${attempt})`;
-      const answer = await new Promise<string>((resolve) => {
-        rl.question(
-          chalk.yellow(`\n${gateName} failed. Retry with failure context? ${attemptInfo} (y/n) `),
-          resolve,
-        );
-      });
-      rl.close();
-      if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
-        console.log(chalk.red("Aborted by user."));
-        process.exit(1);
-      }
-    }
+    // Check if exceeded max retries or prompt user
+    await promptForRetry({
+      taskName: gateName,
+      attempt,
+      maxRetries,
+      autoApprove,
+      telemetry: {
+        stageName,
+        agentName: gateName === "unit tests" ? "gate:unit-tests" : "gate:functional-tests",
+      },
+    });
 
     // Emit gate.retry telemetry after user approves
     const chesstrace = getChesstrace();
@@ -542,6 +516,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
     }
   }
 
+  const commandStartTime = Date.now();
+
   try {
     let specSource = options.spec;
     if (!specSource) {
@@ -593,6 +569,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
       console.log("");
       return;
+    }
+
+    // Emit COMMAND_START after dry-run check
+    if (chesstrace) {
+      try { chesstrace.emit(Events.COMMAND_START, { command: 'run' }); } catch { /* swallow */ }
     }
 
     // Initialize context after dry-run check
@@ -851,8 +832,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
           if (u.usage) tracker.record(u.agent, "implement", u.usage);
         }
 
-        const devSuccess = impl.dev !== null;
-        const qeSuccess = impl.qe !== null;
+        let devSuccess = impl.dev !== null;
+        let qeSuccess = impl.qe !== null;
 
         if (devSuccess && qeSuccess) {
           implStatus.succeed(chalk.green("Implementation complete"));
@@ -867,10 +848,81 @@ export async function runCommand(options: RunOptions): Promise<void> {
           console.log(chalk.gray("qe test files:"), impl.qe.testFiles.join(", ") || chalk.gray("(none)"));
         }
 
+        // Retry loop for failed agents
+        let attempt = 0;
+        while (!devSuccess || !qeSuccess) {
+          attempt++;
+
+          const failedAgents = [
+            !devSuccess ? "dev" : null,
+            !qeSuccess ? "qe" : null,
+          ].filter(Boolean).join(", ");
+
+          // Check if exceeded max retries or prompt user
+          await promptForRetry({
+            taskName: `${failedAgents} agent(s)`,
+            attempt,
+            maxRetries,
+            autoApprove,
+            telemetry: {
+              stageName: stage.name,
+              agentName: !devSuccess ? "dev" : "qe",
+            },
+          });
+
+          // Determine which agents to retry
+          const agentsToRetry: Array<"dev" | "qe"> = [];
+          if (!devSuccess) agentsToRetry.push("dev");
+          if (!qeSuccess) agentsToRetry.push("qe");
+
+          const attemptDisplay = maxRetries > 0
+            ? `${attempt}/${maxRetries}`
+            : `${attempt}`;
+          console.log(chalk.yellow(`\nRetrying ${agentsToRetry.join(" + ")} agent(s) (attempt ${attemptDisplay})...`));
+
+          const retryStatus = createLiveStatus(`re-running ${agentsToRetry.join(" + ")} agent(s)...`);
+          try {
+            const { implement: retryImpl, usages: retryUsages } = await runImplement(
+              context.spec,
+              context.plan,
+              withActivity(agentOptions, retryStatus, toolTracker),
+              { agentsToRun: agentsToRetry },
+            );
+
+            for (const u of retryUsages) {
+              if (u.usage) tracker.record(u.agent, `${stage.name}-retry`, u.usage);
+            }
+
+            // Merge results
+            if (retryImpl.dev && !devSuccess) {
+              context.implement!.dev = retryImpl.dev;
+              devSuccess = true;
+            }
+            if (retryImpl.qe && !qeSuccess) {
+              context.implement!.qe = retryImpl.qe;
+              qeSuccess = true;
+            }
+
+            if (devSuccess && qeSuccess) {
+              retryStatus.succeed(chalk.green("Implementation complete on retry"));
+              if (context.implement!.dev) {
+                console.log(chalk.gray("dev files:"), context.implement!.dev.files.join(", ") || chalk.gray("(none)"));
+              }
+              if (context.implement!.qe) {
+                console.log(chalk.gray("qe test files:"), context.implement!.qe.testFiles.join(", ") || chalk.gray("(none)"));
+              }
+            } else {
+              retryStatus.warn(chalk.yellow(`Retry ${attempt} partially failed`));
+            }
+          } catch {
+            retryStatus.fail(chalk.red(`Retry ${attempt} failed`));
+          }
+        }
+
         context.results.push({
           stage: stage.name,
           success: devSuccess && qeSuccess,
-          output: JSON.stringify(impl),
+          output: JSON.stringify(context.implement),
         });
 
         emitStageEnd(chesstrace, stage.name, stageStartTime, devSuccess && qeSuccess, undefined, toolTracker);
@@ -1227,6 +1279,17 @@ export async function runCommand(options: RunOptions): Promise<void> {
         // Swallow emit errors
       }
 
+      // Emit COMMAND_END on success
+      try {
+        chesstrace.emit(Events.COMMAND_END, {
+          command: 'run',
+          success: allSuccess,
+          durationMs: Date.now() - commandStartTime,
+        });
+      } catch {
+        // Swallow emit errors
+      }
+
       // Flush and close telemetry
       try {
         await chesstrace.flush();
@@ -1266,8 +1329,18 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
     }
 
-    // Emit pipeline.end with failure status (if context exists)
+    // Emit COMMAND_ERROR + pipeline.end with failure status
     if (chesstrace) {
+      try {
+        chesstrace.emit(Events.COMMAND_ERROR, {
+          command: 'run',
+          error: err instanceof Error ? err.message : String(err),
+          durationMs: Date.now() - commandStartTime,
+        });
+      } catch {
+        // Swallow emit errors
+      }
+
       try {
         if (context) {
           chesstrace.emit(Events.PIPELINE_END, {

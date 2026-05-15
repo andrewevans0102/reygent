@@ -8,6 +8,7 @@ import { getProvider } from "../providers/index.js";
 import { loadSpec, SpecError } from "../spec.js";
 import { TaskError } from "../task.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
+import { withTelemetry } from "../telemetry-lifecycle.js";
 
 interface AgentOptions {
   spec?: string;
@@ -17,6 +18,7 @@ export async function agentCommand(
   name: string | undefined,
   options: AgentOptions,
 ): Promise<void> {
+  return withTelemetry('agent', async () => {
   try {
     const agents = getAgents();
     let agent: AgentConfig;
@@ -95,4 +97,5 @@ ${spec.content}`;
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
     process.exit(2);
   }
+  });
 }

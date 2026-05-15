@@ -11,6 +11,7 @@ import { runPlanner } from "../planner.js";
 import { TaskError } from "../task.js";
 import type { PlannerOutput } from "../task.js";
 import type { SpecProvider } from "../spec.js";
+import { withTelemetry } from "../telemetry-lifecycle.js";
 
 const VALID_PROVIDERS: SpecProvider[] = ["jira", "linear", "local"];
 
@@ -34,6 +35,7 @@ function inferProvider(source: string): SpecProvider | undefined {
 }
 
 export async function specCommand(source: string, options: SpecCommandOptions): Promise<void> {
+  return withTelemetry('spec', async () => {
   try {
     // Validate --source flag if given
     if (options.source !== undefined) {
@@ -176,4 +178,5 @@ export async function specCommand(source: string, options: SpecCommandOptions): 
     if (isDebug()) console.error(err instanceof Error ? err.stack : err);
     process.exit(2);
   }
+  });
 }

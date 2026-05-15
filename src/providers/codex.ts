@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import chalk from "chalk";
-import { registerChild } from "../child-registry.js";
+import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
@@ -59,7 +59,7 @@ export const codexAdapter: ProviderAdapter = {
         stdio: [stdinMode, "pipe", "pipe"],
         detached: false, // Keep in same process group so we can kill descendants
       });
-      registerChild(child);
+      registerChildProcess(child);
 
       let stdout = "";
 
@@ -150,7 +150,7 @@ export const codexAdapter: ProviderAdapter = {
         ["--model", model, systemPrompt],
         { stdio: "inherit" },
       );
-      registerChild(child);
+      registerChildProcess(child);
 
       child.on("error", (err) => {
         reject(

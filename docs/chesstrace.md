@@ -208,7 +208,7 @@ Production default. Writes to both local and global databases simultaneously usi
 ```mermaid
 flowchart LR
     WRITE[writeBatch] --> AS[Promise.allSettled]
-    AS --> L[Local: .reygent/telemetry.db]
+    AS --> L[Local: .reygent/chesstrace.db]
     AS --> G[Global: ~/.reygent/chesstrace.db]
     L --> OK1[OK]
     G --> OK2[OK or silently fail]

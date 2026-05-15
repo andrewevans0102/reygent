@@ -26,7 +26,7 @@ describe("telemetry-path", () => {
   describe("getLocalTelemetryPath", () => {
     it("should return project-local path when in project", () => {
       const dbPath = getLocalTelemetryPath(projectDir);
-      expect(dbPath).toBe(`${projectDir}/.reygent/telemetry.db`);
+      expect(dbPath).toBe(`${projectDir}/.reygent/chesstrace.db`);
     });
 
     it("should return undefined when not in project", () => {
@@ -43,7 +43,7 @@ describe("telemetry-path", () => {
       mkdirSync(nestedDir);
 
       const dbPath = getLocalTelemetryPath(nestedDir);
-      expect(dbPath).toBe(`${projectDir}/.reygent/telemetry.db`);
+      expect(dbPath).toBe(`${projectDir}/.reygent/chesstrace.db`);
     });
   });
 
@@ -59,7 +59,7 @@ describe("telemetry-path", () => {
 
       // Both should resolve to same path
       expect(analyzePath).toBe(lastPath);
-      expect(analyzePath).toBe(`${projectDir}/.reygent/telemetry.db`);
+      expect(analyzePath).toBe(`${projectDir}/.reygent/chesstrace.db`);
 
       // Initialize and verify they can access same database
       await analyzeBackend.init();
