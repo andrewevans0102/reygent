@@ -513,7 +513,7 @@ async function generatePlan(
     ? buildPlanPromptWithFeedback(agent.systemPrompt, comments, includedDiffs, excludedFiles, feedback)
     : buildPlanPrompt(agent.systemPrompt, comments, includedDiffs, excludedFiles);
 
-  const result = await spawnAgent("planner", prompt, { quiet: true, provider: agent.provider, model: agent.model });
+  const result = await spawnAgent("planner", prompt, { quiet: true, provider: agent.provider, model: agent.model, allowedTools: [] });
 
   if (result.exitCode !== 0) {
     throw new TaskError(`review-comments: planner agent exited with code ${result.exitCode}`);

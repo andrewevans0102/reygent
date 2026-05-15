@@ -117,7 +117,7 @@ export async function runPlanner(
   const agents = getAgents();
   const plannerAgent = agents.find((a) => a.name === "planner");
   const prompt = buildPrompt(spec, previousAnswers, options);
-  const spawnResult = await spawnAgentStream("planner", prompt, 300_000, { quiet: true, onActivity: options?.onActivity, provider: plannerAgent?.provider, model: plannerAgent?.model });
+  const spawnResult = await spawnAgentStream("planner", prompt, 300_000, { quiet: true, onActivity: options?.onActivity, provider: plannerAgent?.provider, model: plannerAgent?.model, allowedTools: [] });
   const { stdout: raw, exitCode, usage, errorMessage, apiErrorStatus } = spawnResult;
 
   if (exitCode !== 0) {
