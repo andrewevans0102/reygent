@@ -9,6 +9,11 @@ const SUPPORTED_MODELS: ModelEntry[] = [
   { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
 ];
 
+const VERTEX_AI_MODELS: ModelEntry[] = [
+  { id: "gemini-2.5-pro@001", label: "Gemini 2.5 Pro (recommended)" },
+  { id: "gemini-2.5-flash@001", label: "Gemini 2.5 Flash" },
+];
+
 const SHORT_ALIASES: Record<string, string> = {};
 
 const DEFAULT_MODEL = "gemini-2.5-pro";
@@ -23,6 +28,7 @@ export const geminiAdapter: ProviderAdapter = {
   type: "cli",
   defaultModel: DEFAULT_MODEL,
   supportedModels: SUPPORTED_MODELS,
+  vertexModels: VERTEX_AI_MODELS,
   shortAliases: SHORT_ALIASES,
 
   async isAvailable() {
