@@ -1,12 +1,142 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { IncomingMessage } from "node:http";
+import { EventEmitter } from "node:events";
+
+// --- Mock setup (hoisted for vi.mock factories) ---
+
+const { mockExecFile, mockHttpsRequest } = vi.hoisted(() => ({
+  mockExecFile: vi.fn<(cmd: string, args: string[]) => string | Error>(),
+  mockHttpsRequest: vi.fn(),
+}));
 
 vi.mock("@inquirer/prompts", () => ({ select: vi.fn() }));
-vi.mock("./config.js", () => ({ getAgents: vi.fn(() => []) }));
+vi.mock("./config.js", () => ({
+  getAgents: vi.fn(() => [
+    {
+      name: "pr-reviewer",
+      role: "reviewer",
+      systemPrompt: "Review this code.",
+      provider: "claude",
+      model: "claude-3-haiku",
+    },
+  ]),
+}));
 vi.mock("./spawn.js", () => ({ spawnAgentStream: vi.fn() }));
-vi.mock("./implement.js", () => ({ spawnAgent: vi.fn() }));
+vi.mock("./implement.js", () => ({
+  spawnAgent: vi.fn(() => ({
+    exitCode: 0,
+    stdout: JSON.stringify({
+      summary: "Looks good",
+      comments: [],
+      recommendedActions: [],
+    }),
+    usage: { inputTokens: 100, outputTokens: 50 },
+  })),
+}));
 
-import { extractPRReviewOutput, formatPRReviewOutput } from "./pr-review.js";
-import type { PRReviewOutput } from "./task.js";
+vi.mock("node:child_process", () => ({
+  execFile: (cmd: string, args: string[], opts: unknown, cb: Function) => {
+    const result = mockExecFile(cmd, args);
+    setImmediate(() => {
+      if (result instanceof Error) {
+        cb(result, "", result.message);
+      } else {
+        cb(null, result, "");
+      }
+    });
+  },
+}));
+
+vi.mock("node:https", () => ({
+  request: mockHttpsRequest,
+}));
+
+// Mock pr-create exports that resolve TLS
+vi.mock("./pr-create.js", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    resolveToken: vi.fn(async () => "mock-token-123"),
+    resolveTlsOptions: vi.fn(async () => ({})),
+  };
+});
+
+import { extractPRReviewOutput, formatPRReviewOutput, runPRReview, postPRReviewComment } from "./pr-review.js";
+import type { PRReviewOutput, TaskContext } from "./task.js";
+
+// --- Helpers ---
+
+function setupHttpResponses(responses: Array<{ status: number; body: string }>) {
+  for (const r of responses) {
+    mockHttpsRequest.mockImplementationOnce((_opts: any, cb: Function) => {
+      const res = new EventEmitter() as IncomingMessage;
+      (res as any).statusCode = r.status;
+
+      const req = new EventEmitter() as any;
+      req.end = vi.fn(() => {
+        setImmediate(() => {
+          cb(res);
+          setImmediate(() => {
+            res.emit("data", Buffer.from(r.body));
+            res.emit("end");
+          });
+        });
+      });
+      req.write = vi.fn();
+      return req;
+    });
+  }
+}
+
+function setupGitHubRemote() {
+  mockExecFile.mockImplementation((cmd, args) => {
+    if (cmd === "git" && args[0] === "remote" && args[1] === "get-url") {
+      return "https://github.com/owner/repo.git";
+    }
+    if (cmd === "git" && args[0] === "branch" && args[1] === "--show-current") {
+      return "feat/my-feature\n";
+    }
+    if (cmd === "git" && args[0] === "diff" && args[1] === "--stat") {
+      return " src/a.ts | 10 ++++\n 1 file changed";
+    }
+    if (cmd === "git" && args[0] === "log") {
+      return "abc1234 initial commit\n";
+    }
+    return "";
+  });
+}
+
+function setupGitLabRemote() {
+  mockExecFile.mockImplementation((cmd, args) => {
+    if (cmd === "git" && args[0] === "remote" && args[1] === "get-url") {
+      return "https://gitlab.company.com/owner/repo.git";
+    }
+    if (cmd === "git" && args[0] === "branch" && args[1] === "--show-current") {
+      return "feat/my-feature\n";
+    }
+    if (cmd === "git" && args[0] === "diff" && args[1] === "--stat") {
+      return " src/a.ts | 10 ++++\n 1 file changed";
+    }
+    if (cmd === "git" && args[0] === "log") {
+      return "abc1234 initial commit\n";
+    }
+    return "";
+  });
+}
+
+function makeContext(prNumber?: number): TaskContext {
+  return {
+    spec: { source: "markdown" as const, title: "Test", content: "test content" },
+    prCreate: prNumber ? { branch: "feat/x", commitMessage: "c", prUrl: "url", prNumber } : undefined,
+    results: [],
+  };
+}
+
+// --- Tests ---
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("extractPRReviewOutput", () => {
   it("extracts valid review JSON", () => {
@@ -58,7 +188,6 @@ describe("extractPRReviewOutput", () => {
       comments: [],
       recommendedActions: [],
     });
-    // The regex match might not match without summary field
     expect(() => extractPRReviewOutput(input)).toThrow();
   });
 
@@ -160,5 +289,153 @@ describe("formatPRReviewOutput", () => {
     const result = formatPRReviewOutput(output);
     expect(result).toContain("c.ts: whole file");
     expect(result).not.toContain("c.ts:null");
+  });
+});
+
+describe("runPRReview - GitHub platform", () => {
+  it("fetches diff via GitHub REST API", async () => {
+    setupGitHubRemote();
+
+    // 3 parallel HTTP calls: getDiff, getBaseBranch (stat), getBaseBranch (log)
+    setupHttpResponses([
+      { status: 200, body: "diff --git a/src/a.ts b/src/a.ts\n+added line" },
+      { status: 200, body: JSON.stringify({ base: { ref: "main" } }) },
+      { status: 200, body: JSON.stringify({ base: { ref: "main" } }) },
+    ]);
+
+    const context = makeContext(42);
+    const { output } = await runPRReview(context);
+
+    expect(output.summary).toBe("Looks good");
+    expect(mockHttpsRequest).toHaveBeenCalledTimes(3);
+    const firstCall = mockHttpsRequest.mock.calls[0][0];
+    expect(firstCall.hostname).toBe("api.github.com");
+    expect(firstCall.path).toContain("/repos/owner/repo/pulls/42");
+  });
+});
+
+describe("runPRReview - GitLab platform", () => {
+  it("fetches diff via GitLab REST API", async () => {
+    setupGitLabRemote();
+
+    // 3 parallel HTTP calls: getDiff, getBaseBranch (stat), getBaseBranch (log)
+    setupHttpResponses([
+      { status: 200, body: JSON.stringify({
+        changes: [{ old_path: "src/a.ts", new_path: "src/a.ts", diff: "@@ -1,3 +1,4 @@\n+new line" }],
+      }) },
+      { status: 200, body: JSON.stringify({ target_branch: "main" }) },
+      { status: 200, body: JSON.stringify({ target_branch: "main" }) },
+    ]);
+
+    const context = makeContext(7);
+    const { output } = await runPRReview(context);
+
+    expect(output.summary).toBe("Looks good");
+    const firstCall = mockHttpsRequest.mock.calls[0][0];
+    expect(firstCall.hostname).toBe("gitlab.company.com");
+    expect(firstCall.path).toContain("/merge_requests/7/changes");
+  });
+});
+
+describe("postPRReviewComment - GitHub", () => {
+  it("posts comment via GitHub issues API", async () => {
+    setupGitHubRemote();
+
+    setupHttpResponses([
+      { status: 201, body: "{}" },
+    ]);
+
+    const context = makeContext(42);
+    const review: PRReviewOutput = {
+      summary: "LGTM",
+      comments: [],
+      recommendedActions: [],
+    };
+
+    await postPRReviewComment(context, review);
+
+    expect(mockHttpsRequest).toHaveBeenCalledTimes(1);
+    const callOpts = mockHttpsRequest.mock.calls[0][0];
+    expect(callOpts.hostname).toBe("api.github.com");
+    expect(callOpts.path).toContain("/issues/42/comments");
+    expect(callOpts.method).toBe("POST");
+  });
+});
+
+describe("postPRReviewComment - GitLab", () => {
+  it("posts note via GitLab MR notes API", async () => {
+    setupGitLabRemote();
+
+    setupHttpResponses([
+      { status: 201, body: "{}" },
+    ]);
+
+    const context = makeContext(7);
+    const review: PRReviewOutput = {
+      summary: "Needs work",
+      comments: [{ file: "x.ts", line: 1, comment: "fix" }],
+      recommendedActions: ["Fix it"],
+    };
+
+    await postPRReviewComment(context, review);
+
+    expect(mockHttpsRequest).toHaveBeenCalledTimes(1);
+    const callOpts = mockHttpsRequest.mock.calls[0][0];
+    expect(callOpts.hostname).toBe("gitlab.company.com");
+    expect(callOpts.path).toContain("/merge_requests/7/notes");
+    expect(callOpts.method).toBe("POST");
+  });
+});
+
+describe("detectPRFromBranch - GitHub", () => {
+  it("detects PR from branch when no context.prCreate", async () => {
+    setupGitHubRemote();
+
+    // 4 HTTP calls: detectPR, getDiff, getBaseBranch (stat), getBaseBranch (log)
+    setupHttpResponses([
+      { status: 200, body: JSON.stringify([{ number: 99 }]) },
+      { status: 200, body: "diff --git a/f.ts b/f.ts\n+x" },
+      { status: 200, body: JSON.stringify({ base: { ref: "main" } }) },
+      { status: 200, body: JSON.stringify({ base: { ref: "main" } }) },
+    ]);
+
+    const context: TaskContext = {
+      spec: { source: "markdown" as const, title: "T", content: "c" },
+      results: [],
+    };
+    const { output } = await runPRReview(context);
+    expect(output.summary).toBe("Looks good");
+
+    // First call should be detecting PR from branch
+    const detectCall = mockHttpsRequest.mock.calls[0][0];
+    expect(detectCall.path).toContain("pulls?head=");
+    expect(detectCall.path).toContain("state=open");
+  });
+});
+
+describe("detectPRFromBranch - GitLab", () => {
+  it("detects MR from branch when no context.prCreate", async () => {
+    setupGitLabRemote();
+
+    // 4 HTTP calls: detectMR, getDiff, getBaseBranch (stat), getBaseBranch (log)
+    setupHttpResponses([
+      { status: 200, body: JSON.stringify([{ iid: 15 }]) },
+      { status: 200, body: JSON.stringify({
+        changes: [{ old_path: "a.ts", new_path: "a.ts", diff: "+line" }],
+      }) },
+      { status: 200, body: JSON.stringify({ target_branch: "develop" }) },
+      { status: 200, body: JSON.stringify({ target_branch: "develop" }) },
+    ]);
+
+    const context: TaskContext = {
+      spec: { source: "markdown" as const, title: "T", content: "c" },
+      results: [],
+    };
+    const { output } = await runPRReview(context);
+    expect(output.summary).toBe("Looks good");
+
+    const detectCall = mockHttpsRequest.mock.calls[0][0];
+    expect(detectCall.path).toContain("merge_requests?source_branch=");
+    expect(detectCall.path).toContain("state=opened");
   });
 });

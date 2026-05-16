@@ -117,12 +117,12 @@ export async function createPR(opts: {
   return createGitHubPR(opts);
 }
 
-interface TlsOptions {
+export interface TlsOptions {
   rejectUnauthorized?: boolean;
   ca?: string[];
 }
 
-async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
+export async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
   // Respect GIT_SSL_NO_VERIFY env var
   if (process.env.GIT_SSL_NO_VERIFY) return { rejectUnauthorized: false };
   // Respect NODE_TLS_REJECT_UNAUTHORIZED if explicitly set
@@ -234,7 +234,7 @@ function isSslError(err: unknown): boolean {
   );
 }
 
-async function httpsPost(
+export async function httpsPost(
   url: string,
   headers: Record<string, string>,
   body: string,
