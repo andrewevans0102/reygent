@@ -123,6 +123,16 @@ This pattern is used in:
 {"type": "result", "result": "...", "total_cost_usd": 0.05, ...}
 ```
 
+**Workspace trust:**
+
+Reygent unconditionally passes `--skip-git-repo-check` to the Claude CLI. Without this flag, Claude CLI refuses to run in directories that are either:
+1. Not a git repository
+2. Not previously marked as "trusted" by the user in Claude Code
+
+Since reygent already prompts "Auto-approve all actions? (y/n)" before spawning agents, the trust concern is handled at the reygent level. The flag prevents unnecessary failures for users who haven't initialized a git repo or haven't previously used Claude Code in the directory.
+
+When no `.git` directory is detected, the Claude provider emits a one-time warning to stderr advising users that file changes won't be version-controlled.
+
 ### Gemini Provider (`src/providers/gemini.ts`)
 
 **Error detection:**

@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { constants } from "node:os";
 import chalk from "chalk";
@@ -96,6 +98,9 @@ const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 // Track Vertex AI detection to log only once per session
 let vertexAiLoggedForClaude = false;
 
+// Track non-git-repo warning to show only once per process
+let gitRepoWarningShown = false;
+
 /** Extract token counts from a Claude CLI stream result message. */
 export function extractTokenUsage(msg: StreamResultMessage): {
   inputTokens: number | undefined;
@@ -166,6 +171,7 @@ export const claudeAdapter: ProviderAdapter = {
         "--output-format", "stream-json",
         "--verbose",
         "--model", options.model,
+        "--skip-git-repo-check",
       ];
       if (options.allowedTools !== undefined) {
         // Explicit tool restriction: empty array = no tools allowed
@@ -190,6 +196,16 @@ export const claudeAdapter: ProviderAdapter = {
           chalk.gray(`[${name}] Vertex AI detected: project=${vertexProject}, region=${region}\n`)
         );
         vertexAiLoggedForClaude = true;
+      }
+
+      if (!gitRepoWarningShown && !options.quiet) {
+        const hasGit = existsSync(join(process.cwd(), ".git"));
+        if (!hasGit) {
+          process.stderr.write(
+            chalk.yellow("⚠ Not in a git repo — file changes won't be version-controlled. Consider running git init.\n")
+          );
+          gitRepoWarningShown = true;
+        }
       }
 
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
@@ -338,9 +354,19 @@ export const claudeAdapter: ProviderAdapter = {
     }
 
     return new Promise((resolve, reject) => {
+      if (!gitRepoWarningShown) {
+        const hasGit = existsSync(join(process.cwd(), ".git"));
+        if (!hasGit) {
+          process.stderr.write(
+            chalk.yellow("⚠ Not in a git repo — file changes won't be version-controlled. Consider running git init.\n")
+          );
+          gitRepoWarningShown = true;
+        }
+      }
+
       const child = spawn(
         "claude",
-        ["--append-system-prompt", systemPrompt, "--model", model],
+        ["--append-system-prompt", systemPrompt, "--model", model, "--skip-git-repo-check"],
         {
           stdio: "inherit",
           detached: false, // Keep in same process group so we can kill descendants
