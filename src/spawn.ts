@@ -23,6 +23,8 @@ export interface SpawnResult {
   errorMessage?: string;
   /** HTTP status code from API error (e.g., 404, 401, 429). Only present on API errors. */
   apiErrorStatus?: number;
+  /** Captured stderr output (may be truncated). Useful for diagnosing CLI failures. */
+  stderr?: string;
 }
 
 /**
@@ -46,6 +48,12 @@ function looksLikeMalformedModel(model?: string): boolean {
  * Includes errorMessage from the provider and raw stdout as fallback.
  */
 export function formatExitDetail(result: SpawnResult, model?: string): string {
+  // Detect trusted directory / git repo check failure from Claude CLI
+  const combined = `${result.stdout}\n${result.stderr ?? ""}`;
+  if (/trusted directory|skip-git-repo-check/i.test(combined)) {
+    return `\n  Claude CLI does not trust this directory.\n\n  To fix, do one of:\n    1. Run \`claude\` interactively here once and approve the trust prompt\n    2. Initialize a git repo: git init\n\n  Then re-run \`reygent run\`.`;
+  }
+
   if (result.errorMessage) {
     const status = result.apiErrorStatus ? ` (HTTP ${result.apiErrorStatus})` : "";
     let detail = `\n  ${result.errorMessage}${status}`;

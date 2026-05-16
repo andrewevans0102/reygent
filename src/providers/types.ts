@@ -28,6 +28,8 @@ export interface SpawnResult {
   usage?: UsageInfo;
   errorMessage?: string;
   apiErrorStatus?: number;
+  /** Captured stderr output (may be truncated). Useful for diagnosing CLI failures. */
+  stderr?: string;
 }
 
 export interface ModelEntry {
