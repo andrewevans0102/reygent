@@ -117,11 +117,25 @@ export async function createPR(opts: {
   return createGitHubPR(opts);
 }
 
+/**
+ * TLS options for HTTPS requests, including certificate verification settings.
+ * Used by pr-review.ts and other modules that need to make authenticated HTTPS requests.
+ */
 export interface TlsOptions {
+  /** Whether to reject unauthorized certificates. Set to false to skip verification. */
   rejectUnauthorized?: boolean;
+  /** Custom certificate authority bundle. Combines with Node's default CAs when provided. */
   ca?: string[];
 }
 
+/**
+ * Resolves TLS options for HTTPS requests based on git configuration and environment variables.
+ * Respects GIT_SSL_NO_VERIFY, NODE_TLS_REJECT_UNAUTHORIZED, git config http.sslVerify,
+ * and git config http.sslCAInfo to match git's behavior for corporate/self-signed certificates.
+ *
+ * @param hostname - Optional hostname to check for URL-specific git config overrides
+ * @returns TLS options object for use with Node's https.request
+ */
 export async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
   // Respect GIT_SSL_NO_VERIFY env var
   if (process.env.GIT_SSL_NO_VERIFY) return { rejectUnauthorized: false };
@@ -234,6 +248,19 @@ function isSslError(err: unknown): boolean {
   );
 }
 
+/**
+ * Makes an HTTPS POST request with automatic TLS configuration and SSL error retry.
+ * Resolves TLS options from git config, respecting corporate CA bundles and SSL verification settings.
+ * On SSL errors, retries once with verification disabled as a fallback (unless already insecure).
+ *
+ * Used by pr-review.ts for posting review comments to GitHub/GitLab APIs.
+ *
+ * @param url - Full HTTPS URL to POST to
+ * @param headers - HTTP headers to send
+ * @param body - Request body as string (typically JSON)
+ * @param opts - Options: insecure skips all TLS verification
+ * @returns Promise with HTTP status code and response text
+ */
 export async function httpsPost(
   url: string,
   headers: Record<string, string>,

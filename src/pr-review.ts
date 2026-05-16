@@ -316,6 +316,52 @@ function exec(
 // Platform-aware HTTP helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Sleep for specified milliseconds. Used for retry backoff.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Retry an async operation with exponential backoff for rate limit errors (429).
+ * @param fn - Async function to retry
+ * @param maxRetries - Maximum number of retry attempts (default 3)
+ * @param initialDelay - Initial delay in ms (default 1000)
+ * @returns Result of the async function
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  initialDelay = 1000,
+): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      // Check if this is a rate limit error (429)
+      const is429 = lastError.message.includes("429") ||
+                    lastError.message.toLowerCase().includes("rate limit");
+
+      // Only retry on 429 errors and if we have retries left
+      if (!is429 || attempt === maxRetries) {
+        throw lastError;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = initialDelay * Math.pow(2, attempt);
+      if (process.env.DEBUG) {
+        console.warn(`Rate limited (429), retrying after ${delay}ms... (attempt ${attempt + 1}/${maxRetries})`);
+      }
+      await sleep(delay);
+    }
+  }
+  throw lastError ?? new Error("Retry failed with unknown error");
+}
+
 async function httpsGet(
   url: string,
   headers: Record<string, string>,
@@ -357,11 +403,16 @@ function getApiBase(remote: RemoteInfo): string {
     const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
     return `https://${remote.host}/api/v4/projects/${projectPath}`;
   }
-  const apiHost =
-    remote.host === "github.com"
-      ? "https://api.github.com"
-      : `https://${remote.host}/api/v3`;
-  return `${apiHost}/repos/${remote.owner}/${remote.repo}`;
+  if (remote.platform === "github") {
+    const apiHost =
+      remote.host === "github.com"
+        ? "https://api.github.com"
+        : `https://${remote.host}/api/v3`;
+    return `${apiHost}/repos/${remote.owner}/${remote.repo}`;
+  }
+  throw new TaskError(
+    `pr-review: unsupported platform "${remote.platform}". Only "github" and "gitlab" are supported.`,
+  );
 }
 
 function getAuthHeaders(remote: RemoteInfo, token: string): Record<string, string> {
@@ -452,16 +503,46 @@ async function getDiff(
       throw new TaskError(`pr-review: GitLab API error ${status}: ${text}`);
     }
     const data = JSON.parse(text) as {
-      changes: Array<{ old_path: string; new_path: string; diff: string }>;
+      changes: Array<{
+        old_path: string;
+        new_path: string;
+        diff: string;
+        new_file?: boolean;
+        deleted_file?: boolean;
+        renamed_file?: boolean;
+      }>;
     };
     // Reconstruct unified diff from GitLab changes
     return data.changes
       .map((c) => {
-        const header =
-          c.old_path === c.new_path
-            ? `diff --git a/${c.old_path} b/${c.new_path}`
-            : `diff --git a/${c.old_path} b/${c.new_path}\nrename from ${c.old_path}\nrename to ${c.new_path}`;
-        return `${header}\n${c.diff}`;
+        // Handle binary files: GitLab API may return empty diff or special marker
+        if (!c.diff || c.diff.trim() === "") {
+          return `diff --git a/${c.old_path} b/${c.new_path}\nBinary files differ`;
+        }
+
+        // Handle deleted files
+        if (c.deleted_file) {
+          return `diff --git a/${c.old_path} b/${c.new_path}\ndeleted file mode 100644\n${c.diff}`;
+        }
+
+        // Handle new files
+        if (c.new_file) {
+          return `diff --git a/${c.old_path} b/${c.new_path}\nnew file mode 100644\n${c.diff}`;
+        }
+
+        // Handle renames with or without content changes
+        if (c.renamed_file || c.old_path !== c.new_path) {
+          const renameHeader = `diff --git a/${c.old_path} b/${c.new_path}\nrename from ${c.old_path}\nrename to ${c.new_path}`;
+          // If diff is only whitespace/empty, it's a pure rename
+          if (c.diff.trim() === "") {
+            return renameHeader;
+          }
+          // Rename with content changes
+          return `${renameHeader}\n${c.diff}`;
+        }
+
+        // Regular file modification
+        return `diff --git a/${c.old_path} b/${c.new_path}\n${c.diff}`;
       })
       .join("\n");
   }
@@ -561,18 +642,29 @@ async function detectPRFromBranch(
   }
 
   // GitHub: search PRs by head branch
-  const encodedHead = encodeURIComponent(`${remote.owner}:${branch}`);
-  const { status, text } = await httpsGet(
+  // First try with repo owner prefix (for same-repo PRs)
+  let encodedHead = encodeURIComponent(`${remote.owner}:${branch}`);
+  let { status, text } = await httpsGet(
     `${apiBase}/pulls?head=${encodedHead}&state=open`,
     headers,
     { insecure },
   );
-  if (status < 200 || status >= 300) {
-    throw new TaskError(
-      `pr-review: no open PR found for branch "${branch}". Create a PR first or provide a PR number.`,
+
+  let prs = (status >= 200 && status < 300) ? JSON.parse(text) as Array<{ number: number }> : [];
+
+  // If no PRs found with owner:branch, try without owner prefix (handles cross-fork PRs)
+  if (prs.length === 0) {
+    encodedHead = encodeURIComponent(branch);
+    const retry = await httpsGet(
+      `${apiBase}/pulls?head=${encodedHead}&state=open`,
+      headers,
+      { insecure },
     );
+    if (retry.status >= 200 && retry.status < 300) {
+      prs = JSON.parse(retry.text) as Array<{ number: number }>;
+    }
   }
-  const prs = JSON.parse(text) as Array<{ number: number }>;
+
   if (prs.length === 0) {
     throw new TaskError(
       `pr-review: no open PR found for branch "${branch}". Create a PR first or provide a PR number.`,
@@ -643,6 +735,7 @@ export async function runPRReview(
 /**
  * Post a formatted PR review as a comment on the pull request.
  * Supports both GitHub PRs and GitLab MRs.
+ * Includes retry logic with exponential backoff for rate limit (429) errors.
  */
 export async function postPRReviewComment(
   context: TaskContext,
@@ -655,27 +748,30 @@ export async function postPRReviewComment(
 
   const apiBase = getApiBase(remote);
 
-  if (remote.platform === "gitlab") {
+  // Wrap API call in retry logic for rate limiting
+  await retryWithBackoff(async () => {
+    if (remote.platform === "gitlab") {
+      const headers = getAuthHeaders(remote, token);
+      const { status, text } = await httpsPost(
+        `${apiBase}/merge_requests/${prNumber}/notes`,
+        headers,
+        JSON.stringify({ body }),
+      );
+      if (status < 200 || status >= 300) {
+        throw new TaskError(`pr-review: GitLab API error ${status}: ${text}`);
+      }
+      return;
+    }
+
+    // GitHub: post as issue comment
     const headers = getAuthHeaders(remote, token);
     const { status, text } = await httpsPost(
-      `${apiBase}/merge_requests/${prNumber}/notes`,
+      `${apiBase}/issues/${prNumber}/comments`,
       headers,
       JSON.stringify({ body }),
     );
     if (status < 200 || status >= 300) {
-      throw new TaskError(`pr-review: GitLab API error ${status}: ${text}`);
+      throw new TaskError(`pr-review: GitHub API error ${status}: ${text}`);
     }
-    return;
-  }
-
-  // GitHub: post as issue comment
-  const headers = getAuthHeaders(remote, token);
-  const { status, text } = await httpsPost(
-    `${apiBase}/issues/${prNumber}/comments`,
-    headers,
-    JSON.stringify({ body }),
-  );
-  if (status < 200 || status >= 300) {
-    throw new TaskError(`pr-review: GitHub API error ${status}: ${text}`);
-  }
+  });
 }

@@ -73,14 +73,12 @@ function setupHttpResponses(responses: Array<{ status: number; body: string }>) 
       (res as any).statusCode = r.status;
 
       const req = new EventEmitter() as any;
-      req.end = vi.fn(() => {
-        setImmediate(() => {
-          cb(res);
-          setImmediate(() => {
-            res.emit("data", Buffer.from(r.body));
-            res.emit("end");
-          });
-        });
+      req.end = vi.fn(async () => {
+        await Promise.resolve(); // Ensure callback runs after current stack
+        cb(res);
+        await Promise.resolve(); // Ensure data emission runs after callback
+        res.emit("data", Buffer.from(r.body));
+        res.emit("end");
       });
       req.write = vi.fn();
       return req;
@@ -88,37 +86,47 @@ function setupHttpResponses(responses: Array<{ status: number; body: string }>) 
   }
 }
 
+function setupSharedGitMocks() {
+  return {
+    branch: "feat/my-feature\n",
+    diffStat: " src/a.ts | 10 ++++\n 1 file changed",
+    log: "abc1234 initial commit\n",
+  };
+}
+
 function setupGitHubRemote() {
+  const shared = setupSharedGitMocks();
   mockExecFile.mockImplementation((cmd, args) => {
     if (cmd === "git" && args[0] === "remote" && args[1] === "get-url") {
       return "https://github.com/owner/repo.git";
     }
     if (cmd === "git" && args[0] === "branch" && args[1] === "--show-current") {
-      return "feat/my-feature\n";
+      return shared.branch;
     }
     if (cmd === "git" && args[0] === "diff" && args[1] === "--stat") {
-      return " src/a.ts | 10 ++++\n 1 file changed";
+      return shared.diffStat;
     }
     if (cmd === "git" && args[0] === "log") {
-      return "abc1234 initial commit\n";
+      return shared.log;
     }
     return "";
   });
 }
 
 function setupGitLabRemote() {
+  const shared = setupSharedGitMocks();
   mockExecFile.mockImplementation((cmd, args) => {
     if (cmd === "git" && args[0] === "remote" && args[1] === "get-url") {
       return "https://gitlab.company.com/owner/repo.git";
     }
     if (cmd === "git" && args[0] === "branch" && args[1] === "--show-current") {
-      return "feat/my-feature\n";
+      return shared.branch;
     }
     if (cmd === "git" && args[0] === "diff" && args[1] === "--stat") {
-      return " src/a.ts | 10 ++++\n 1 file changed";
+      return shared.diffStat;
     }
     if (cmd === "git" && args[0] === "log") {
-      return "abc1234 initial commit\n";
+      return shared.log;
     }
     return "";
   });
