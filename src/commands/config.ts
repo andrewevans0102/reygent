@@ -224,23 +224,41 @@ async function runConfig(): Promise<void> {
   let selectedModel: string;
 
   // Track platform choice per provider (vertex vs direct) so we don't re-ask
+  // Note: Platform choice is inferred from model format and not persisted separately.
+  // Models with @ separator (e.g., claude-sonnet@20250929) indicate Vertex AI.
+  // Models with - separator (e.g., claude-sonnet-20250929) indicate direct API.
+  // On subsequent config runs, we detect the format from the existing model value.
   const vertexProviders = new Set<string>();
   const platformAskedProviders = new Set<string>();
 
   // Check if provider supports Vertex AI and ask platform preference
   let useVertexAi = false;
   if (provider.vertexModels && provider.vertexModels.length > 0) {
-    resetTerminalForInput();
-    const platform = await select({
-      message: "API platform:",
-      choices: [
-        { name: "Direct API", value: "direct" as const },
-        { name: `Google Vertex AI ${chalk.gray("— uses model@version format")}`, value: "vertex" as const },
-      ],
-    });
-    useVertexAi = platform === "vertex";
-    if (useVertexAi) vertexProviders.add(selectedProvider);
-    platformAskedProviders.add(selectedProvider);
+    // Auto-detect platform from existing model format if available
+    const existingModel = rawConfig.model as string | undefined;
+    if (existingModel && existingModel.includes("@")) {
+      // Existing model uses @-format → Vertex AI
+      useVertexAi = true;
+      vertexProviders.add(selectedProvider);
+      platformAskedProviders.add(selectedProvider);
+    } else if (existingModel && (existingModel.includes("-") || existingModel.startsWith("gemini-") || existingModel.startsWith("claude-"))) {
+      // Existing model uses --format → Direct API
+      useVertexAi = false;
+      platformAskedProviders.add(selectedProvider);
+    } else {
+      // No existing model or ambiguous format — prompt user
+      resetTerminalForInput();
+      const platform = await select({
+        message: "API platform:",
+        choices: [
+          { name: "Direct API", value: "direct" as const },
+          { name: `Google Vertex AI ${chalk.gray("— uses model@version format")}`, value: "vertex" as const },
+        ],
+      });
+      useVertexAi = platform === "vertex";
+      if (useVertexAi) vertexProviders.add(selectedProvider);
+      platformAskedProviders.add(selectedProvider);
+    }
   }
 
   const modelList = useVertexAi ? (provider.vertexModels ?? []) : provider.supportedModels;
@@ -280,9 +298,11 @@ async function runConfig(): Promise<void> {
 
       // Brief pattern hint for unexpected formats
       if (selectedProvider === "claude" && !selectedModel.startsWith("claude-") && !selectedModel.includes("projects/")) {
-        console.log(chalk.yellow("⚠"), chalk.gray("Expected format: claude-{name}-{date} or claude-{name}@{date}"));
+        const expectedFormat = useVertexAi ? "claude-{name}@{date}" : "claude-{name}-{date}";
+        console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
       } else if (selectedProvider === "gemini" && !selectedModel.startsWith("gemini-") && !selectedModel.includes("projects/")) {
-        console.log(chalk.yellow("⚠"), chalk.gray("Expected format: gemini-{version}-{variant} or gemini-{version}@{version}"));
+        const expectedFormat = useVertexAi ? "gemini-{version}@{version}" : "gemini-{version}-{variant}";
+        console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
       } else if (selectedProvider === "codex" && !selectedModel.startsWith("gpt-")) {
         console.log(chalk.yellow("⚠"), chalk.gray("Expected format: gpt-{version}"));
       }
@@ -363,18 +383,31 @@ async function runConfig(): Promise<void> {
       // Determine Vertex AI preference for this agent's provider
       let agentUseVertexAi = vertexProviders.has(agentProviderChoice);
       if (!platformAskedProviders.has(agentProviderChoice) && agentProviderAdapter.vertexModels && agentProviderAdapter.vertexModels.length > 0) {
-        // First time seeing this provider — ask platform preference
-        resetTerminalForInput();
-        const agentPlatform = await select({
-          message: `API platform for ${agentProviderChoice}:`,
-          choices: [
-            { name: "Direct API", value: "direct" as const },
-            { name: `Google Vertex AI ${chalk.gray("— uses model@version format")}`, value: "vertex" as const },
-          ],
-        });
-        agentUseVertexAi = agentPlatform === "vertex";
-        if (agentUseVertexAi) vertexProviders.add(agentProviderChoice);
-        platformAskedProviders.add(agentProviderChoice);
+        // First time seeing this provider — try auto-detect from existing agent model
+        const existingAgentModel = agent.model;
+        if (existingAgentModel && existingAgentModel.includes("@")) {
+          // Agent model uses @-format → Vertex AI
+          agentUseVertexAi = true;
+          vertexProviders.add(agentProviderChoice);
+          platformAskedProviders.add(agentProviderChoice);
+        } else if (existingAgentModel && (existingAgentModel.includes("-") || existingAgentModel.startsWith("gemini-") || existingAgentModel.startsWith("claude-"))) {
+          // Agent model uses --format → Direct API
+          agentUseVertexAi = false;
+          platformAskedProviders.add(agentProviderChoice);
+        } else {
+          // No existing model or ambiguous format — prompt user
+          resetTerminalForInput();
+          const agentPlatform = await select({
+            message: `API platform for ${agentProviderChoice}:`,
+            choices: [
+              { name: "Direct API", value: "direct" as const },
+              { name: `Google Vertex AI ${chalk.gray("— uses model@version format")}`, value: "vertex" as const },
+            ],
+          });
+          agentUseVertexAi = agentPlatform === "vertex";
+          if (agentUseVertexAi) vertexProviders.add(agentProviderChoice);
+          platformAskedProviders.add(agentProviderChoice);
+        }
       }
 
       const agentModelList = agentUseVertexAi
@@ -416,9 +449,11 @@ async function runConfig(): Promise<void> {
 
           // Brief pattern hint for unexpected formats
           if (agentProviderChoice === "claude" && !agentModelChoice.startsWith("claude-") && !agentModelChoice.includes("projects/")) {
-            console.log(chalk.yellow("⚠"), chalk.gray("Expected format: claude-{name}-{date} or claude-{name}@{date}"));
+            const expectedFormat = agentUseVertexAi ? "claude-{name}@{date}" : "claude-{name}-{date}";
+            console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
           } else if (agentProviderChoice === "gemini" && !agentModelChoice.startsWith("gemini-") && !agentModelChoice.includes("projects/")) {
-            console.log(chalk.yellow("⚠"), chalk.gray("Expected format: gemini-{version}-{variant} or gemini-{version}@{version}"));
+            const expectedFormat = agentUseVertexAi ? "gemini-{version}@{version}" : "gemini-{version}-{variant}";
+            console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
           } else if (agentProviderChoice === "codex" && !agentModelChoice.startsWith("gpt-")) {
             console.log(chalk.yellow("⚠"), chalk.gray("Expected format: gpt-{version}"));
           }
