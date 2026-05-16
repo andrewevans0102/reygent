@@ -68,12 +68,16 @@ const SUPPORTED_MODELS: ModelEntry[] = [
 ];
 
 const VERTEX_AI_MODELS: ModelEntry[] = [
+  { id: "claude-opus-4-7", label: "Opus 4.7" },
+  { id: "claude-opus-4-6", label: "Opus 4.6" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
   { id: "claude-sonnet-4-5@20250929", label: "Sonnet 4.5 (recommended)" },
+  { id: "claude-sonnet-4@20250514", label: "Sonnet 4 (deprecated)" },
+  { id: "claude-opus-4-5@20251101", label: "Opus 4.5" },
+  { id: "claude-opus-4-1@20250805", label: "Opus 4.1" },
+  { id: "claude-opus-4@20250514", label: "Opus 4 (deprecated)" },
   { id: "claude-haiku-4-5@20251001", label: "Haiku 4.5" },
-  { id: "claude-sonnet-4@20250514", label: "Sonnet 4" },
-  { id: "claude-3-5-sonnet@20241022", label: "3.5 Sonnet" },
-  { id: "claude-3-5-haiku@20241022", label: "3.5 Haiku" },
-  { id: "claude-3-opus@20240229", label: "3 Opus" },
+  { id: "claude-3-5-haiku@20241022", label: "3.5 Haiku (deprecated)" },
 ];
 
 const SHORT_ALIASES: Record<string, string> = {

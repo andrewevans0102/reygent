@@ -279,12 +279,20 @@ async function runConfig(): Promise<void> {
       });
 
       // Brief pattern hint for unexpected formats
-      if (selectedProvider === "claude" && !selectedModel.startsWith("claude-") && !selectedModel.includes("projects/")) {
-        const expectedFormat = useVertexAi ? "claude-{name}@{date}" : "claude-{name}-{date}";
-        console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
-      } else if (selectedProvider === "gemini" && !selectedModel.startsWith("gemini-") && !selectedModel.includes("projects/")) {
-        const expectedFormat = useVertexAi ? "gemini-{version}@{version}" : "gemini-{version}-{variant}";
-        console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
+      if (selectedProvider === "claude" && !selectedModel.includes("projects/")) {
+        const hasVertexFormat = selectedModel.includes("@");
+        const hasDirectFormat = selectedModel.startsWith("claude-") && !selectedModel.includes("@");
+        if ((useVertexAi && !hasVertexFormat) || (!useVertexAi && !hasDirectFormat)) {
+          const expectedFormat = useVertexAi ? "claude-{name}@{date}" : "claude-{name}-{date}";
+          console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
+        }
+      } else if (selectedProvider === "gemini" && !selectedModel.includes("projects/")) {
+        const hasVertexFormat = selectedModel.includes("@");
+        const hasDirectFormat = selectedModel.startsWith("gemini-") && !selectedModel.includes("@");
+        if ((useVertexAi && !hasVertexFormat) || (!useVertexAi && !hasDirectFormat)) {
+          const expectedFormat = useVertexAi ? "gemini-{version}@{version}" : "gemini-{version}-{variant}";
+          console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
+        }
       } else if (selectedProvider === "codex" && !selectedModel.startsWith("gpt-")) {
         console.log(chalk.yellow("⚠"), chalk.gray("Expected format: gpt-{version}"));
       }
@@ -363,7 +371,7 @@ async function runConfig(): Promise<void> {
       let agentModelChoice: string;
 
       // Determine Vertex AI preference for this agent's provider
-      let agentUseVertexAi = vertexProviders.has(agentProviderChoice);
+      let agentUseVertexAi = false;
       if (!platformAskedProviders.has(agentProviderChoice) && agentProviderAdapter.vertexModels && agentProviderAdapter.vertexModels.length > 0) {
         resetTerminalForInput();
         const agentPlatform = await select({
@@ -416,12 +424,20 @@ async function runConfig(): Promise<void> {
           });
 
           // Brief pattern hint for unexpected formats
-          if (agentProviderChoice === "claude" && !agentModelChoice.startsWith("claude-") && !agentModelChoice.includes("projects/")) {
-            const expectedFormat = agentUseVertexAi ? "claude-{name}@{date}" : "claude-{name}-{date}";
-            console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
-          } else if (agentProviderChoice === "gemini" && !agentModelChoice.startsWith("gemini-") && !agentModelChoice.includes("projects/")) {
-            const expectedFormat = agentUseVertexAi ? "gemini-{version}@{version}" : "gemini-{version}-{variant}";
-            console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
+          if (agentProviderChoice === "claude" && !agentModelChoice.includes("projects/")) {
+            const hasVertexFormat = agentModelChoice.includes("@");
+            const hasDirectFormat = agentModelChoice.startsWith("claude-") && !agentModelChoice.includes("@");
+            if ((agentUseVertexAi && !hasVertexFormat) || (!agentUseVertexAi && !hasDirectFormat)) {
+              const expectedFormat = agentUseVertexAi ? "claude-{name}@{date}" : "claude-{name}-{date}";
+              console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
+            }
+          } else if (agentProviderChoice === "gemini" && !agentModelChoice.includes("projects/")) {
+            const hasVertexFormat = agentModelChoice.includes("@");
+            const hasDirectFormat = agentModelChoice.startsWith("gemini-") && !agentModelChoice.includes("@");
+            if ((agentUseVertexAi && !hasVertexFormat) || (!agentUseVertexAi && !hasDirectFormat)) {
+              const expectedFormat = agentUseVertexAi ? "gemini-{version}@{version}" : "gemini-{version}-{variant}";
+              console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
+            }
           } else if (agentProviderChoice === "codex" && !agentModelChoice.startsWith("gpt-")) {
             console.log(chalk.yellow("⚠"), chalk.gray("Expected format: gpt-{version}"));
           }

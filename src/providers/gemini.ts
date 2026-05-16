@@ -10,8 +10,8 @@ const SUPPORTED_MODELS: ModelEntry[] = [
 ];
 
 const VERTEX_AI_MODELS: ModelEntry[] = [
-  { id: "gemini-2.5-pro@001", label: "Gemini 2.5 Pro (recommended)" },
-  { id: "gemini-2.5-flash@001", label: "Gemini 2.5 Flash" },
+  { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro (recommended)" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
 ];
 
 const SHORT_ALIASES: Record<string, string> = {};
