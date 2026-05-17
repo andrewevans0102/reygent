@@ -1,7 +1,7 @@
-import { createInterface } from "node:readline";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import chalk from "chalk";
+import { input } from "@inquirer/prompts";
 import { isDebug } from "../debug.js";
 import { generateSpec, runClarification } from "../generate-spec.js";
 import { createLiveStatus } from "../live-status.js";
@@ -11,11 +11,7 @@ import { withTelemetry } from "../telemetry-lifecycle.js";
 import { wrapText } from "../format.js";
 
 async function prompt(question: string, fallback?: string): Promise<string> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await new Promise<string>((resolve) => {
-    rl.question(question, resolve);
-  });
-  rl.close();
+  const answer = await input({ message: question, default: fallback });
   return answer.trim() || fallback || "";
 }
 
@@ -74,47 +70,36 @@ export async function generateSpecCommand(
           console.log(chalk.yellow("\n━━━ Clarifying Questions ━━━\n"));
 
           const answers: string[] = [];
-          const rl = createInterface({
-            input: process.stdin,
-            output: process.stdout,
-          });
-
           const termWidth = Math.max(process.stdout.columns || 80, 40);
 
-          try {
-            for (let i = 0; i < result.questions.length; i++) {
-              const question = result.questions[i];
+          for (let i = 0; i < result.questions.length; i++) {
+            const question = result.questions[i];
 
-              // Add empty line before first question for consistency
-              if (i === 0) {
-                console.log();
-              }
-
-              const counter = chalk.cyan(`Question ${i + 1} of ${result.questions.length}`);
-              console.log(counter);
-
-              // Wrap question text to terminal width with 2-space indent
-              const wrapped = wrapText(question, 2, termWidth, "  ");
-              console.log(`  ${wrapped}`);
-
-              const answer = await new Promise<string>((resolve) => {
-                rl.question(chalk.gray("> "), resolve);
-              });
-
-              if (answer.trim().toLowerCase() === "abort" || answer.trim().toLowerCase() === "cancel") {
-                console.log(chalk.red("\nAborted."));
-                process.exit(0);
-              }
-
-              answers.push(`Q: ${question}\nA: ${answer}`);
-
-              // Add spacing between questions except after last one
-              if (i < result.questions.length - 1) {
-                console.log();
-              }
+            // Add empty line before first question for consistency
+            if (i === 0) {
+              console.log();
             }
-          } finally {
-            rl.close();
+
+            const counter = chalk.cyan(`Question ${i + 1} of ${result.questions.length}`);
+            console.log(counter);
+
+            // Wrap question text to terminal width with 2-space indent
+            const wrapped = wrapText(question, 2, termWidth, "  ");
+            console.log(`  ${wrapped}`);
+
+            const answer = await input({ message: ">" });
+
+            if (answer.trim().toLowerCase() === "abort" || answer.trim().toLowerCase() === "cancel") {
+              console.log(chalk.red("\nAborted."));
+              process.exit(0);
+            }
+
+            answers.push(`Q: ${question}\nA: ${answer}`);
+
+            // Add spacing between questions except after last one
+            if (i < result.questions.length - 1) {
+              console.log();
+            }
           }
 
           clarificationAnswers = answers.join("\n\n");
