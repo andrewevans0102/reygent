@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline";
+import { execFile } from "node:child_process";
 import { join } from "node:path";
 import chalk from "chalk";
 import ora from "ora";
@@ -35,6 +36,14 @@ import { isTestEnvironment } from "../test-env.js";
 import { promptForRetry } from "../retry-prompt.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
+
+function isGitRepo(): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile("git", ["rev-parse", "--is-inside-work-tree"], (error) => {
+      resolve(!error);
+    });
+  });
+}
 
 /**
  * Emit stage.end event with duration and success status
@@ -1160,6 +1169,13 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
 
       if (stage.name === "pr-create") {
+        if (!(await isGitRepo())) {
+          console.log(chalk.yellow("Skipping PR creation — not inside a git repository."));
+          context.results.push({ stage: stage.name, success: true, output: "skipped (not a git repo)" });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+          continue;
+        }
+
         if (!context.implement) {
           // Emit error.task before throwing
           if (chesstrace) {
@@ -1226,6 +1242,13 @@ export async function runCommand(options: RunOptions): Promise<void> {
       }
 
       if (stage.name === "pr-review") {
+        if (!(await isGitRepo())) {
+          console.log(chalk.yellow("Skipping PR review — not inside a git repository."));
+          context.results.push({ stage: stage.name, success: true, output: "skipped (not a git repo)" });
+          emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+          continue;
+        }
+
         const prStatus = createLiveStatus("reviewing pull request...");
         const { output: reviewOutput, usage: prUsage } = await runPRReview(
           context,
