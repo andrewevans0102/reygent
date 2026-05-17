@@ -290,6 +290,59 @@ async function resolveEvents(since?: string): Promise<ResolvedEvents> {
 }
 
 // ---------------------------------------------------------------------------
+// Shared event helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Get run-end events: prefers pipeline.end, falls back to command.end + command.error.
+ * Most telemetry only emits command.end/command.error (not pipeline.end), so we
+ * must handle both to avoid showing zero runs.
+ *
+ * For command.error events, success is set to false so callers can filter uniformly.
+ */
+function getRunEndEvents(allEvents: TelemetryEvent[]): TelemetryEvent[] {
+  const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
+  if (pipelineEvents.length > 0) return pipelineEvents;
+
+  const commandEnds = filterEvents(allEvents, { event: Events.COMMAND_END });
+  const commandErrors = filterEvents(allEvents, { event: Events.COMMAND_ERROR });
+
+  // Normalize command.error to have success=false for uniform handling
+  for (const e of commandErrors) {
+    if (e.data.success === undefined) {
+      e.data.success = false;
+    }
+  }
+
+  return [...commandEnds, ...commandErrors];
+}
+
+/**
+ * Get error events: category "error" plus any *.error event names
+ * (command.error, git.error, agent.error, etc.)
+ */
+function getErrorEvents(allEvents: TelemetryEvent[]): TelemetryEvent[] {
+  const seen = new Set<string>();
+  const result: TelemetryEvent[] = [];
+
+  for (const e of allEvents) {
+    if (e.category === "error") {
+      result.push(e);
+      seen.add(e.id);
+    }
+  }
+
+  for (const e of allEvents) {
+    if (!seen.has(e.id) && e.event.endsWith(".error")) {
+      result.push(e);
+      seen.add(e.id);
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Compute functions
 // ---------------------------------------------------------------------------
 
@@ -298,11 +351,11 @@ export async function computeFailureAnalysis(opts: {
   limit?: number;
 }): Promise<FailureAnalysisResult> {
   const { events: allEvents, days } = await resolveEvents(opts.since);
-  const errorEvents = filterEvents(allEvents, { category: "error" });
-  const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
+  const errorEvents = getErrorEvents(allEvents);
+  const runEndEvents = getRunEndEvents(allEvents);
   const gateRetries = allEvents.filter(e => e.event === Events.GATE_RETRY);
 
-  const totalRuns = new Set(pipelineEvents.map(e => e.runId)).size;
+  const totalRuns = new Set(runEndEvents.map(e => e.runId)).size;
 
   // Group by event type
   const patternGroups = groupBy(errorEvents, e => e.event);
@@ -363,11 +416,11 @@ export async function computeSuccessAnalysis(opts: {
   minSuccessRate?: number;
 }): Promise<SuccessAnalysisResult> {
   const { events: allEvents, days } = await resolveEvents(opts.since);
-  const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
+  const runEndEvents = getRunEndEvents(allEvents);
   const agentSpawnEvents = filterEvents(allEvents, { event: Events.AGENT_SPAWN });
   const agentCompleteEvents = filterEvents(allEvents, { event: Events.AGENT_COMPLETE });
 
-  const successfulRuns = pipelineEvents.filter(e => e.data.success === true).length;
+  const successfulRuns = runEndEvents.filter(e => e.data.success === true).length;
 
   // Build agent stats
   const agentStatsMap = new Map<string, {
@@ -439,15 +492,15 @@ export async function computeCostAnalysis(opts: {
 }): Promise<CostAnalysisResult> {
   const { events: allEvents, days } = await resolveEvents(opts.since);
   const costEvents = filterEvents(allEvents, { event: Events.USAGE_COST });
-  const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
+  const runEndEvents = getRunEndEvents(allEvents);
 
-  const totalRuns = new Set(pipelineEvents.map(e => e.runId)).size;
-  const successRunIds = new Set(pipelineEvents.filter(e => e.data.success === true).map(e => e.runId));
+  const totalRuns = new Set(runEndEvents.map(e => e.runId)).size;
+  const successRunIds = new Set(runEndEvents.filter(e => e.data.success === true).map(e => e.runId));
   const successfulRuns = successRunIds.size;
   const failedRuns = totalRuns - successfulRuns;
 
-  const totalCost = costEvents.reduce((sum, e) => sum + (e.data.costUsd as number), 0);
-  const successCost = costEvents.filter(e => successRunIds.has(e.runId)).reduce((sum, e) => sum + (e.data.costUsd as number), 0);
+  const totalCost = costEvents.reduce((sum, e) => sum + ((e.data.costUsd as number) || 0), 0);
+  const successCost = costEvents.filter(e => successRunIds.has(e.runId)).reduce((sum, e) => sum + ((e.data.costUsd as number) || 0), 0);
   const failedCost = totalCost - successCost;
 
   // By stage
@@ -664,11 +717,19 @@ export async function computeRunsSummary(opts: {
     const endTime = Math.max(...timestamps);
 
     const pipelineEnd = events.find(e => e.event === Events.PIPELINE_END);
-    const success = pipelineEnd ? (pipelineEnd.data.success as boolean) : null;
+    const commandEnd = events.find(e => e.event === Events.COMMAND_END);
+    const commandError = events.find(e => e.event === Events.COMMAND_ERROR);
+    const success = pipelineEnd
+      ? (pipelineEnd.data.success as boolean)
+      : commandEnd
+        ? (commandEnd.data.success as boolean)
+        : commandError
+          ? false
+          : null;
 
     const cost = events
       .filter(e => e.event === Events.USAGE_COST)
-      .reduce((sum, e) => sum + (e.data.costUsd as number), 0);
+      .reduce((sum, e) => sum + ((e.data.costUsd as number) || 0), 0);
 
     const agents = [...new Set(
       events.filter(e => e.event === Events.AGENT_SPAWN).map(e => e.data.agent as string)
@@ -705,15 +766,18 @@ export async function computeRunDetail(opts: {
 
   const pipelineEnd = events.find(e => e.event === Events.PIPELINE_END);
   const commandEnd = events.find(e => e.event === Events.COMMAND_END);
+  const commandError = events.find(e => e.event === Events.COMMAND_ERROR);
   const success = pipelineEnd
     ? (pipelineEnd.data.success as boolean)
     : commandEnd
       ? (commandEnd.data.success as boolean)
-      : null;
+      : commandError
+        ? false
+        : null;
 
   const cost = events
     .filter(e => e.event === Events.USAGE_COST)
-    .reduce((sum, e) => sum + (e.data.costUsd as number), 0);
+    .reduce((sum, e) => sum + ((e.data.costUsd as number) || 0), 0);
 
   const agents = [...new Set(
     events.filter(e => e.event === Events.AGENT_SPAWN).map(e => e.data.agent as string)
