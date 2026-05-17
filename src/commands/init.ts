@@ -6,6 +6,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { builtinAgents } from "../agents.js";
 import type { ReygentConfig } from "../config.js";
+import { promptForTelemetryOptIn } from "../chesstrace/prompt.js";
 import { isDebug } from "../debug.js";
 import { DEFAULT_MODEL } from "../model.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
@@ -105,6 +106,16 @@ knowledge/success-patterns.md
       writeFileSync(gitignorePath, gitignoreContent, "utf-8");
 
       spinner.succeed(chalk.green("Initialized .reygent folder"));
+
+      // Prompt for telemetry opt-in (interactive only)
+      if (process.stdin.isTTY) {
+        try {
+          await promptForTelemetryOptIn();
+        } catch (err) {
+          if (err instanceof ExitPromptError) throw err;
+          if (isDebug()) console.error(chalk.gray("Telemetry prompt failed:"), err);
+        }
+      }
 
       console.log("");
       console.log(chalk.bold("Next steps:"));
