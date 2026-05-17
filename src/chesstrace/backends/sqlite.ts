@@ -343,6 +343,34 @@ export class SqliteBackend implements StorageBackend {
   }
 
   /**
+   * Get all events from the database synchronously.
+   * Used by knowledge analyzer to extract failure/success patterns.
+   */
+  getEvents(): TelemetryEvent[] {
+    if (!this.db) {
+      throw new Error('Database not initialized. Call init() first.');
+    }
+    const rows = this.db.prepare('SELECT * FROM events ORDER BY timestamp ASC').all() as Array<{
+      id: string;
+      run_id: string;
+      timestamp: number;
+      category: TelemetryCategory;
+      event: string;
+      min_level: number;
+      data: string;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      runId: row.run_id,
+      timestamp: row.timestamp,
+      category: row.category,
+      event: row.event,
+      minLevel: row.min_level,
+      data: JSON.parse(row.data) as Record<string, unknown>,
+    }));
+  }
+
+  /**
    * Get database file path (useful for debugging/testing)
    */
   getDbPath(): string {

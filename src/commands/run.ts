@@ -28,6 +28,7 @@ import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import { loadConfig } from "../config.js";
 import { getTelemetryOverride, resolveTelemetryEnabled } from "../telemetry-override.js";
 import { analyzeFailurePatterns, analyzeSuccessPatterns } from "../knowledge/analyzer.js";
+import { generateSolution } from "../knowledge/solution-generator.js";
 import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
 import { findProjectRoot } from "../project-detection.js";
 import { DualBackend } from "../chesstrace/backends/dual.js";
@@ -113,9 +114,10 @@ async function updateKnowledgeFromTelemetry(): Promise<void> {
     for (const pattern of topFailures) {
       for (const agent of pattern.agents) {
         try {
+          const solution = await generateSolution(pattern, backend, agent);
           await addFailureEntry(projectRoot, {
             issue: pattern.pattern,
-            solution: "Review telemetry for details",
+            solution,
             agent: agent as any,
           });
         } catch {
