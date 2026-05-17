@@ -1,17 +1,18 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import chalk from "chalk";
-import { input } from "@inquirer/prompts";
 import { isDebug } from "../debug.js";
 import { generateSpec, runClarification } from "../generate-spec.js";
 import { createLiveStatus } from "../live-status.js";
+import { pasteableInput } from "../pasteable-input.js";
 import { TaskError } from "../task.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 import { withTelemetry } from "../telemetry-lifecycle.js";
 import { wrapText } from "../format.js";
 
 async function prompt(question: string, fallback?: string): Promise<string> {
-  const answer = await input({ message: question, default: fallback });
+  resetTerminalForInput();
+  const answer = await pasteableInput({ message: question, default: fallback });
   return answer.trim() || fallback || "";
 }
 
@@ -87,7 +88,8 @@ export async function generateSpecCommand(
             const wrapped = wrapText(question, 2, termWidth, "  ");
             console.log(`  ${wrapped}`);
 
-            const answer = await input({ message: ">" });
+            resetTerminalForInput();
+            const answer = await pasteableInput({ message: ">" });
 
             if (answer.trim().toLowerCase() === "abort" || answer.trim().toLowerCase() === "cancel") {
               console.log(chalk.red("\nAborted."));

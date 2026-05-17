@@ -123,8 +123,8 @@ describe("All interactive commands terminal state management", () => {
       expect(source).toMatch(/clarifyStatus\.stop\(\);?\s*resetTerminalForInput/s);
     });
 
-    it("should use @inquirer/prompts input after resetTerminalForInput", () => {
-      expect(source).toMatch(/resetTerminalForInput.*input\(/s);
+    it("should use pasteableInput after resetTerminalForInput", () => {
+      expect(source).toMatch(/resetTerminalForInput.*pasteableInput\(/s);
     });
   });
 
