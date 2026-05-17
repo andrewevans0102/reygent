@@ -139,6 +139,81 @@ export function generateDashboardHtml(defaultSince: string): string {
   .mono { font-family: inherit; color: #888; }
   .empty { text-align: center; padding: 32px; color: #555; }
 
+  /* Clickable run rows */
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: rgba(0,212,255,0.08); }
+
+  /* Run detail view */
+  #run-detail { display: none; }
+  #run-detail.active { display: block; }
+  .back-btn {
+    background: none;
+    border: 1px solid #333;
+    color: #00d4ff;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+  }
+  .back-btn:hover { border-color: #00d4ff; background: rgba(0,212,255,0.05); }
+
+  .run-header {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .run-header .kpi { padding: 12px; }
+  .run-header .kpi .value { font-size: 1.2rem; }
+
+  /* Event log table */
+  .event-log th { position: sticky; top: 0; background: #1a1a2e; z-index: 1; }
+  .event-log td.category-badge {
+    white-space: nowrap;
+  }
+  .event-log .cat-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: bold;
+  }
+  .event-log .evt-name { color: #e0e0e0; font-weight: 500; }
+  .event-log .evt-data {
+    color: #777;
+    font-size: 0.75rem;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .event-log .evt-data.expanded {
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-width: none;
+  }
+  .event-log .time-col { white-space: nowrap; color: #666; font-size: 0.75rem; }
+  .event-log .time-offset { color: #555; font-size: 0.7rem; }
+
+  /* Stage separator */
+  .stage-row td {
+    background: rgba(0,212,255,0.06);
+    border-top: 2px solid #00d4ff44;
+    color: #00d4ff;
+    font-weight: bold;
+    font-size: 0.8rem;
+    padding: 10px 8px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Agent lifecycle rows */
+  .event-log tr.agent-spawn td { border-left: 3px solid #00cc66; }
+  .event-log tr.agent-complete td { border-left: 3px solid #3b82f6; }
+  .event-log tr.agent-error td, .event-log tr.error-row td { border-left: 3px solid #ff4444; }
+
   @media (max-width: 768px) {
     .chart-row { grid-template-columns: 1fr; }
     .kpis { grid-template-columns: repeat(2, 1fr); }
@@ -200,10 +275,21 @@ export function generateDashboardHtml(defaultSince: string): string {
   </div>
 </div>
 
-<div class="chart-row full">
+<div class="chart-row full" id="runs-section">
   <div class="card">
     <h2>Recent Runs</h2>
+    <p style="color:#555;font-size:0.75rem;margin-bottom:8px;">Click a run to view step-by-step execution trace</p>
     <div id="runsTable"></div>
+  </div>
+</div>
+
+<div id="run-detail">
+  <button class="back-btn" onclick="hideRunDetail()">← Back to Dashboard</button>
+  <h2 style="color:#00d4ff;margin-bottom:16px;">Run Trace: <span id="detail-run-id" class="mono"></span></h2>
+  <div class="run-header" id="detail-header"></div>
+  <div class="card">
+    <h2>Step-by-Step Event Log (<span id="detail-event-count">0</span> events)</h2>
+    <div id="detail-events"></div>
   </div>
 </div>
 
@@ -453,19 +539,20 @@ export function generateDashboardHtml(defaultSince: string): string {
       el.innerHTML = '<div class="empty">No runs found</div>';
       return;
     }
-    let html = '<table><thead><tr><th>Run ID</th><th>Status</th><th>Duration</th><th>Cost</th><th>Agents</th><th>When</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Run ID</th><th>Status</th><th>Duration</th><th>Cost</th><th>Agents</th><th>Events</th><th>When</th></tr></thead><tbody>';
     for (const r of runs.slice(0, 20)) {
       const statusBadge = r.success === true
         ? '<span class="badge success">OK</span>'
         : r.success === false
         ? '<span class="badge fail">FAIL</span>'
         : '<span class="badge unknown">?</span>';
-      html += '<tr>';
+      html += '<tr class="clickable" onclick="showRunDetail(\'' + esc(r.runId) + '\')">';
       html += '<td class="mono">' + shortId(r.runId) + '</td>';
       html += '<td>' + statusBadge + '</td>';
       html += '<td class="mono">' + fmtDuration(r.duration) + '</td>';
       html += '<td class="mono">' + (r.cost > 0 ? usd(r.cost) : '-') + '</td>';
       html += '<td class="mono">' + esc(r.agents.join(', ')) + '</td>';
+      html += '<td class="mono">' + r.eventCount + '</td>';
       html += '<td class="mono">' + relTime(r.startTime) + '</td>';
       html += '</tr>';
     }
@@ -477,6 +564,135 @@ export function generateDashboardHtml(defaultSince: string): string {
     const d = document.createElement('div');
     d.textContent = s || '';
     return d.innerHTML;
+  }
+
+  // Category color for event log tags
+  function catColor(cat) {
+    return CATEGORY_COLORS[cat] || COLORS.gray;
+  }
+
+  function fmtTimestamp(ts) {
+    return new Date(ts).toISOString().replace('T', ' ').replace(/\\.\\d{3}Z$/, '');
+  }
+
+  function fmtOffset(ms) {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    if (m > 0) return '+' + m + 'm ' + (s % 60) + 's';
+    return '+' + s + '.' + String(ms % 1000).padStart(3, '0').substring(0, 1) + 's';
+  }
+
+  function formatDataField(data) {
+    const entries = Object.entries(data);
+    if (entries.length === 0) return '';
+    // Show key=value pairs, readable
+    return entries.map(function(kv) {
+      var k = kv[0], v = kv[1];
+      if (typeof v === 'object' && v !== null) return k + '=' + JSON.stringify(v);
+      return k + '=' + v;
+    }).join('  ');
+  }
+
+  function eventRowClass(evt) {
+    if (evt.event === 'agent.spawn') return 'agent-spawn';
+    if (evt.event === 'agent.complete') return 'agent-complete';
+    if (evt.event === 'agent.timeout' || evt.event === 'agent.error') return 'agent-error';
+    if (evt.category === 'error') return 'error-row';
+    return '';
+  }
+
+  // -- Run detail view --
+
+  // Sections to hide/show when toggling detail view
+  var dashboardSections = ['kpis', 'runs-section'];
+  var chartSections = [];
+
+  function getDashboardElements() {
+    // Collect all chart-row divs and kpis
+    return document.querySelectorAll('.kpis, .chart-row, .controls');
+  }
+
+  window.showRunDetail = async function(runId) {
+    setStatus('Loading run ' + runId.substring(0, 8) + '...', 'loading');
+    try {
+      const res = await fetch('/api/run-detail?runId=' + encodeURIComponent(runId));
+      if (!res.ok) throw new Error(res.statusText);
+      const detail = await res.json();
+      renderRunDetail(detail);
+      setStatus('Run loaded', 'ok');
+    } catch (err) {
+      setStatus('Error: ' + err.message, 'error');
+    }
+  };
+
+  window.hideRunDetail = function() {
+    $('run-detail').className = '';
+    // Show dashboard sections
+    for (var el of getDashboardElements()) el.style.display = '';
+    document.querySelector('h1').style.display = '';
+    document.querySelector('.subtitle').style.display = '';
+  };
+
+  function renderRunDetail(detail) {
+    // Hide main dashboard
+    for (var el of getDashboardElements()) el.style.display = 'none';
+    document.querySelector('h1').style.display = 'none';
+    document.querySelector('.subtitle').style.display = 'none';
+
+    // Show detail view
+    $('run-detail').className = 'active';
+    $('detail-run-id').textContent = detail.runId.substring(0, 8);
+    $('detail-event-count').textContent = detail.eventCount;
+
+    // Header KPIs
+    var statusText = detail.success === true ? 'Success' : detail.success === false ? 'Failed' : 'Unknown';
+    var statusColor = detail.success === true ? 'green' : detail.success === false ? 'red' : '';
+    var headerHtml = '';
+    headerHtml += '<div class="kpi"><div class="value ' + statusColor + '">' + statusText + '</div><div class="label">Status</div></div>';
+    headerHtml += '<div class="kpi"><div class="value">' + fmtDuration(detail.duration) + '</div><div class="label">Duration</div></div>';
+    headerHtml += '<div class="kpi"><div class="value yellow">' + usd(detail.cost) + '</div><div class="label">Cost</div></div>';
+    headerHtml += '<div class="kpi"><div class="value">' + detail.agents.length + '</div><div class="label">Agents</div></div>';
+    headerHtml += '<div class="kpi"><div class="value">' + detail.eventCount + '</div><div class="label">Events</div></div>';
+    if (detail.stages.length > 0) {
+      headerHtml += '<div class="kpi"><div class="value">' + detail.stages.length + '</div><div class="label">Stages</div></div>';
+    }
+    $('detail-header').innerHTML = headerHtml;
+
+    // Build event log table
+    var startTime = detail.startTime;
+    var html = '<table class="event-log"><thead><tr>';
+    html += '<th style="width:60px">Offset</th>';
+    html += '<th style="width:150px">Time</th>';
+    html += '<th style="width:90px">Category</th>';
+    html += '<th style="width:180px">Event</th>';
+    html += '<th>Details</th>';
+    html += '</tr></thead><tbody>';
+
+    var currentStage = null;
+    for (var i = 0; i < detail.events.length; i++) {
+      var evt = detail.events[i];
+
+      // Insert stage separator
+      if (evt.event === 'pipeline.stage_start' && evt.data.stage && evt.data.stage !== currentStage) {
+        currentStage = evt.data.stage;
+        html += '<tr class="stage-row"><td colspan="5">▸ Stage: ' + esc(String(currentStage)) + '</td></tr>';
+      }
+
+      var rowClass = eventRowClass(evt);
+      var offset = evt.timestamp - startTime;
+      var color = catColor(evt.category);
+
+      html += '<tr class="' + rowClass + '">';
+      html += '<td class="time-offset">' + fmtOffset(offset) + '</td>';
+      html += '<td class="time-col">' + fmtTimestamp(evt.timestamp) + '</td>';
+      html += '<td class="category-badge"><span class="cat-tag" style="background:' + color + '22;color:' + color + '">' + esc(evt.category) + '</span></td>';
+      html += '<td class="evt-name">' + esc(evt.event) + '</td>';
+      html += '<td class="evt-data" onclick="this.classList.toggle(\'expanded\')">' + esc(formatDataField(evt.data)) + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    $('detail-events').innerHTML = html;
   }
 
   async function loadDashboard() {

@@ -218,6 +218,26 @@ export interface RunSummaryItem {
   agents: string[];
 }
 
+export interface RunDetailEvent {
+  timestamp: number;
+  category: string;
+  event: string;
+  data: Record<string, unknown>;
+}
+
+export interface RunDetailResult {
+  runId: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  eventCount: number;
+  success: boolean | null;
+  cost: number;
+  agents: string[];
+  stages: string[];
+  events: RunDetailEvent[];
+}
+
 // ---------------------------------------------------------------------------
 // Shared event resolution (handles "lastrun" filter)
 // ---------------------------------------------------------------------------
@@ -666,4 +686,60 @@ export async function computeRunsSummary(opts: {
 
   const limit = opts.limit ?? 50;
   return runs.slice(0, limit);
+}
+
+export async function computeRunDetail(opts: {
+  runId: string;
+}): Promise<RunDetailResult | null> {
+  const backend = await getBackend();
+  const events = await backend.query({ runId: opts.runId });
+  await backend.close();
+
+  if (events.length === 0) return null;
+
+  events.sort((a, b) => a.timestamp - b.timestamp);
+
+  const timestamps = events.map(e => e.timestamp);
+  const startTime = Math.min(...timestamps);
+  const endTime = Math.max(...timestamps);
+
+  const pipelineEnd = events.find(e => e.event === Events.PIPELINE_END);
+  const commandEnd = events.find(e => e.event === Events.COMMAND_END);
+  const success = pipelineEnd
+    ? (pipelineEnd.data.success as boolean)
+    : commandEnd
+      ? (commandEnd.data.success as boolean)
+      : null;
+
+  const cost = events
+    .filter(e => e.event === Events.USAGE_COST)
+    .reduce((sum, e) => sum + (e.data.costUsd as number), 0);
+
+  const agents = [...new Set(
+    events.filter(e => e.event === Events.AGENT_SPAWN).map(e => e.data.agent as string)
+  )];
+
+  const stages = events
+    .filter(e => e.event === Events.PIPELINE_STAGE_START)
+    .map(e => e.data.stage as string);
+
+  const detailEvents: RunDetailEvent[] = events.map(e => ({
+    timestamp: e.timestamp,
+    category: e.category,
+    event: e.event,
+    data: e.data,
+  }));
+
+  return {
+    runId: opts.runId,
+    startTime,
+    endTime,
+    duration: endTime - startTime,
+    eventCount: events.length,
+    success,
+    cost,
+    agents,
+    stages,
+    events: detailEvents,
+  };
 }

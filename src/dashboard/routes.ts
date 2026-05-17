@@ -7,6 +7,7 @@ import {
   computeAgentAnalysis,
   computeEventTimeline,
   computeRunsSummary,
+  computeRunDetail,
   checkTelemetryEnabled,
 } from "../commands/analyze-data.js";
 
@@ -105,6 +106,21 @@ export async function handleApiRoute(
 
       case "/api/runs": {
         const result = await computeRunsSummary({ since, limit: 50 });
+        json(res, result);
+        return true;
+      }
+
+      case "/api/run-detail": {
+        const runId = url.searchParams.get("runId");
+        if (!runId) {
+          jsonError(res, "Missing runId parameter", 400);
+          return true;
+        }
+        const result = await computeRunDetail({ runId });
+        if (!result) {
+          jsonError(res, "Run not found", 404);
+          return true;
+        }
         json(res, result);
         return true;
       }
