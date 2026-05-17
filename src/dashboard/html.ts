@@ -158,6 +158,7 @@ export function generateDashboardHtml(defaultSince: string): string {
     <option value="14d">Last 14 days</option>
     <option value="30d">Last 30 days</option>
     <option value="90d">Last 90 days</option>
+    <option value="lastrun">Last Run</option>
   </select>
   <span id="status" class="status">Loading...</span>
 </div>

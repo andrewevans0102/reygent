@@ -219,6 +219,57 @@ export interface RunSummaryItem {
 }
 
 // ---------------------------------------------------------------------------
+// Shared event resolution (handles "lastrun" filter)
+// ---------------------------------------------------------------------------
+
+interface ResolvedEvents {
+  events: TelemetryEvent[];
+  days: number;
+}
+
+async function resolveEvents(since?: string): Promise<ResolvedEvents> {
+  const backend = await getBackend();
+
+  if (since === "lastrun") {
+    // Query last 90 days to find latest run
+    const recentTime = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    const allEvents = await backend.query({ startTime: recentTime });
+    await backend.close();
+
+    // Find run with most recent event
+    const runLatest = new Map<string, number>();
+    for (const e of allEvents) {
+      const cur = runLatest.get(e.runId) || 0;
+      if (e.timestamp > cur) runLatest.set(e.runId, e.timestamp);
+    }
+    let latestRunId = "";
+    let latestTime = 0;
+    for (const [runId, time] of runLatest) {
+      if (time > latestTime) {
+        latestRunId = runId;
+        latestTime = time;
+      }
+    }
+
+    const events = latestRunId
+      ? allEvents.filter((e) => e.runId === latestRunId)
+      : [];
+    return { events, days: 1 };
+  }
+
+  const sinceTs = since
+    ? parseSince(since)
+    : Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const events = await backend.query({ startTime: sinceTs });
+  await backend.close();
+  const days = Math.max(
+    1,
+    Math.floor((Date.now() - sinceTs) / (24 * 60 * 60 * 1000)),
+  );
+  return { events, days };
+}
+
+// ---------------------------------------------------------------------------
 // Compute functions
 // ---------------------------------------------------------------------------
 
@@ -226,18 +277,12 @@ export async function computeFailureAnalysis(opts: {
   since?: string;
   limit?: number;
 }): Promise<FailureAnalysisResult> {
-  const backend = await getBackend();
-  const since = opts.since ? parseSince(opts.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  const allEvents = await backend.query({ startTime: since });
+  const { events: allEvents, days } = await resolveEvents(opts.since);
   const errorEvents = filterEvents(allEvents, { category: "error" });
   const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
   const gateRetries = allEvents.filter(e => e.event === Events.GATE_RETRY);
 
-  await backend.close();
-
   const totalRuns = new Set(pipelineEvents.map(e => e.runId)).size;
-  const days = Math.max(1, Math.floor((Date.now() - since) / (24 * 60 * 60 * 1000)));
 
   // Group by event type
   const patternGroups = groupBy(errorEvents, e => e.event);
@@ -297,18 +342,12 @@ export async function computeSuccessAnalysis(opts: {
   stage?: string;
   minSuccessRate?: number;
 }): Promise<SuccessAnalysisResult> {
-  const backend = await getBackend();
-  const since = opts.since ? parseSince(opts.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  const allEvents = await backend.query({ startTime: since });
+  const { events: allEvents, days } = await resolveEvents(opts.since);
   const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
   const agentSpawnEvents = filterEvents(allEvents, { event: Events.AGENT_SPAWN });
   const agentCompleteEvents = filterEvents(allEvents, { event: Events.AGENT_COMPLETE });
 
-  await backend.close();
-
   const successfulRuns = pipelineEvents.filter(e => e.data.success === true).length;
-  const days = Math.max(1, Math.floor((Date.now() - since) / (24 * 60 * 60 * 1000)));
 
   // Build agent stats
   const agentStatsMap = new Map<string, {
@@ -378,20 +417,14 @@ export async function computeSuccessAnalysis(opts: {
 export async function computeCostAnalysis(opts: {
   since?: string;
 }): Promise<CostAnalysisResult> {
-  const backend = await getBackend();
-  const since = opts.since ? parseSince(opts.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  const allEvents = await backend.query({ startTime: since });
+  const { events: allEvents, days } = await resolveEvents(opts.since);
   const costEvents = filterEvents(allEvents, { event: Events.USAGE_COST });
   const pipelineEvents = filterEvents(allEvents, { event: Events.PIPELINE_END });
-
-  await backend.close();
 
   const totalRuns = new Set(pipelineEvents.map(e => e.runId)).size;
   const successRunIds = new Set(pipelineEvents.filter(e => e.data.success === true).map(e => e.runId));
   const successfulRuns = successRunIds.size;
   const failedRuns = totalRuns - successfulRuns;
-  const days = Math.max(1, Math.floor((Date.now() - since) / (24 * 60 * 60 * 1000)));
 
   const totalCost = costEvents.reduce((sum, e) => sum + (e.data.costUsd as number), 0);
   const successCost = costEvents.filter(e => successRunIds.has(e.runId)).reduce((sum, e) => sum + (e.data.costUsd as number), 0);
@@ -475,18 +508,11 @@ export async function computeAgentAnalysis(opts: {
   since?: string;
   agent?: string;
 }): Promise<AgentAnalysisResult> {
-  const backend = await getBackend();
-  const since = opts.since ? parseSince(opts.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  const allEvents = await backend.query({ startTime: since });
+  const { events: allEvents, days } = await resolveEvents(opts.since);
   const agentSpawnEvents = filterEvents(allEvents, { event: Events.AGENT_SPAWN });
   const agentCompleteEvents = filterEvents(allEvents, { event: Events.AGENT_COMPLETE });
   const errorEvents = filterEvents(allEvents, { category: "error" });
   const costEvents = filterEvents(allEvents, { event: Events.USAGE_COST });
-
-  await backend.close();
-
-  const days = Math.max(1, Math.floor((Date.now() - since) / (24 * 60 * 60 * 1000)));
 
   // Build per-agent stats
   const statsMap = new Map<string, {
@@ -574,13 +600,7 @@ export async function computeAgentAnalysis(opts: {
 export async function computeEventTimeline(opts: {
   since?: string;
 }): Promise<EventTimelineResult> {
-  const backend = await getBackend();
-  const since = opts.since ? parseSince(opts.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  const allEvents = await backend.query({ startTime: since });
-  await backend.close();
-
-  const days = Math.max(1, Math.floor((Date.now() - since) / (24 * 60 * 60 * 1000)));
+  const { events: allEvents, days } = await resolveEvents(opts.since);
 
   const bucketMap = new Map<string, Record<string, number>>();
   const categorySet = new Set<string>();
@@ -606,11 +626,7 @@ export async function computeRunsSummary(opts: {
   since?: string;
   limit?: number;
 }): Promise<RunSummaryItem[]> {
-  const backend = await getBackend();
-  const since = opts.since ? parseSince(opts.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  const allEvents = await backend.query({ startTime: since });
-  await backend.close();
+  const { events: allEvents } = await resolveEvents(opts.since);
 
   // Group by runId
   const runMap = new Map<string, TelemetryEvent[]>();
