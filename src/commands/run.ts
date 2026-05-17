@@ -38,7 +38,9 @@ import { promptForRetry } from "../retry-prompt.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
-export function isGitRepo(): Promise<boolean> {
+// Internal helper - not exported to avoid leaking implementation details
+// Tests should verify behavior through integration tests rather than unit testing this function
+function isGitRepo(): Promise<boolean> {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       resolve(false);

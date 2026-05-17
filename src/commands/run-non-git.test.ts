@@ -49,7 +49,7 @@ describe("reygent run in non-git directories", () => {
     );
 
     // Run reygent with timeout to detect hanging
-    const timeout = 10000; // 10 seconds max
+    const timeout = 3000;
     const startTime = Date.now();
 
     try {
@@ -91,7 +91,7 @@ describe("reygent run in non-git directories", () => {
       // Re-throw other errors
       throw err;
     }
-  }, 15000); // 15s test timeout (allows for 10s command timeout + overhead)
+  }, 5000);
 
   it("should exit cleanly in empty git repository (no commits)", async () => {
     // Create minimal spec file
@@ -104,7 +104,7 @@ describe("reygent run in non-git directories", () => {
     // Initialize empty git repo
     await execFileAsync("git", ["init"], { cwd: testDir });
 
-    const timeout = 10000;
+    const timeout = 3000;
     const startTime = Date.now();
 
     try {
@@ -140,7 +140,7 @@ describe("reygent run in non-git directories", () => {
       }
       throw err;
     }
-  }, 15000);
+  }, 5000);
 
   it("should exit cleanly in normal git repository (control)", async () => {
     // Create minimal spec file
@@ -164,7 +164,7 @@ describe("reygent run in non-git directories", () => {
       cwd: testDir,
     });
 
-    const timeout = 10000;
+    const timeout = 3000;
     const startTime = Date.now();
 
     try {
@@ -200,7 +200,7 @@ describe("reygent run in non-git directories", () => {
       }
       throw err;
     }
-  }, 15000);
+  }, 5000);
 
   it("should handle telemetry close gracefully without git", async () => {
     // Create minimal spec file
@@ -217,7 +217,7 @@ describe("reygent run in non-git directories", () => {
     );
 
     // Run with telemetry enabled (default)
-    const timeout = 10000;
+    const timeout = 3000;
     const startTime = Date.now();
 
     try {
@@ -259,7 +259,7 @@ describe("reygent run in non-git directories", () => {
       }
       throw err;
     }
-  }, 15000);
+  }, 5000);
 
   it("should skip PR stages gracefully when not in git repo", async () => {
     // This test would require full pipeline execution (not dry-run)
@@ -279,7 +279,7 @@ describe("reygent run in non-git directories", () => {
 
     // Note: This test uses dry-run to avoid full execution
     // Full integration test would require mocking agent responses
-    const timeout = 10000;
+    const timeout = 3000;
 
     try {
       const controller = new AbortController();
@@ -313,7 +313,7 @@ describe("reygent run in non-git directories", () => {
       }
       throw err;
     }
-  }, 15000);
+  }, 5000);
 });
 
 describe("updateKnowledgeFromTelemetry in non-git directories", () => {
@@ -338,7 +338,7 @@ describe("updateKnowledgeFromTelemetry in non-git directories", () => {
     );
 
     // Run command
-    const timeout = 10000;
+    const timeout = 3000;
 
     try {
       const controller = new AbortController();
@@ -376,7 +376,7 @@ describe("updateKnowledgeFromTelemetry in non-git directories", () => {
       }
       throw err;
     }
-  }, 15000);
+  }, 5000);
 
   it("should handle knowledge update errors gracefully", async () => {
     // Create project with markers
@@ -395,7 +395,7 @@ describe("updateKnowledgeFromTelemetry in non-git directories", () => {
     const reygentDir = join(testDir, ".reygent");
     await mkdir(reygentDir, { mode: 0o444 }); // Read-only
 
-    const timeout = 10000;
+    const timeout = 3000;
 
     try {
       const controller = new AbortController();
@@ -433,7 +433,7 @@ describe("updateKnowledgeFromTelemetry in non-git directories", () => {
       }
       // Command may fail due to read-only dir, but shouldn't hang
     }
-  }, 15000);
+  }, 5000);
 });
 
 describe("telemetry backend close in non-git directories", () => {
@@ -462,7 +462,7 @@ describe("telemetry backend close in non-git directories", () => {
       JSON.stringify({ name: "test-project" }),
     );
 
-    const timeout = 10000;
+    const timeout = 3000;
     const startTime = Date.now();
 
     try {
@@ -503,7 +503,7 @@ describe("telemetry backend close in non-git directories", () => {
       }
       throw err;
     }
-  }, 15000);
+  }, 5000);
 
   it("should handle flush errors during telemetry close", async () => {
     const specPath = join(testDir, "spec.md");
@@ -517,7 +517,7 @@ describe("telemetry backend close in non-git directories", () => {
       JSON.stringify({ name: "test-project" }),
     );
 
-    const timeout = 10000;
+    const timeout = 3000;
 
     try {
       const controller = new AbortController();
@@ -554,5 +554,5 @@ describe("telemetry backend close in non-git directories", () => {
         );
       }
     }
-  }, 15000);
+  }, 5000);
 });
