@@ -38,9 +38,14 @@ import { promptForRetry } from "../retry-prompt.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
-function isGitRepo(): Promise<boolean> {
+export function isGitRepo(): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile("git", ["rev-parse", "--is-inside-work-tree"], (error) => {
+    const timeout = setTimeout(() => {
+      resolve(false);
+    }, 5000);
+
+    execFile("git", ["rev-parse", "--is-inside-work-tree"], { timeout: 5000 }, (error) => {
+      clearTimeout(timeout);
       resolve(!error);
     });
   });
