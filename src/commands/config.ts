@@ -235,7 +235,7 @@ async function runConfig(): Promise<void> {
       message: "API platform:",
       choices: [
         { name: "Direct API", value: "direct" as const },
-        { name: `Google Vertex AI ${chalk.gray("— uses model@version format")}`, value: "vertex" as const },
+        { name: `Google Vertex AI ${chalk.gray("— see https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai")}`, value: "vertex" as const },
       ],
     });
     useVertexAi = platform === "vertex";
@@ -280,11 +280,9 @@ async function runConfig(): Promise<void> {
 
       // Brief pattern hint for unexpected formats
       if (selectedProvider === "claude" && !selectedModel.includes("projects/")) {
-        const hasVertexFormat = selectedModel.includes("@");
         const hasDirectFormat = selectedModel.startsWith("claude-") && !selectedModel.includes("@");
-        if ((useVertexAi && !hasVertexFormat) || (!useVertexAi && !hasDirectFormat)) {
-          const expectedFormat = useVertexAi ? "claude-{name}@{date}" : "claude-{name}-{date}";
-          console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
+        if (!useVertexAi && !hasDirectFormat) {
+          console.log(chalk.yellow("⚠"), chalk.gray("Expected format: claude-{name}-{date}"));
         }
       } else if (selectedProvider === "gemini" && !selectedModel.includes("projects/")) {
         const hasVertexFormat = selectedModel.includes("@");
@@ -378,7 +376,7 @@ async function runConfig(): Promise<void> {
           message: `API platform for ${agentProviderChoice}:`,
           choices: [
             { name: "Direct API", value: "direct" as const },
-            { name: `Google Vertex AI ${chalk.gray("— uses model@version format")}`, value: "vertex" as const },
+            { name: `Google Vertex AI ${chalk.gray("— see https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai")}`, value: "vertex" as const },
           ],
         });
         agentUseVertexAi = agentPlatform === "vertex";
@@ -425,11 +423,9 @@ async function runConfig(): Promise<void> {
 
           // Brief pattern hint for unexpected formats
           if (agentProviderChoice === "claude" && !agentModelChoice.includes("projects/")) {
-            const hasVertexFormat = agentModelChoice.includes("@");
             const hasDirectFormat = agentModelChoice.startsWith("claude-") && !agentModelChoice.includes("@");
-            if ((agentUseVertexAi && !hasVertexFormat) || (!agentUseVertexAi && !hasDirectFormat)) {
-              const expectedFormat = agentUseVertexAi ? "claude-{name}@{date}" : "claude-{name}-{date}";
-              console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
+            if (!agentUseVertexAi && !hasDirectFormat) {
+              console.log(chalk.yellow("⚠"), chalk.gray("Expected format: claude-{name}-{date}"));
             }
           } else if (agentProviderChoice === "gemini" && !agentModelChoice.includes("projects/")) {
             const hasVertexFormat = agentModelChoice.includes("@");

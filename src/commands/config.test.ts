@@ -733,7 +733,7 @@ describe("configCommand", () => {
     expect(written.model).toBe("claude-sonnet-4-5-20250929");
   });
 
-  it("shows only Vertex AI format hint for custom models when Vertex selected", async () => {
+  it("does not show format warning for Claude custom models on Vertex AI", async () => {
     const { getProvider } = await import("../providers/index.js");
     const mockGetProvider = vi.mocked(getProvider);
     mockGetProvider.mockImplementation((name: string) => {
@@ -760,13 +760,13 @@ describe("configCommand", () => {
     mockSelect.mockResolvedValueOnce("claude"); // provider
     mockSelect.mockResolvedValueOnce("vertex"); // platform prompt
     mockSelect.mockResolvedValueOnce("__custom__"); // custom model
-    mockInput.mockResolvedValueOnce("claude-sonnet-4-5-20250929"); // Direct format when Vertex selected
+    mockInput.mockResolvedValueOnce("claude-sonnet-4-5-20250929"); // Bare format (valid for newer Vertex models)
 
     await configCommand();
 
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
-    // Should show only @-format hint when Vertex platform selected but direct format provided
-    expect(output).toContain("claude-{name}@{date}");
+    // Newer Vertex AI models use bare IDs without @version, so no format warning should appear
+    expect(output).not.toContain("claude-{name}@{date}");
     expect(output).not.toContain("claude-{name}-{date}");
   });
 });
