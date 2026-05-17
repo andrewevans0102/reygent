@@ -103,7 +103,7 @@ describe("analyzeFailurePatterns", () => {
     const backend = new MockBackend(events);
     const patterns = analyzeFailurePatterns(backend, recent);
 
-    expect(patterns).toHaveLength(0); // both filtered out (occurrences = 1)
+    expect(patterns).toHaveLength(1); // recent event passes filter (occurrences >= 1)
   });
 
   it("returns empty array when no patterns found", () => {

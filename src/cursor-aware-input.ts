@@ -10,13 +10,15 @@
  *    changes, `useState` sees a new value → triggers `handleChange()` →
  *    full `render()` → correct row+column positioning.
  *
- * 2. When prompt + input exceeds terminal width, `breakLines()` inserts `\n`
- *    at the width boundary. `screen.render()` then calculates the prompt via
- *    `lastLine(content)`, but if `rl.line` spans across the inserted `\n`,
- *    the prompt becomes shorter than `rl.line`, the `setPrompt()` call uses
- *    an empty string, and `getCursorPos()` returns wrong column values.
- *    Fix: render user input on a separate line from the prompt message during
- *    active editing, so `breakLines` never splits `rl.line` across lines.
+ * 2. When prompt + input exceeds terminal width, `breakLines()` uses
+ *    `wrapAnsi` which does **word-level** wrapping (breaking at spaces).
+ *    But readline's `getCursorPos()` calculates column via simple
+ *    `total % columns` (character-level division). After word-wrapping,
+ *    the visual column doesn't match readline's calculated column,
+ *    causing the cursor to appear at the wrong position (mid-word).
+ *    Fix: render user input on a separate line from the prompt message
+ *    during active editing, so both readline and wrapAnsi start from
+ *    column 0 and agree on wrap positions.
  *
  * Also handles paste injection: when pasteState.pending is true,
  * the accumulated text is inserted directly into rl.line (bypassing
@@ -175,9 +177,10 @@ export default createPrompt<string, InputConfig>((config, done) => {
   }
 
   // During active editing, render input on its own line.  This prevents
-  // @inquirer/core's breakLines() from splitting rl.line across visual
-  // lines, which would break screen.render()'s cursor positioning math
-  // (see bug #2 in the file header).
+  // a mismatch between wrapAnsi's word-level wrapping (used by breakLines)
+  // and readline's character-count cursor positioning (getCursorPos uses
+  // total % columns).  With input starting at column 0, both agree on
+  // where line breaks occur — see bug #2 in the file header.
   const promptLine = [prefix, message, defaultStr]
     .filter((v) => v !== undefined)
     .join(" ");

@@ -204,6 +204,7 @@ export const claudeAdapter: ProviderAdapter = {
       let resultApiErrorStatus: number | undefined;
       let resultUsage: UsageInfo | undefined;
       const textChunks: string[] = [];
+      const stderrChunks: string[] = [];
 
       const timeout = setTimeout(() => {
         // Kill entire process group to catch spawned descendants
@@ -227,12 +228,14 @@ export const claudeAdapter: ProviderAdapter = {
         if (stdoutEnded && stderrEnded && processExitCode !== null) {
           clearTimeout(timeout);
           const stdout = resultText || textChunks.join("\n");
+          const stderr = stderrChunks.join("\n").slice(0, 2000);
           resolve({
             stdout,
             exitCode: processExitCode,
             usage: resultUsage,
             errorMessage: resultErrorMessage,
             apiErrorStatus: resultApiErrorStatus,
+            stderr: stderr || undefined,
           });
         }
       };
@@ -304,6 +307,7 @@ export const claudeAdapter: ProviderAdapter = {
 
       const stderrRL = createInterface({ input: child.stderr! });
       stderrRL.on("line", (line) => {
+        stderrChunks.push(line);
         if (options.onActivity) {
           options.onActivity({ agent: name, detail: line.slice(0, 80) });
         } else {

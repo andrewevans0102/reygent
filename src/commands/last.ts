@@ -62,12 +62,13 @@ function checkTelemetryEnabled(config: ReturnType<typeof loadConfig>): void {
  */
 function displaySummary(runId: string, events: TelemetryEvent[]): void {
   const pipelineEnd = events.find(e => e.event === Events.PIPELINE_END);
+  const commandEnd = events.find(e => e.event === Events.COMMAND_END);
   const pipelineStart = events.find(e => e.event === Events.PIPELINE_START);
   const errorEvents = events.filter(e => e.category === "error");
   const costEvents = events.filter(e => e.event === Events.USAGE_COST);
   const agentSpawns = events.filter(e => e.event === Events.AGENT_SPAWN);
 
-  const success = pipelineEnd?.data.success === true;
+  const success = pipelineEnd?.data.success === true || (!pipelineEnd && commandEnd?.data.success === true);
   const startTime = pipelineStart?.timestamp ?? events[0]?.timestamp ?? 0;
   const endTime = pipelineEnd?.timestamp ?? events[events.length - 1]?.timestamp ?? 0;
   const duration = endTime - startTime;
