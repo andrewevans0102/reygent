@@ -1,3 +1,37 @@
+# [1.2.0](https://github.com/andrewevans0102/reygent/compare/v1.1.3...v1.2.0) (2026-05-18)
+
+
+### Bug Fixes
+
+* address PR review comments ([bfa83d1](https://github.com/andrewevans0102/reygent/commit/bfa83d175319b05acb8b7fba2be64476442535b7))
+* address PR review comments ([14060c0](https://github.com/andrewevans0102/reygent/commit/14060c0b7f9c74e8bf794217a26f22860c6a36c7))
+* address PR review comments ([2bbd98b](https://github.com/andrewevans0102/reygent/commit/2bbd98bdcf6f54b7ee3416d23f4c13f708b3871e))
+* address PR review comments ([7a388f5](https://github.com/andrewevans0102/reygent/commit/7a388f53c9808819d17214daa78d8ca83152e52d))
+* always prompt for Vertex AI platform instead of auto-detecting ([3f4f1f2](https://github.com/andrewevans0102/reygent/commit/3f4f1f24ef522c00b539ddd183e9a288abf3a382))
+* dashboard backend type and method name issues ([dbf5d0d](https://github.com/andrewevans0102/reygent/commit/dbf5d0dd4d1bcdebcfda330279151e444572ddd2))
+* dashboard display bugs (undefined count, run lookup) ([dcf069d](https://github.com/andrewevans0102/reygent/commit/dcf069ddc16bce7c2e6bde086ce403901c0b87d2))
+* enforce commitlint rules in auto-generated commit messages ([338547f](https://github.com/andrewevans0102/reygent/commit/338547f9eebf98ab5da96d90219943a934be1f61))
+* fall back to COMMAND_END for run status when no PIPELINE_END exists ([88e1c34](https://github.com/andrewevans0102/reygent/commit/88e1c341aebe913e86cd557077f26ea3c5537073))
+* prevent paste from auto-submitting generate-spec prompts ([9d84fce](https://github.com/andrewevans0102/reygent/commit/9d84fce33875806752d0a72827d36794172f8a0c))
+* remove two-line rendering that caused cursor flicker in prompts ([1a03573](https://github.com/andrewevans0102/reygent/commit/1a035732ed2efad664f68fb7b51b81746ba04c9c))
+* restore knowledge auto-learning and add LLM-generated solutions ([f4c6534](https://github.com/andrewevans0102/reygent/commit/f4c6534703cb755e74e0fb28b787b0c59dedcc7c))
+* restore two-line rendering to fix cursor misposition on wrapped input ([e64f80a](https://github.com/andrewevans0102/reygent/commit/e64f80a2a51a567ea6ab57ba42ba903982140d9e))
+* show actionable error when Claude CLI rejects untrusted directory ([06f309c](https://github.com/andrewevans0102/reygent/commit/06f309ca285bf4c1d47a741f8f2b3befe832b298))
+* skip PR creation and review when not in a git repo ([0d20f78](https://github.com/andrewevans0102/reygent/commit/0d20f78401a447c8a0aee453f8fd0ff4be9482fd))
+* update Vertex AI platform hint and remove false-positive model format warning ([cc60e43](https://github.com/andrewevans0102/reygent/commit/cc60e433e4f923fa23b6910c7a9fa7e46dae3032))
+* use pasteableInput in generate-spec to prevent cursor jumping ([becfc6d](https://github.com/andrewevans0102/reygent/commit/becfc6db2e551ddc44540b28f9ac7cb564f0129c))
+
+
+### Features
+
+* add --with-agents filter to dashboard runs ([ea661a7](https://github.com/andrewevans0102/reygent/commit/ea661a738aad2189b6edf78aa3cc54c1f69ed99a))
+* add GitLab support to pr-review stage ([617254a](https://github.com/andrewevans0102/reygent/commit/617254abf849fa4a411c85df16594ee3f74c7ef6))
+* add static HTML dashboard generation ([b3f68d4](https://github.com/andrewevans0102/reygent/commit/b3f68d425ba5bcd366cc4887f1ec510114b726b8))
+* add Vertex AI model support to config command ([892b84c](https://github.com/andrewevans0102/reygent/commit/892b84c830be10e65bfcfdb439a78a5c59c4e965))
+* **DT-345:** `reygent run` hangs after completion when project has no git repo attached ([b46b5db](https://github.com/andrewevans0102/reygent/commit/b46b5db834bb6cd503e86a45abea843da4d78b1f))
+* **DT-346:** add telemetry dashboard ([b86534c](https://github.com/andrewevans0102/reygent/commit/b86534c1e0f5c0b24eeee590e459c0d6d52cc159))
+* prompt for telemetry opt-in during `reygent init` ([7ada8a5](https://github.com/andrewevans0102/reygent/commit/7ada8a55687f967298e7bee2070f958111f6ebd7))
+
 ## [1.1.3](https://github.com/andrewevans0102/reygent/compare/v1.1.2...v1.1.3) (2026-05-15)
 
 
