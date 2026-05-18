@@ -13,7 +13,7 @@ describe("getRunsList", () => {
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
-      queryEvents: vi.fn(),
+      query: vi.fn(),
     };
   });
 
@@ -43,7 +43,7 @@ describe("getRunsList", () => {
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run1, run2]);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-1",
@@ -72,7 +72,7 @@ describe("getRunsList", () => {
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-1",
@@ -99,7 +99,7 @@ describe("getRunsList", () => {
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-1",
@@ -136,7 +136,7 @@ describe("getRunsList", () => {
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-1",
@@ -163,7 +163,7 @@ describe("getRunsList", () => {
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-1",
@@ -208,7 +208,7 @@ describe("getRunsList", () => {
     }));
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-1",
@@ -242,7 +242,7 @@ describe("getRunsList", () => {
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run1, run2]);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-2",

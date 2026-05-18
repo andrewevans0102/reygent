@@ -1,6 +1,6 @@
 import Table from "cli-table3";
 import chalk from "chalk";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
 import { parseSince } from "./utils.js";
 
 export interface AgentFailuresOptions {
@@ -26,7 +26,7 @@ export interface AgentFailureSummary {
  * Get agent-level failure drill-down
  */
 export async function getAgentFailures(
-  backend: TelemetryBackend,
+  backend: StorageBackend,
   options: AgentFailuresOptions = {}
 ): Promise<AgentFailuresResult> {
   const startTime = options.since ? parseSince(options.since) : undefined;
@@ -45,7 +45,7 @@ export async function getAgentFailures(
   const allErrorTypes = new Map<string, number>();
 
   for (const run of filtered) {
-    const events = await backend.queryEvents({ runId: run.runId });
+    const events = await backend.query({ runId: run.runId });
 
     // Find agent spawns and errors
     const agentSpawns = events.filter((e) => e.event === "agent.spawn");

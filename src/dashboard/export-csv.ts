@@ -1,6 +1,6 @@
 import { writeFileSync } from "fs";
 import path from "path";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
 import { parseSince, formatTimestamp } from "./utils.js";
 
 export interface ExportOptions {
@@ -14,14 +14,14 @@ export interface ExportOptions {
  * Export telemetry data to CSV format
  */
 export async function exportToCSV(
-  backend: TelemetryBackend,
+  backend: StorageBackend,
   options: ExportOptions
 ): Promise<string> {
   let events;
 
   if (options.runId) {
     // Export specific run
-    events = await backend.queryEvents({ runId: options.runId });
+    events = await backend.query({ runId: options.runId });
     if (events.length === 0) {
       throw new Error(`Run ${options.runId} not found`);
     }
@@ -35,7 +35,7 @@ export async function exportToCSV(
 
     // Collect all events from filtered runs
     const allEvents = await Promise.all(
-      filtered.map((run) => backend.queryEvents({ runId: run.runId }))
+      filtered.map((run) => backend.query({ runId: run.runId }))
     );
     events = allEvents.flat();
   }

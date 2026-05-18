@@ -66,5 +66,11 @@ export function formatRelativeTime(timestamp: number): string {
  */
 export async function getProjectRoot(): Promise<string> {
   const { findProjectRoot } = await import("../project-detection.js");
-  return await findProjectRoot();
+  const root = findProjectRoot(process.cwd());
+  if (!root) {
+    throw new Error(
+      "No .reygent directory found. Run 'reygent init' or use --global flag for global telemetry."
+    );
+  }
+  return root;
 }

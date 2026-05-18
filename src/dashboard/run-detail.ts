@@ -1,6 +1,6 @@
 import Table from "cli-table3";
 import chalk from "chalk";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
 import { formatTimestamp, formatDuration } from "./utils.js";
 
 export interface RunDetailResult {
@@ -14,10 +14,10 @@ export interface RunDetailResult {
  * Get detailed information for a specific run (--verbose parity)
  */
 export async function getRunDetail(
-  backend: TelemetryBackend,
+  backend: StorageBackend,
   runId: string
 ): Promise<RunDetailResult | null> {
-  const events = await backend.queryEvents({ runId });
+  const events = await backend.query({ runId });
 
   if (events.length === 0) {
     return null;

@@ -13,12 +13,12 @@ describe("getRunDetail", () => {
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
-      queryEvents: vi.fn(),
+      query: vi.fn(),
     };
   });
 
   it("returns null when run not found", async () => {
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([]);
+    vi.mocked(mockBackend.query).mockResolvedValue([]);
 
     const result = await getRunDetail(mockBackend, "nonexistent-run");
 
@@ -56,7 +56,7 @@ describe("getRunDetail", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const result = await getRunDetail(mockBackend, "run-1");
 
@@ -90,7 +90,7 @@ describe("getRunDetail", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const result = await getRunDetail(mockBackend, "run-1");
 
@@ -128,7 +128,7 @@ describe("getRunDetail", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const result = await getRunDetail(mockBackend, "run-1");
 
@@ -167,7 +167,7 @@ describe("getRunDetail", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const result = await getRunDetail(mockBackend, "run-1");
 
@@ -206,7 +206,7 @@ describe("getRunDetail", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const result = await getRunDetail(mockBackend, "run-1");
 
@@ -244,7 +244,7 @@ describe("getRunDetail", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const result = await getRunDetail(mockBackend, "run-1");
 

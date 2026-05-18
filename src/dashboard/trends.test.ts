@@ -13,7 +13,7 @@ describe("getTrendData", () => {
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
-      queryEvents: vi.fn(),
+      query: vi.fn(),
     };
   });
 
@@ -55,7 +55,7 @@ describe("getTrendData", () => {
     ];
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
-    vi.mocked(mockBackend.queryEvents)
+    vi.mocked(mockBackend.query)
       .mockResolvedValueOnce([
         {
           id: "1",
@@ -117,7 +117,7 @@ describe("getTrendData", () => {
     ];
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
-    vi.mocked(mockBackend.queryEvents)
+    vi.mocked(mockBackend.query)
       .mockResolvedValueOnce([
         {
           id: "1",
@@ -178,7 +178,7 @@ describe("getTrendData", () => {
     ];
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
-    vi.mocked(mockBackend.queryEvents)
+    vi.mocked(mockBackend.query)
       .mockResolvedValueOnce([
         {
           id: "1",
@@ -231,7 +231,7 @@ describe("getTrendData", () => {
     ];
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-1",
@@ -267,7 +267,7 @@ describe("getTrendData", () => {
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run1, run2]);
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([
+    vi.mocked(mockBackend.query).mockResolvedValue([
       {
         id: "1",
         runId: "run-2",

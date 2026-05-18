@@ -1,6 +1,6 @@
 import Table from "cli-table3";
 import chalk from "chalk";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
 import { parseSince } from "./utils.js";
 
 export interface TrendOptions {
@@ -28,7 +28,7 @@ export interface TrendBucket {
  * Get success vs failure trend data over time
  */
 export async function getTrendData(
-  backend: TelemetryBackend,
+  backend: StorageBackend,
   options: TrendOptions = {}
 ): Promise<TrendResult> {
   const startTime = options.since ? parseSince(options.since) : undefined;
@@ -56,7 +56,7 @@ export async function getTrendData(
   // Determine run status for each
   const runStatuses = await Promise.all(
     sorted.map(async (run) => {
-      const events = await backend.queryEvents({ runId: run.runId });
+      const events = await backend.query({ runId: run.runId });
       const commandEnd = events.find((e) => e.event === "command.end");
       const pipelineEnd = events.find((e) => e.event === "pipeline.end");
       const hasErrors = events.some((e) => e.category === "error");

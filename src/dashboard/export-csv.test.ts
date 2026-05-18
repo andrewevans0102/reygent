@@ -15,7 +15,7 @@ describe("exportToCSV", () => {
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
-      queryEvents: vi.fn(),
+      query: vi.fn(),
     };
   });
 
@@ -51,7 +51,7 @@ describe("exportToCSV", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const filepath = await exportToCSV(mockBackend, {
       scope: "local",
@@ -90,7 +90,7 @@ describe("exportToCSV", () => {
     ];
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
-    vi.mocked(mockBackend.queryEvents)
+    vi.mocked(mockBackend.query)
       .mockResolvedValueOnce([
         {
           id: "1",
@@ -129,7 +129,7 @@ describe("exportToCSV", () => {
   });
 
   it("throws error when run not found", async () => {
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue([]);
+    vi.mocked(mockBackend.query).mockResolvedValue([]);
 
     await expect(
       exportToCSV(mockBackend, {
@@ -152,7 +152,7 @@ describe("exportToCSV", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const filepath = await exportToCSV(mockBackend, {
       scope: "local",
@@ -198,7 +198,7 @@ describe("exportToCSV", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const filepath = await exportToCSV(mockBackend, {
       scope: "local",
@@ -230,7 +230,7 @@ describe("exportToCSV", () => {
       },
     ];
 
-    vi.mocked(mockBackend.queryEvents).mockResolvedValue(events);
+    vi.mocked(mockBackend.query).mockResolvedValue(events);
 
     const filepath = await exportToCSV(mockBackend, {
       scope: "local",

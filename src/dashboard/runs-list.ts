@@ -1,6 +1,6 @@
 import Table from "cli-table3";
 import chalk from "chalk";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
 import { formatRelativeTime, formatDuration, parseSince } from "./utils.js";
 
 export interface RunsListOptions {
@@ -28,7 +28,7 @@ export interface RunSummaryRow {
  * Get runs list with summary information
  */
 export async function getRunsList(
-  backend: TelemetryBackend,
+  backend: StorageBackend,
   options: RunsListOptions = {}
 ): Promise<RunsListResult> {
   const limit = options.limit ?? 50;
@@ -51,7 +51,7 @@ export async function getRunsList(
   // Build summary rows
   const summaries = await Promise.all(
     limited.map(async (run) => {
-      const events = await backend.queryEvents({ runId: run.runId });
+      const events = await backend.query({ runId: run.runId });
 
       // Determine status
       let status: "success" | "failure" | "incomplete" = "incomplete";

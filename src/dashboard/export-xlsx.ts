@@ -1,6 +1,6 @@
 import { writeFileSync } from "fs";
 import * as XLSX from "xlsx";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
 import { parseSince, formatTimestamp } from "./utils.js";
 
 export interface ExportOptions {
@@ -14,7 +14,7 @@ export interface ExportOptions {
  * Export telemetry data to XLSX format with proper formatting
  */
 export async function exportToXLSX(
-  backend: TelemetryBackend,
+  backend: StorageBackend,
   options: ExportOptions
 ): Promise<string> {
   let events;
@@ -22,7 +22,7 @@ export async function exportToXLSX(
 
   if (options.runId) {
     // Export specific run
-    events = await backend.queryEvents({ runId: options.runId });
+    events = await backend.query({ runId: options.runId });
     if (events.length === 0) {
       throw new Error(`Run ${options.runId} not found`);
     }
@@ -37,7 +37,7 @@ export async function exportToXLSX(
 
     // Collect all events from filtered runs
     const allEvents = await Promise.all(
-      filtered.map((run) => backend.queryEvents({ runId: run.runId }))
+      filtered.map((run) => backend.query({ runId: run.runId }))
     );
     events = allEvents.flat();
     runs = filtered;
@@ -76,7 +76,7 @@ export async function exportToXLSX(
   // Create runs summary sheet
   const runsSummaryData = await Promise.all(
     runs.map(async (run) => {
-      const runEvents = await backend.queryEvents({ runId: run.runId });
+      const runEvents = await backend.query({ runId: run.runId });
 
       // Calculate summary stats
       const startTime = runEvents[0]?.timestamp ?? run.startTime;
