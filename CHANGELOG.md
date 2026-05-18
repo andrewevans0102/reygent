@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/andrewevans0102/reygent/compare/v1.2.0...v1.2.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* escape unclosed HTML tag in dashboard.md for VitePress build ([c681e72](https://github.com/andrewevans0102/reygent/commit/c681e72787d1158a2c20f1cc8b028b4f120b211d))
+
 # [1.2.0](https://github.com/andrewevans0102/reygent/compare/v1.1.3...v1.2.0) (2026-05-18)
 
 
