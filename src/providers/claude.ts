@@ -67,6 +67,19 @@ const SUPPORTED_MODELS: ModelEntry[] = [
   { id: "claude-3-opus-20240229", label: "3 Opus" },
 ];
 
+const VERTEX_AI_MODELS: ModelEntry[] = [
+  { id: "claude-opus-4-7", label: "Opus 4.7" },
+  { id: "claude-opus-4-6", label: "Opus 4.6" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { id: "claude-sonnet-4-5@20250929", label: "Sonnet 4.5 (recommended)" },
+  { id: "claude-sonnet-4@20250514", label: "Sonnet 4 (deprecated)" },
+  { id: "claude-opus-4-5@20251101", label: "Opus 4.5" },
+  { id: "claude-opus-4-1@20250805", label: "Opus 4.1" },
+  { id: "claude-opus-4@20250514", label: "Opus 4 (deprecated)" },
+  { id: "claude-haiku-4-5@20251001", label: "Haiku 4.5" },
+  { id: "claude-3-5-haiku@20241022", label: "3.5 Haiku (deprecated)" },
+];
+
 const SHORT_ALIASES: Record<string, string> = {
   "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
   "claude-haiku-4-5": "claude-haiku-4-5-20251001",
@@ -122,6 +135,7 @@ export const claudeAdapter: ProviderAdapter = {
   type: "cli",
   defaultModel: DEFAULT_MODEL,
   supportedModels: SUPPORTED_MODELS,
+  vertexModels: VERTEX_AI_MODELS,
   shortAliases: SHORT_ALIASES,
 
   async isAvailable() {
@@ -190,6 +204,7 @@ export const claudeAdapter: ProviderAdapter = {
       let resultApiErrorStatus: number | undefined;
       let resultUsage: UsageInfo | undefined;
       const textChunks: string[] = [];
+      const stderrChunks: string[] = [];
 
       const timeout = setTimeout(() => {
         // Kill entire process group to catch spawned descendants
@@ -213,12 +228,14 @@ export const claudeAdapter: ProviderAdapter = {
         if (stdoutEnded && stderrEnded && processExitCode !== null) {
           clearTimeout(timeout);
           const stdout = resultText || textChunks.join("\n");
+          const stderr = stderrChunks.join("\n").slice(0, 2000);
           resolve({
             stdout,
             exitCode: processExitCode,
             usage: resultUsage,
             errorMessage: resultErrorMessage,
             apiErrorStatus: resultApiErrorStatus,
+            stderr: stderr || undefined,
           });
         }
       };
@@ -290,6 +307,7 @@ export const claudeAdapter: ProviderAdapter = {
 
       const stderrRL = createInterface({ input: child.stderr! });
       stderrRL.on("line", (line) => {
+        stderrChunks.push(line);
         if (options.onActivity) {
           options.onActivity({ agent: name, detail: line.slice(0, 80) });
         } else {

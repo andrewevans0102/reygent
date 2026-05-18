@@ -158,19 +158,19 @@ describe("buildCommitMessage", () => {
   it("formats jira as conventional commit with scope", () => {
     const spec: SpecPayload = { source: "jira", issueKey: "PROJ-1", title: "Fix bug", content: "" };
     const msg = buildCommitMessage(makeContext(spec), "feat");
-    expect(msg).toBe("feat(PROJ-1): Fix bug");
+    expect(msg).toBe("feat(PROJ-1): fix bug");
   });
 
   it("formats linear as conventional commit with scope", () => {
     const spec: SpecPayload = { source: "linear", issueId: "DT-99", title: "Add feature", content: "" };
     const msg = buildCommitMessage(makeContext(spec), "fix");
-    expect(msg).toBe("fix(DT-99): Add feature");
+    expect(msg).toBe("fix(DT-99): add feature");
   });
 
   it("formats markdown as conventional commit without scope", () => {
     const spec: SpecPayload = { source: "markdown", title: "Do thing", content: "" };
     const msg = buildCommitMessage(makeContext(spec), "chore");
-    expect(msg).toBe("chore: Do thing");
+    expect(msg).toBe("chore: do thing");
   });
 
   it("includes goals and tasks when plan exists", () => {
@@ -182,7 +182,7 @@ describe("buildCommitMessage", () => {
       dod: ["d1"],
     };
     const msg = buildCommitMessage(makeContext(spec, plan), "feat");
-    expect(msg).toContain("feat: Do thing");
+    expect(msg).toContain("feat: do thing");
     expect(msg).toContain("Goals:");
     expect(msg).toContain("- goal1");
     expect(msg).toContain("Tasks:");
@@ -192,7 +192,24 @@ describe("buildCommitMessage", () => {
   it("uses correct branch type in prefix", () => {
     const spec: SpecPayload = { source: "jira", issueKey: "PROJ-5", title: "Refactor module", content: "" };
     const msg = buildCommitMessage(makeContext(spec), "refactor");
-    expect(msg).toBe("refactor(PROJ-5): Refactor module");
+    expect(msg).toBe("refactor(PROJ-5): refactor module");
+  });
+
+  it("truncates long titles to fit 100 char limit", () => {
+    const longTitle = "Very long title that exceeds the commitlint header-max-length limit of 100 characters and needs truncation";
+    const spec: SpecPayload = { source: "linear", issueId: "DT-123", title: longTitle, content: "" };
+    const msg = buildCommitMessage(makeContext(spec), "feat");
+    const subject = msg.split("\n")[0];
+    expect(subject.length).toBeLessThanOrEqual(100);
+    expect(subject).toContain("...");
+    expect(subject).toMatch(/^feat\(DT-123\): /);
+  });
+
+  it("does not truncate titles that fit within limit", () => {
+    const spec: SpecPayload = { source: "linear", issueId: "DT-1", title: "Short title", content: "" };
+    const msg = buildCommitMessage(makeContext(spec), "feat");
+    expect(msg).toBe("feat(DT-1): short title");
+    expect(msg).not.toContain("...");
   });
 });
 

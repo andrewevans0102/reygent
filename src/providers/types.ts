@@ -28,6 +28,8 @@ export interface SpawnResult {
   usage?: UsageInfo;
   errorMessage?: string;
   apiErrorStatus?: number;
+  /** Captured stderr output (may be truncated). Useful for diagnosing CLI failures. */
+  stderr?: string;
 }
 
 export interface ModelEntry {
@@ -40,6 +42,8 @@ export interface ProviderAdapter {
   type: "cli" | "api";
   defaultModel: string;
   supportedModels: ModelEntry[];
+  /** Vertex AI model variants (uses @date format instead of -date). */
+  vertexModels?: ModelEntry[];
   shortAliases: Record<string, string>;
   isAvailable(): Promise<{ available: boolean; reason?: string }>;
   spawn(options: SpawnAdapterOptions): Promise<SpawnResult>;

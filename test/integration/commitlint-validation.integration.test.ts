@@ -377,7 +377,7 @@ describe("Commitlint validation", () => {
       const msg = buildCommitMessage(makeContext(spec), "feat");
       const subject = msg.split("\n")[0];
       expect(subject).toMatch(conventionalPattern);
-      expect(subject).toBe("feat(PROJ-123): Fix login bug");
+      expect(subject).toBe("feat(PROJ-123): fix login bug");
     });
 
     it("linear output matches conventional commits format", () => {
@@ -385,7 +385,7 @@ describe("Commitlint validation", () => {
       const msg = buildCommitMessage(makeContext(spec), "fix");
       const subject = msg.split("\n")[0];
       expect(subject).toMatch(conventionalPattern);
-      expect(subject).toBe("fix(DT-99): Resolve auth issue");
+      expect(subject).toBe("fix(DT-99): resolve auth issue");
     });
 
     it("markdown output matches conventional commits format", () => {
@@ -393,7 +393,7 @@ describe("Commitlint validation", () => {
       const msg = buildCommitMessage(makeContext(spec), "chore");
       const subject = msg.split("\n")[0];
       expect(subject).toMatch(conventionalPattern);
-      expect(subject).toBe("chore: Update dependencies");
+      expect(subject).toBe("chore: update dependencies");
     });
 
     it("all branch types produce valid conventional commit subjects", () => {
@@ -413,6 +413,60 @@ describe("Commitlint validation", () => {
       const subject = msg.split("\n")[0];
       expect(subject).toMatch(conventionalPattern);
       expect(msg).toContain("Goals:");
+    });
+  });
+
+  describe("buildCommitMessage commitlint compliance", () => {
+    function makeContext(spec: SpecPayload, plan?: PlannerOutput): TaskContext {
+      return { spec, plan, results: [] };
+    }
+
+    it("enforces lowercase first char in title (subject-case rule)", () => {
+      const spec: SpecPayload = { source: "linear", issueId: "DT-1", title: "Uppercase Title", content: "" };
+      const msg = buildCommitMessage(makeContext(spec), "feat");
+      const subject = msg.split("\n")[0];
+      expect(subject).toBe("feat(DT-1): uppercase Title");
+      // First char after ": " should be lowercase
+      const descStart = subject.indexOf(": ") + 2;
+      expect(subject[descStart]).toBe("u");
+    });
+
+    it("enforces max 100 char header (header-max-length rule)", () => {
+      const longTitle = "Very long title that definitely exceeds the commitlint header-max-length rule of 100 characters total when combined with type and scope prefix";
+      const spec: SpecPayload = { source: "linear", issueId: "DT-999", title: longTitle, content: "" };
+      const msg = buildCommitMessage(makeContext(spec), "feat");
+      const subject = msg.split("\n")[0];
+      expect(subject.length).toBeLessThanOrEqual(100);
+      expect(subject).toContain("...");
+    });
+
+    it("preserves title when under 100 char limit", () => {
+      const spec: SpecPayload = { source: "linear", issueId: "DT-1", title: "Short title that fits", content: "" };
+      const msg = buildCommitMessage(makeContext(spec), "feat");
+      const subject = msg.split("\n")[0];
+      expect(subject).toBe("feat(DT-1): short title that fits");
+      expect(subject.length).toBeLessThanOrEqual(100);
+      expect(subject).not.toContain("...");
+    });
+
+    it("truncates correctly for jira scope", () => {
+      const longTitle = "Very long title that needs truncation to fit within the 100 character commitlint limit when combined with type and jira scope";
+      const spec: SpecPayload = { source: "jira", issueKey: "PROJ-1234", title: longTitle, content: "" };
+      const msg = buildCommitMessage(makeContext(spec), "feat");
+      const subject = msg.split("\n")[0];
+      expect(subject.length).toBeLessThanOrEqual(100);
+      expect(subject).toMatch(/^feat\(PROJ-1234\): /);
+      expect(subject).toContain("...");
+    });
+
+    it("truncates correctly for markdown (no scope)", () => {
+      const longTitle = "Very long title for markdown spec that needs truncation to fit within 100 character limit for commitlint header-max-length rule";
+      const spec: SpecPayload = { source: "markdown", title: longTitle, content: "" };
+      const msg = buildCommitMessage(makeContext(spec), "feat");
+      const subject = msg.split("\n")[0];
+      expect(subject.length).toBeLessThanOrEqual(100);
+      expect(subject).toMatch(/^feat: /);
+      expect(subject).toContain("...");
     });
   });
 

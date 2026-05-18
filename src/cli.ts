@@ -21,6 +21,7 @@ import { registerTelemetryCommand } from "./commands/telemetry.js";
 import { registerAnalyzeCommand } from "./commands/analyze.js";
 import { registerLastCommand } from "./commands/last.js";
 import { registerKnowledgeCommand } from "./commands/knowledge.js";
+import { registerDashboardCommand } from "./commands/dashboard.js";
 import { isValidType, VALID_BRANCH_TYPES } from "./branch-type.js";
 import { shouldPromptForTelemetry, promptForTelemetryOptIn } from "./chesstrace/prompt.js";
 
@@ -125,6 +126,7 @@ registerAnalyzeCommand(program);
 registerLastCommand(program);
 registerSkillsCommand(program);
 registerKnowledgeCommand(program);
+registerDashboardCommand(program);
 
 // Show header on commands that do actual work (not --help or --version)
 const isHelpOrVersion = process.argv.includes("--help") ||
@@ -138,7 +140,7 @@ if (!isHelpOrVersion) {
 }
 
 // Set debug flag, provider, model, and telemetry overrides before any command action runs
-program.hook("preAction", async () => {
+program.hook("preAction", async (_thisCommand, actionCommand) => {
   if (program.opts().debug) {
     setDebug(true);
   }
@@ -192,8 +194,10 @@ program.hook("preAction", async () => {
   }
 
   // Show telemetry opt-in prompt on first run (unless --no-telemetry flag set)
+  // Skip for `init` command — it handles telemetry prompt itself after writing config
   const noTelemetry = program.opts().telemetry === false;
-  if (!noTelemetry && shouldPromptForTelemetry()) {
+  const isInitCommand = actionCommand.name() === "init";
+  if (!noTelemetry && !isInitCommand && shouldPromptForTelemetry()) {
     try {
       await promptForTelemetryOptIn();
     } catch (err) {

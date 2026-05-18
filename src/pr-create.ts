@@ -117,12 +117,26 @@ export async function createPR(opts: {
   return createGitHubPR(opts);
 }
 
-interface TlsOptions {
+/**
+ * TLS options for HTTPS requests, including certificate verification settings.
+ * Used by pr-review.ts and other modules that need to make authenticated HTTPS requests.
+ */
+export interface TlsOptions {
+  /** Whether to reject unauthorized certificates. Set to false to skip verification. */
   rejectUnauthorized?: boolean;
+  /** Custom certificate authority bundle. Combines with Node's default CAs when provided. */
   ca?: string[];
 }
 
-async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
+/**
+ * Resolves TLS options for HTTPS requests based on git configuration and environment variables.
+ * Respects GIT_SSL_NO_VERIFY, NODE_TLS_REJECT_UNAUTHORIZED, git config http.sslVerify,
+ * and git config http.sslCAInfo to match git's behavior for corporate/self-signed certificates.
+ *
+ * @param hostname - Optional hostname to check for URL-specific git config overrides
+ * @returns TLS options object for use with Node's https.request
+ */
+export async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
   // Respect GIT_SSL_NO_VERIFY env var
   if (process.env.GIT_SSL_NO_VERIFY) return { rejectUnauthorized: false };
   // Respect NODE_TLS_REJECT_UNAUTHORIZED if explicitly set
@@ -234,7 +248,20 @@ function isSslError(err: unknown): boolean {
   );
 }
 
-async function httpsPost(
+/**
+ * Makes an HTTPS POST request with automatic TLS configuration and SSL error retry.
+ * Resolves TLS options from git config, respecting corporate CA bundles and SSL verification settings.
+ * On SSL errors, retries once with verification disabled as a fallback (unless already insecure).
+ *
+ * Used by pr-review.ts for posting review comments to GitHub/GitLab APIs.
+ *
+ * @param url - Full HTTPS URL to POST to
+ * @param headers - HTTP headers to send
+ * @param body - Request body as string (typically JSON)
+ * @param opts - Options: insecure skips all TLS verification
+ * @returns Promise with HTTP status code and response text
+ */
+export async function httpsPost(
   url: string,
   headers: Record<string, string>,
   body: string,
@@ -390,9 +417,23 @@ export function buildCommitMessage(context: TaskContext, branchType: CanonicalBr
       break;
   }
 
-  const subject = scope
-    ? `${branchType}(${scope}): ${spec.title}`
-    : `${branchType}: ${spec.title}`;
+  // Normalize title: lowercase first character for commitlint subject-case rule
+  let title = spec.title;
+  if (title.length > 0) {
+    title = title[0].toLowerCase() + title.slice(1);
+  }
+
+  // Build prefix and check total length against commitlint header-max-length (100)
+  const prefix = scope ? `${branchType}(${scope}): ` : `${branchType}: `;
+  const maxLen = 100;
+
+  // Truncate title if needed to fit in 100 chars
+  if (prefix.length + title.length > maxLen) {
+    const availableLen = maxLen - prefix.length - 3; // reserve 3 for "..."
+    title = title.slice(0, availableLen) + "...";
+  }
+
+  const subject = prefix + title;
 
   if (!plan) return subject;
 

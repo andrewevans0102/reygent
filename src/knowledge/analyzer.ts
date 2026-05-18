@@ -72,7 +72,7 @@ export function analyzeFailurePatterns(
 
   // Return patterns with >1 occurrence, sorted by frequency
   return Array.from(patterns.values())
-    .filter((p) => p.occurrences > 1)
+    .filter((p) => p.occurrences >= 1)
     .sort((a, b) => b.occurrences - a.occurrences);
 }
 

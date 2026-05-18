@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🐱 Reygent Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      background: white;
+      padding: 20px 30px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .meta {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .scope-toggle {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .scope-toggle button {
+      padding: 10px 20px;
+      border: 2px solid #ddd;
+      background: white;
+      cursor: pointer;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .scope-toggle button.active {
+      background: #007bff;
+      color: white;
+      border-color: #007bff;
+    }
+
+    .scope-toggle button:hover:not(.active):not(:disabled) {
+      border-color: #007bff;
+    }
+
+    .scope-toggle button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      background: #f8f9fa;
+    }
+
+    .scope-info {
+      display: inline-block;
+      margin-left: 15px;
+      padding: 8px 12px;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #856404;
+    }
+
+    .section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .section h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: #f8f9fa;
+    }
+
+    th {
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #666;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    th:hover {
+      background: #e9ecef;
+    }
+
+    th.sortable::after {
+      content: ' ↕';
+      opacity: 0.3;
+    }
+
+    th.sorted-asc::after {
+      content: ' ↑';
+      opacity: 1;
+    }
+
+    th.sorted-desc::after {
+      content: ' ↓';
+      opacity: 1;
+    }
+
+    td {
+      padding: 12px;
+      border-top: 1px solid #f0f0f0;
+      font-size: 14px;
+    }
+
+    tbody tr {
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    tbody tr:hover {
+      background: #f8f9fa;
+    }
+
+    tbody tr.selected {
+      background: #e7f3ff;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .status.failure {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .status.incomplete {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .run-id {
+      font-family: 'Courier New', monospace;
+      color: #007bff;
+      font-size: 13px;
+    }
+
+    .detail-panel {
+      display: none;
+      margin-top: 20px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border-left: 4px solid #007bff;
+    }
+
+    .detail-panel.visible {
+      display: block;
+    }
+
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .detail-header h3 {
+      font-size: 16px;
+      flex: 1;
+    }
+
+    .detail-nav {
+      display: flex;
+      gap: 5px;
+      margin-right: 10px;
+    }
+
+    .nav-btn {
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: #5a6268;
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .close-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .close-btn:hover {
+      background: #c82333;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .detail-item {
+      padding: 10px;
+      background: white;
+      border-radius: 4px;
+    }
+
+    .detail-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .detail-value {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin-top: 20px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 2px solid transparent;
+    }
+
+    .stat-card:hover {
+      background: #e9ecef;
+      border-color: #007bff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .stat-card:active {
+      transform: translateY(0);
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #007bff;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 5px;
+    }
+
+    .error-list {
+      list-style: none;
+      margin-top: 10px;
+    }
+
+    .error-list li {
+      padding: 8px;
+      background: #fff3cd;
+      border-left: 3px solid #ffc107;
+      margin-bottom: 5px;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+      padding: 15px;
+    }
+
+    .pagination button {
+      padding: 8px 16px;
+      border: 1px solid #ddd;
+      background: white;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .pagination button:hover:not(:disabled) {
+      background: #007bff;
+      color: white;
+      border-color: #007bff;
+    }
+
+    .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pagination .page-info {
+      font-size: 14px;
+      color: #666;
+      min-width: 150px;
+      text-align: center;
+    }
+
+    .filter-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: #007bff;
+      color: white;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-left: 10px;
+      cursor: pointer;
+    }
+
+    .filter-badge:hover {
+      background: #0056b3;
+    }
+
+    .events-timeline {
+      margin-top: 20px;
+      background: white;
+      border-radius: 6px;
+      padding: 15px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .event-item {
+      padding: 10px;
+      border-left: 3px solid #dee2e6;
+      margin-bottom: 10px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .event-item.category-error {
+      border-left-color: #dc3545;
+      background: #fff5f5;
+    }
+
+    .event-item.category-agent {
+      border-left-color: #17a2b8;
+    }
+
+    .event-item.category-command,
+    .event-item.category-pipeline {
+      border-left-color: #007bff;
+    }
+
+    .event-item.category-knowledge {
+      border-left-color: #28a745;
+    }
+
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .event-time {
+      color: #6c757d;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .event-category {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      text-transform: uppercase;
+      background: #e9ecef;
+      color: #495057;
+    }
+
+    .event-data {
+      margin-top: 5px;
+      padding: 5px;
+      background: white;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #495057;
+    }
+
+    .events-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #dee2e6;
+    }
+
+    .events-count {
+      color: #6c757d;
+      font-size: 13px;
+    }
+
+    .agent-name {
+      display: inline-block;
+      padding: 4px 10px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 14px;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 0.5px;
+    }
+
+    .agent-name-inline {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #667eea;
+      color: white;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🐱 Reygent Dashboard</h1>
+      <div class="meta">
+        <span id="generated-time">Generated: Loading...</span>
+      </div>
+    </header>
+
+    <div class="scope-toggle">
+      <button id="btn-local" class="active" onclick="switchScope('local')">Local</button>
+      <button id="btn-global" onclick="switchScope('global')">Global</button>
+      <span id="scope-info" class="scope-info" style="display: none;"></span>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="section">
+      <h2>Summary</h2>
+      <div class="stats-grid">
+        <div class="stat-card" onclick="navigateToRuns()" title="Click to view runs">
+          <div class="stat-value" id="stat-total-runs">0</div>
+          <div class="stat-label">Total Runs</div>
+        </div>
+        <div class="stat-card" onclick="filterByStatus('success')" title="Click to filter successful runs">
+          <div class="stat-value" id="stat-success-rate" style="color: #28a745;">0%</div>
+          <div class="stat-label">Success Rate</div>
+        </div>
+        <div class="stat-card" onclick="filterByStatus('failure')" title="Click to filter failed runs">
+          <div class="stat-value" id="stat-failures" style="color: #dc3545;">0</div>
+          <div class="stat-label">Failures</div>
+        </div>
+        <div class="stat-card" onclick="navigateToAgentFailures()" title="Click to view agent failures">
+          <div class="stat-value" id="stat-agent-failures">0</div>
+          <div class="stat-label">Agent Failures</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trends Chart -->
+    <div class="section">
+      <h2>Success vs Failure Trends (90 days)</h2>
+      <div class="chart-container">
+        <canvas id="trends-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Runs List -->
+    <div class="section" id="runs-section">
+      <h2>
+        Recent Runs
+        <span id="filter-badge" class="filter-badge" style="display: none;" onclick="clearFilter()">
+          ✕ Clear filter
+        </span>
+        <label style="float: right; font-size: 13px; font-weight: 400; cursor: pointer; user-select: none;">
+          <input type="checkbox" id="agents-only-toggle" onchange="toggleAgentsOnly()" style="cursor: pointer;"> With agents only
+        </label>
+      </h2>
+      <div id="runs-table-container">
+        <table id="runs-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-key="runId">Run ID</th>
+              <th class="sortable" data-key="startTime">Started</th>
+              <th class="sortable" data-key="duration">Duration</th>
+              <th class="sortable" data-key="status">Status</th>
+              <th class="sortable" data-key="agentCount">Agents</th>
+              <th class="sortable" data-key="errorCount">Errors</th>
+            </tr>
+          </thead>
+          <tbody id="runs-tbody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+        <div class="pagination">
+          <button id="btn-first-page" onclick="goToPage(0)">&laquo; First</button>
+          <button id="btn-prev-page" onclick="goToPage(currentPage - 1)">&lsaquo; Prev</button>
+          <div class="page-info" id="page-info">Page 1 of 1</div>
+          <button id="btn-next-page" onclick="goToPage(currentPage + 1)">Next &rsaquo;</button>
+          <button id="btn-last-page" onclick="goToPage(totalPages - 1)">Last &raquo;</button>
+        </div>
+      </div>
+      <div id="run-detail" class="detail-panel">
+        <!-- Populated by JS when row clicked -->
+      </div>
+    </div>
+
+    <!-- Agent Failures -->
+    <div class="section" id="agent-failures-section">
+      <h2>Top Agent Failures (30 days)</h2>
+      <div id="agent-failures-container">
+        <table id="agent-failures-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Failures</th>
+              <th>Runs Affected</th>
+              <th>Last Seen</th>
+            </tr>
+          </thead>
+          <tbody id="agent-failures-tbody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
+      <div id="agent-failure-detail" class="detail-panel">
+        <!-- Populated by JS when agent clicked -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Data will be injected here
+    const DASHBOARD_DATA = __DATA_PLACEHOLDER__;
+  </script>
+
+  <script>
+    // Dashboard application code
+    let currentScope = 'local';
+    let currentData = null;
+    let trendsChart = null;
+    let sortState = { key: 'startTime', order: 'desc' };
+    let currentPage = 0;
+    let totalPages = 1;
+    let pageSize = 10;
+    let statusFilter = null;
+    let agentsOnly = false;
+
+    function init() {
+      currentData = DASHBOARD_DATA[currentScope];
+      if (!currentData) {
+        currentData = DASHBOARD_DATA[currentScope === 'local' ? 'global' : 'local'];
+        if (currentData) {
+          currentScope = currentScope === 'local' ? 'global' : 'local';
+        }
+      }
+
+      // Update generated time
+      const generatedDate = new Date(DASHBOARD_DATA.generated);
+      document.getElementById('generated-time').textContent =
+        `Generated: ${generatedDate.toLocaleString()}`;
+
+      // Update scope toggle buttons
+      const hasLocal = !!DASHBOARD_DATA.local;
+      const hasGlobal = !!DASHBOARD_DATA.global;
+
+      document.getElementById('btn-local').classList.toggle('active', currentScope === 'local');
+      document.getElementById('btn-global').classList.toggle('active', currentScope === 'global');
+      document.getElementById('btn-local').disabled = !hasLocal;
+      document.getElementById('btn-global').disabled = !hasGlobal;
+
+      // Show info message if only one scope available
+      const scopeInfo = document.getElementById('scope-info');
+      if (!hasLocal && hasGlobal) {
+        scopeInfo.textContent = '⚠️ No local telemetry in this project. Showing global data.';
+        scopeInfo.style.display = 'inline-block';
+      } else if (hasLocal && !hasGlobal) {
+        scopeInfo.textContent = 'ℹ️ No global telemetry available. Showing local data only.';
+        scopeInfo.style.display = 'inline-block';
+      } else {
+        scopeInfo.style.display = 'none';
+      }
+
+      render();
+    }
+
+    function switchScope(scope) {
+      if (!DASHBOARD_DATA[scope]) {
+        alert(`No ${scope} data available`);
+        return;
+      }
+      currentScope = scope;
+      currentData = DASHBOARD_DATA[scope];
+      currentPage = 0;
+      statusFilter = null;
+      document.getElementById('btn-local').classList.toggle('active', scope === 'local');
+      document.getElementById('btn-global').classList.toggle('active', scope === 'global');
+      render();
+    }
+
+    function navigateToRuns() {
+      statusFilter = null;
+      currentPage = 0;
+      renderRunsTable();
+      document.getElementById('runs-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function filterByStatus(status) {
+      statusFilter = status;
+      currentPage = 0;
+      renderRunsTable();
+      document.getElementById('runs-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function clearFilter() {
+      statusFilter = null;
+      currentPage = 0;
+      renderRunsTable();
+    }
+
+    function toggleAgentsOnly() {
+      agentsOnly = document.getElementById('agents-only-toggle').checked;
+      currentPage = 0;
+      renderRunsTable();
+    }
+
+    function navigateToAgentFailures() {
+      document.getElementById('agent-failures-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function goToPage(page) {
+      if (page < 0 || page >= totalPages) return;
+      currentPage = page;
+      renderRunsTable();
+    }
+
+    function render() {
+      if (!currentData) {
+        renderEmpty();
+        return;
+      }
+
+      renderStats();
+      renderTrendsChart();
+      renderRunsTable();
+      renderAgentFailures();
+    }
+
+    function renderEmpty() {
+      document.getElementById('runs-tbody').innerHTML =
+        '<tr><td colspan="6" class="empty-state">No data available</td></tr>';
+      document.getElementById('agent-failures-tbody').innerHTML =
+        '<tr><td colspan="4" class="empty-state">No data available</td></tr>';
+    }
+
+    function renderStats() {
+      const { trends, agentFailures } = currentData;
+      document.getElementById('stat-total-runs').textContent = trends.totalRuns;
+      document.getElementById('stat-success-rate').textContent =
+        `${(trends.successRate * 100).toFixed(1)}%`;
+      document.getElementById('stat-failures').textContent = trends.failureCount;
+      document.getElementById('stat-agent-failures').textContent =
+        agentFailures.reduce((sum, a) => sum + a.failureCount, 0);
+    }
+
+    function renderTrendsChart() {
+      const { buckets } = currentData.trends;
+      const canvas = document.getElementById('trends-chart');
+      const ctx = canvas.getContext('2d');
+
+      if (trendsChart) {
+        trendsChart.destroy();
+      }
+
+      const labels = buckets.map(b => {
+        const date = new Date(b.timestamp);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      });
+
+      trendsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Success',
+              data: buckets.map(b => b.successCount),
+              backgroundColor: 'rgba(40, 167, 69, 0.7)',
+              borderColor: 'rgba(40, 167, 69, 1)',
+              borderWidth: 1
+            },
+            {
+              label: 'Failure',
+              data: buckets.map(b => b.failureCount),
+              backgroundColor: 'rgba(220, 53, 69, 0.7)',
+              borderColor: 'rgba(220, 53, 69, 1)',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { stacked: true },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: { stepSize: 1 }
+            }
+          }
+        }
+      });
+    }
+
+    function renderRunsTable() {
+      const tbody = document.getElementById('runs-tbody');
+
+      // Filter runs
+      let runs = [...currentData.runs];
+      if (statusFilter) {
+        runs = runs.filter(r => r.status === statusFilter);
+      }
+      if (agentsOnly) {
+        runs = runs.filter(r => r.agentCount > 0);
+      }
+
+      // Update filter badge
+      const filterBadge = document.getElementById('filter-badge');
+      if (statusFilter) {
+        filterBadge.textContent = `✕ Filtered: ${statusFilter} (${runs.length})`;
+        filterBadge.style.display = 'inline-block';
+      } else {
+        filterBadge.style.display = 'none';
+      }
+
+      // Sort runs
+      runs.sort((a, b) => {
+        const aVal = a[sortState.key];
+        const bVal = b[sortState.key];
+        const order = sortState.order === 'asc' ? 1 : -1;
+        return aVal > bVal ? order : aVal < bVal ? -order : 0;
+      });
+
+      // Calculate pagination
+      totalPages = Math.max(1, Math.ceil(runs.length / pageSize));
+      if (currentPage >= totalPages) currentPage = totalPages - 1;
+      if (currentPage < 0) currentPage = 0;
+
+      const start = currentPage * pageSize;
+      const end = Math.min(start + pageSize, runs.length);
+      const pageRuns = runs.slice(start, end);
+
+      // Render table
+      tbody.innerHTML = pageRuns.map(run => {
+        const startDate = new Date(run.startTime);
+        const duration = run.duration ? formatDuration(run.duration) : '—';
+        const runIdShort = run.runId.substring(0, 8);
+
+        return `
+          <tr onclick="showRunDetail('${run.runId}')">
+            <td><span class="run-id">${runIdShort}</span></td>
+            <td>${formatRelativeTime(run.startTime)}</td>
+            <td>${duration}</td>
+            <td><span class="status ${run.status}">${run.status}</span></td>
+            <td>${run.agentCount}</td>
+            <td style="color: ${run.errorCount > 0 ? '#dc3545' : '#6c757d'}">${run.errorCount}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // Update pagination controls
+      document.getElementById('page-info').textContent =
+        `Page ${currentPage + 1} of ${totalPages} (${start + 1}-${end} of ${runs.length})`;
+      document.getElementById('btn-first-page').disabled = currentPage === 0;
+      document.getElementById('btn-prev-page').disabled = currentPage === 0;
+      document.getElementById('btn-next-page').disabled = currentPage >= totalPages - 1;
+      document.getElementById('btn-last-page').disabled = currentPage >= totalPages - 1;
+
+      // Update sort indicators
+      document.querySelectorAll('th.sortable').forEach(th => {
+        th.className = 'sortable';
+        if (th.dataset.key === sortState.key) {
+          th.classList.add(`sorted-${sortState.order}`);
+        }
+      });
+    }
+
+    function renderAgentFailures() {
+      const tbody = document.getElementById('agent-failures-tbody');
+      const failures = currentData.agentFailures;
+
+      if (failures.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No agent failures in this period</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = failures.map((agent, index) => {
+        const uniqueRuns = new Set(agent.runIds).size;
+        const lastSeen = agent.lastSeen ? formatRelativeTime(agent.lastSeen) : '—';
+
+        return `
+          <tr onclick="showAgentFailureDetail(${index})" style="cursor: pointer;" title="Click to view failure details">
+            <td><span class="agent-name">${escapeHtml(agent.agent)}</span></td>
+            <td style="color: #dc3545; font-weight: 600;">${agent.failureCount}</td>
+            <td>${uniqueRuns}</td>
+            <td>${lastSeen}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function showAgentFailureDetail(agentIndex) {
+      const agent = currentData.agentFailures[agentIndex];
+      if (!agent) return;
+
+      const panel = document.getElementById('agent-failure-detail');
+
+      // Get all runs for this agent
+      const uniqueRunIds = [...new Set(agent.runIds)];
+      const agentRuns = uniqueRunIds.map(runId => {
+        return currentData.runs.find(r => r.runId === runId);
+      }).filter(r => r); // Filter out nulls
+
+      // Build failures list
+      let failuresHtml = '';
+      if (agentRuns.length > 0) {
+        failuresHtml = `
+          <div class="events-timeline">
+            <div class="events-header">
+              <h4 style="margin: 0;">Failure Details</h4>
+              <span class="events-count">${agent.failureCount} failures in ${agentRuns.length} runs</span>
+            </div>
+            ${agentRuns.map(run => {
+              if (!run || !run.events) return '';
+
+              // Find errors in this run related to the agent
+              const errors = run.events.filter(e =>
+                (e.category === 'error' && e.data && e.data.agent === agent.agent) ||
+                (e.category === 'error' && !e.data?.agent) ||
+                (e.data && e.data.agent === agent.agent && e.data.error)
+              );
+
+              if (errors.length === 0) return '';
+
+              const runDate = new Date(run.startTime);
+
+              return `
+                <div class="event-item category-error" style="margin-bottom: 15px;">
+                  <div class="event-header" style="margin-bottom: 10px;">
+                    <div>
+                      <strong style="font-size: 14px;">Run: <span class="run-id" onclick="showRunDetail('${run.runId}')" style="cursor: pointer;">${run.runId.substring(0, 8)}</span></strong>
+                      <div style="color: #6c757d; font-size: 12px; margin-top: 3px;">${runDate.toLocaleString()}</div>
+                    </div>
+                    <span class="status ${run.status}">${run.status}</span>
+                  </div>
+                  <div style="margin-top: 10px;">
+                    ${errors.map(err => {
+                      const errTime = new Date(err.timestamp);
+                      const relTime = err.timestamp - run.startTime;
+
+                      let errorMsg = 'Unknown error';
+                      if (err.data) {
+                        if (err.data.error) errorMsg = err.data.error;
+                        else if (err.data.message) errorMsg = err.data.message;
+                      }
+
+                      let contextData = [];
+                      if (err.data) {
+                        if (err.data.stage) contextData.push(`stage: ${err.data.stage}`);
+                        if (err.data.tool) contextData.push(`tool: ${err.data.tool}`);
+                        if (err.data.provider) contextData.push(`provider: ${err.data.provider}`);
+                      }
+
+                      return `
+                        <div style="padding: 8px; background: white; border-radius: 4px; margin-bottom: 8px;">
+                          <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <strong style="color: #dc3545;">${err.event}</strong>
+                            <span class="event-time">+${formatDuration(relTime)}</span>
+                          </div>
+                          <div style="font-family: 'Courier New', monospace; font-size: 12px; color: #495057;">
+                            ${escapeHtml(errorMsg)}
+                          </div>
+                          ${contextData.length > 0 ? `
+                            <div style="font-size: 11px; color: #6c757d; margin-top: 5px;">
+                              ${contextData.join(' | ')}
+                            </div>
+                          ` : ''}
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } else {
+        failuresHtml = '<div class="empty-state">No run details available</div>';
+      }
+
+      panel.innerHTML = `
+        <div class="detail-header">
+          <h3>Agent Failures: <span class="agent-name">${escapeHtml(agent.agent)}</span></h3>
+          <button class="close-btn" onclick="closeAgentFailureDetail()">Close</button>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">Total Failures</div>
+            <div class="detail-value" style="color: #dc3545;">${agent.failureCount}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Affected Runs</div>
+            <div class="detail-value">${agentRuns.length}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Failure Rate</div>
+            <div class="detail-value">${agentRuns.length > 0 ? ((agent.failureCount / agentRuns.length) * 100).toFixed(1) : '0'}%</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Last Seen</div>
+            <div class="detail-value" style="font-size: 12px;">${new Date(agent.lastSeen).toLocaleString()}</div>
+          </div>
+        </div>
+        ${failuresHtml}
+      `;
+
+      panel.classList.add('visible');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function closeAgentFailureDetail() {
+      document.getElementById('agent-failure-detail').classList.remove('visible');
+    }
+
+    function showRunDetail(runId) {
+      const allRuns = getFilteredRuns();
+      const runIndex = allRuns.findIndex(r => r.runId === runId);
+      if (runIndex === -1) return;
+
+      const run = allRuns[runIndex];
+      const panel = document.getElementById('run-detail');
+      const startDate = new Date(run.startTime);
+      const duration = run.duration ? formatDuration(run.duration) : 'N/A';
+
+      // Calculate cost from events
+      let totalCost = 0;
+      if (run.events) {
+        for (const evt of run.events) {
+          if (evt.event === 'usage.cost' && evt.data && evt.data.cost) {
+            totalCost += evt.data.cost;
+          }
+        }
+      }
+
+      // Build events timeline
+      let eventsHtml = '';
+      if (run.events && run.events.length > 0) {
+        eventsHtml = `
+          <div class="events-timeline">
+            <div class="events-header">
+              <h4 style="margin: 0;">Event Timeline</h4>
+              <span class="events-count">${run.events.length} events</span>
+            </div>
+            ${run.events.map(evt => {
+              const eventTime = new Date(evt.timestamp);
+              const relTime = evt.timestamp - run.startTime;
+              const category = evt.category || 'unknown';
+
+              // Format event data
+              let dataHtml = '';
+              if (evt.data && Object.keys(evt.data).length > 0) {
+                let agentHtml = '';
+                if (evt.data.agent) {
+                  agentHtml = `<span class="agent-name-inline">${escapeHtml(evt.data.agent)}</span> `;
+                }
+
+                const relevantData = [];
+                if (evt.data.provider) relevantData.push(`provider: ${evt.data.provider}`);
+                if (evt.data.model) relevantData.push(`model: ${evt.data.model}`);
+                if (evt.data.message) relevantData.push(`message: ${evt.data.message}`);
+                if (evt.data.error) relevantData.push(`error: ${evt.data.error}`);
+                if (evt.data.stage) relevantData.push(`stage: ${evt.data.stage}`);
+                if (evt.data.tool) relevantData.push(`tool: ${evt.data.tool}`);
+                if (evt.data.cost) relevantData.push(`cost: $${evt.data.cost.toFixed(4)}`);
+                if (evt.data.tokens) relevantData.push(`tokens: ${evt.data.tokens}`);
+                if (evt.data.duration) relevantData.push(`duration: ${evt.data.duration}ms`);
+
+                if (agentHtml || relevantData.length > 0) {
+                  dataHtml = `<div class="event-data">${agentHtml}${escapeHtml(relevantData.join(' | '))}</div>`;
+                }
+              }
+
+              return `
+                <div class="event-item category-${category}">
+                  <div class="event-header">
+                    <div>
+                      <span class="event-category">${category}</span>
+                      <strong style="margin-left: 8px;">${evt.event}</strong>
+                    </div>
+                    <div class="event-time">+${formatDuration(relTime)}</div>
+                  </div>
+                  ${dataHtml}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      panel.innerHTML = `
+        <div class="detail-header">
+          <h3>Run Details: ${run.runId.substring(0, 16)}...</h3>
+          <div class="detail-nav">
+            <button class="nav-btn" onclick="showRunDetail('${allRuns[runIndex - 1]?.runId}')" ${runIndex === 0 ? 'disabled' : ''}>
+              ← Prev
+            </button>
+            <button class="nav-btn" onclick="showRunDetail('${allRuns[runIndex + 1]?.runId}')" ${runIndex >= allRuns.length - 1 ? 'disabled' : ''}>
+              Next →
+            </button>
+          </div>
+          <button class="close-btn" onclick="closeRunDetail()">Close</button>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">Status</div>
+            <div class="detail-value"><span class="status ${run.status}">${run.status}</span></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Started</div>
+            <div class="detail-value" style="font-size: 14px;">${startDate.toLocaleString()}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Duration</div>
+            <div class="detail-value">${duration}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Agents</div>
+            <div class="detail-value">${run.agentCount}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Errors</div>
+            <div class="detail-value" style="color: ${run.errorCount > 0 ? '#dc3545' : '#28a745'}">${run.errorCount}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Events</div>
+            <div class="detail-value">${run.events ? run.events.length : 0}</div>
+          </div>
+          ${totalCost > 0 ? `
+          <div class="detail-item">
+            <div class="detail-label">Cost</div>
+            <div class="detail-value">$${totalCost.toFixed(4)}</div>
+          </div>
+          ` : ''}
+        </div>
+        ${eventsHtml}
+      `;
+
+      panel.classList.add('visible');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function getFilteredRuns() {
+      let runs = [...currentData.runs];
+      if (statusFilter) {
+        runs = runs.filter(r => r.status === statusFilter);
+      }
+      if (agentsOnly) {
+        runs = runs.filter(r => r.agentCount > 0);
+      }
+      runs.sort((a, b) => {
+        const aVal = a[sortState.key];
+        const bVal = b[sortState.key];
+        const order = sortState.order === 'asc' ? 1 : -1;
+        return aVal > bVal ? order : aVal < bVal ? -order : 0;
+      });
+      return runs;
+    }
+
+    function closeRunDetail() {
+      document.getElementById('run-detail').classList.remove('visible');
+    }
+
+    // Sorting
+    document.querySelectorAll('th.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.key;
+        if (sortState.key === key) {
+          sortState.order = sortState.order === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortState.key = key;
+          sortState.order = 'desc';
+        }
+        currentPage = 0;
+        renderRunsTable();
+      });
+    });
+
+    // Utilities
+    function formatDuration(ms) {
+      if (ms < 1000) return `${ms}ms`;
+      if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+      const mins = Math.floor(ms / 60000);
+      const secs = Math.floor((ms % 60000) / 1000);
+      return `${mins}m ${secs}s`;
+    }
+
+    function formatRelativeTime(timestamp) {
+      const now = Date.now();
+      const diff = now - timestamp;
+      const minutes = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+
+      if (minutes < 1) return 'Just now';
+      if (minutes < 60) return `${minutes}m ago`;
+      if (hours < 24) return `${hours}h ago`;
+      if (days < 7) return `${days}d ago`;
+
+      const date = new Date(timestamp);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Initialize on load
+    init();
+  </script>
+</body>
+</html>

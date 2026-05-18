@@ -136,13 +136,13 @@ describe("Interactive command cursor hang prevention", () => {
       expect(sourceCode).toMatch(/resetTerminalForInput/);
     });
 
-    it("should use readline createInterface after resetTerminalForInput", async () => {
+    it("should use pasteableInput after resetTerminalForInput", async () => {
       const { readFileSync } = await import("node:fs");
       const sourcePath = join(__dirname, "generate-spec.ts");
       const sourceCode = readFileSync(sourcePath, "utf-8");
 
-      // Pattern: resetTerminalForInput() followed by createInterface()
-      expect(sourceCode).toMatch(/resetTerminalForInput.*createInterface/s);
+      // Pattern: resetTerminalForInput() followed by pasteableInput()
+      expect(sourceCode).toMatch(/resetTerminalForInput.*pasteableInput\(/s);
     });
   });
 

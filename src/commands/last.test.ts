@@ -187,6 +187,133 @@ describe("last command", () => {
     expect(parsed.events).toHaveLength(2);
   });
 
+  it("should show success when only COMMAND_END exists (no PIPELINE_END)", async () => {
+    const runId = "test-run-no-pipeline";
+    const now = Date.now();
+
+    const events: TelemetryEvent[] = [
+      {
+        id: "evt-1",
+        runId,
+        timestamp: now,
+        category: "command",
+        event: Events.COMMAND_START,
+        minLevel: TelemetryLevel.minimal,
+        data: { command: "review-comments" },
+      },
+      {
+        id: "evt-2",
+        runId,
+        timestamp: now + 1000,
+        category: "agent",
+        event: Events.AGENT_SPAWN,
+        minLevel: TelemetryLevel.standard,
+        data: { agent: "planner", model: "claude-sonnet-4", provider: "anthropic" },
+      },
+      {
+        id: "evt-3",
+        runId,
+        timestamp: now + 5000,
+        category: "agent",
+        event: Events.AGENT_COMPLETE,
+        minLevel: TelemetryLevel.standard,
+        data: { agent: "planner", exitCode: 0, success: true, duration: 4000 },
+      },
+      {
+        id: "evt-4",
+        runId,
+        timestamp: now + 10000,
+        category: "command",
+        event: Events.COMMAND_END,
+        minLevel: TelemetryLevel.minimal,
+        data: { command: "review-comments", success: true, durationMs: 10000 },
+      },
+    ];
+
+    await backend.writeBatch(events);
+    await lastCommandImpl({}, backend);
+
+    const output = consoleOutput.join("\n");
+    expect(output).toContain("Latest Run Summary");
+    expect(output).toContain("Success");
+    expect(output).not.toContain("Failed");
+  });
+
+  it("should show failed when COMMAND_END has success false and no PIPELINE_END", async () => {
+    const runId = "test-run-cmd-fail";
+    const now = Date.now();
+
+    const events: TelemetryEvent[] = [
+      {
+        id: "evt-1",
+        runId,
+        timestamp: now,
+        category: "command",
+        event: Events.COMMAND_START,
+        minLevel: TelemetryLevel.minimal,
+        data: { command: "review-comments" },
+      },
+      {
+        id: "evt-2",
+        runId,
+        timestamp: now + 5000,
+        category: "command",
+        event: Events.COMMAND_END,
+        minLevel: TelemetryLevel.minimal,
+        data: { command: "review-comments", success: false, durationMs: 5000 },
+      },
+    ];
+
+    await backend.writeBatch(events);
+    await lastCommandImpl({}, backend);
+
+    const output = consoleOutput.join("\n");
+    expect(output).toContain("Failed");
+    expect(output).not.toContain("Success");
+  });
+
+  it("should prefer PIPELINE_END over COMMAND_END when both exist", async () => {
+    const runId = "test-run-both";
+    const now = Date.now();
+
+    const events: TelemetryEvent[] = [
+      {
+        id: "evt-1",
+        runId,
+        timestamp: now,
+        category: "pipeline",
+        event: Events.PIPELINE_START,
+        minLevel: TelemetryLevel.standard,
+        data: {},
+      },
+      {
+        id: "evt-2",
+        runId,
+        timestamp: now + 5000,
+        category: "pipeline",
+        event: Events.PIPELINE_END,
+        minLevel: TelemetryLevel.standard,
+        data: { success: false },
+      },
+      {
+        id: "evt-3",
+        runId,
+        timestamp: now + 5001,
+        category: "command",
+        event: Events.COMMAND_END,
+        minLevel: TelemetryLevel.minimal,
+        data: { command: "run", success: true, durationMs: 5000 },
+      },
+    ];
+
+    await backend.writeBatch(events);
+    await lastCommandImpl({}, backend);
+
+    const output = consoleOutput.join("\n");
+    // PIPELINE_END says false, so should be Failed even though COMMAND_END says true
+    expect(output).toContain("Failed");
+  });
+
   it("should format costs correctly", async () => {
     const runId = "test-run-cost";
     const now = Date.now();

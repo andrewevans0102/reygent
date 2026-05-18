@@ -658,4 +658,115 @@ describe("configCommand", () => {
     expect(output).toContain("global");
     expect(output).toContain(".reygent/config.json");
   });
+
+  // --- Vertex AI tests ---
+
+  it("prompts for Vertex AI platform and shows Vertex models when selected", async () => {
+    const { getProvider } = await import("../providers/index.js");
+    const mockGetProvider = vi.mocked(getProvider);
+    mockGetProvider.mockImplementation((name: string) => {
+      if (name === "claude") {
+        return {
+          name: "claude",
+          defaultModel: "claude-sonnet-4-5",
+          supportedModels: [{ id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" }],
+          vertexModels: [{ id: "claude-sonnet-4-5@20250929", label: "Sonnet 4.5 (Vertex)" }],
+          isAvailable: mockClaudeAvailable,
+        };
+      }
+      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) };
+    });
+
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5@20250929",
+      agents: [],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude"); // provider
+    mockSelect.mockResolvedValueOnce("vertex"); // platform prompt
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5@20250929"); // model
+
+    await configCommand();
+
+    // scope + provider + platform + model = 4 select calls
+    expect(mockSelect).toHaveBeenCalledTimes(4);
+    const written = JSON.parse((mockWriteFileSync.mock.calls[0]![1] as string).trim());
+    expect(written.model).toBe("claude-sonnet-4-5@20250929");
+  });
+
+  it("prompts for platform and shows direct API models when selected", async () => {
+    const { getProvider } = await import("../providers/index.js");
+    const mockGetProvider = vi.mocked(getProvider);
+    mockGetProvider.mockImplementation((name: string) => {
+      if (name === "claude") {
+        return {
+          name: "claude",
+          defaultModel: "claude-sonnet-4-5",
+          supportedModels: [{ id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" }],
+          vertexModels: [{ id: "claude-sonnet-4-5@20250929", label: "Sonnet 4.5 (Vertex)" }],
+          isAvailable: mockClaudeAvailable,
+        };
+      }
+      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) };
+    });
+
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5-20250929",
+      agents: [],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude"); // provider
+    mockSelect.mockResolvedValueOnce("direct"); // platform prompt
+    mockSelect.mockResolvedValueOnce("claude-sonnet-4-5-20250929"); // model
+
+    await configCommand();
+
+    // scope + provider + platform + model = 4 select calls
+    expect(mockSelect).toHaveBeenCalledTimes(4);
+    const written = JSON.parse((mockWriteFileSync.mock.calls[0]![1] as string).trim());
+    expect(written.model).toBe("claude-sonnet-4-5-20250929");
+  });
+
+  it("does not show format warning for Claude custom models on Vertex AI", async () => {
+    const { getProvider } = await import("../providers/index.js");
+    const mockGetProvider = vi.mocked(getProvider);
+    mockGetProvider.mockImplementation((name: string) => {
+      if (name === "claude") {
+        return {
+          name: "claude",
+          defaultModel: "claude-sonnet-4-5",
+          supportedModels: [{ id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" }],
+          vertexModels: [{ id: "claude-sonnet-4-5@20250929", label: "Sonnet 4.5 (Vertex)" }],
+          isAvailable: mockClaudeAvailable,
+        };
+      }
+      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) };
+    });
+
+    mockSelect.mockResolvedValueOnce("local"); // scope
+    mockFindLocalConfigDir.mockReturnValue("/proj/.reygent");
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      provider: "claude",
+      model: "claude-sonnet-4-5@20250929",
+      agents: [],
+    }));
+
+    mockSelect.mockResolvedValueOnce("claude"); // provider
+    mockSelect.mockResolvedValueOnce("vertex"); // platform prompt
+    mockSelect.mockResolvedValueOnce("__custom__"); // custom model
+    mockInput.mockResolvedValueOnce("claude-sonnet-4-5-20250929"); // Bare format (valid for newer Vertex models)
+
+    await configCommand();
+
+    const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+    // Newer Vertex AI models use bare IDs without @version, so no format warning should appear
+    expect(output).not.toContain("claude-{name}@{date}");
+    expect(output).not.toContain("claude-{name}-{date}");
+  });
 });

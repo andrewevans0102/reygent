@@ -223,7 +223,29 @@ async function runConfig(): Promise<void> {
   const provider = getProvider(selectedProvider);
   let selectedModel: string;
 
-  if (provider.supportedModels.length === 0) {
+  // Track platform choice per provider (vertex vs direct) so we don't re-ask within a single config run
+  const vertexProviders = new Set<string>();
+  const platformAskedProviders = new Set<string>();
+
+  // Check if provider supports Vertex AI and ask platform preference
+  let useVertexAi = false;
+  if (provider.vertexModels && provider.vertexModels.length > 0) {
+    resetTerminalForInput();
+    const platform = await select({
+      message: "API platform:",
+      choices: [
+        { name: "Direct API", value: "direct" as const },
+        { name: `Google Vertex AI ${chalk.gray("— see https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai")}`, value: "vertex" as const },
+      ],
+    });
+    useVertexAi = platform === "vertex";
+    if (useVertexAi) vertexProviders.add(selectedProvider);
+    platformAskedProviders.add(selectedProvider);
+  }
+
+  const modelList = useVertexAi ? (provider.vertexModels ?? []) : provider.supportedModels;
+
+  if (modelList.length === 0) {
     // OpenRouter or similar — free-text input only
     resetTerminalForInput();
     selectedModel = await pasteableInput({
@@ -233,7 +255,7 @@ async function runConfig(): Promise<void> {
   } else {
     // Providers with predefined models — offer list + custom option
     resetTerminalForInput();
-    const modelChoices = provider.supportedModels.map((m) => ({
+    const modelChoices = modelList.map((m) => ({
       name: `${m.id} — ${m.label}`,
       value: m.id,
     }));
@@ -256,25 +278,21 @@ async function runConfig(): Promise<void> {
         default: (rawConfig.model as string | undefined) ?? provider.defaultModel,
       });
 
-      // Basic pattern validation for common typos
-      if (selectedProvider === "claude") {
-        // Claude models typically: claude-{family}-{version}[-{date}]
-        if (!selectedModel.startsWith("claude-") && !selectedModel.includes("projects/")) {
-          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Claude format. Expected: claude-{family}-{version} or Vertex AI full resource name."));
-          console.log(chalk.gray("  Examples: claude-opus-4-6, projects/PROJECT/locations/REGION/publishers/anthropic/models/MODEL"));
+      // Brief pattern hint for unexpected formats
+      if (selectedProvider === "claude" && !selectedModel.includes("projects/")) {
+        const hasDirectFormat = selectedModel.startsWith("claude-") && !selectedModel.includes("@");
+        if (!useVertexAi && !hasDirectFormat) {
+          console.log(chalk.yellow("⚠"), chalk.gray("Expected format: claude-{name}-{date}"));
         }
-      } else if (selectedProvider === "gemini") {
-        // Gemini models typically: gemini-{version}-{variant}
-        if (!selectedModel.startsWith("gemini-") && !selectedModel.includes("projects/")) {
-          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Gemini format. Expected: gemini-{version}-{variant} or Vertex AI full resource name."));
-          console.log(chalk.gray("  Examples: gemini-2.5-pro, projects/PROJECT/locations/REGION/publishers/google/models/MODEL"));
+      } else if (selectedProvider === "gemini" && !selectedModel.includes("projects/")) {
+        const hasVertexFormat = selectedModel.includes("@");
+        const hasDirectFormat = selectedModel.startsWith("gemini-") && !selectedModel.includes("@");
+        if ((useVertexAi && !hasVertexFormat) || (!useVertexAi && !hasDirectFormat)) {
+          const expectedFormat = useVertexAi ? "gemini-{version}@{version}" : "gemini-{version}-{variant}";
+          console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
         }
-      } else if (selectedProvider === "codex") {
-        // Codex models typically: gpt-{version}
-        if (!selectedModel.startsWith("gpt-")) {
-          console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Codex format. Expected: gpt-{version}"));
-          console.log(chalk.gray("  Examples: gpt-5.4, gpt-6.0"));
-        }
+      } else if (selectedProvider === "codex" && !selectedModel.startsWith("gpt-")) {
+        console.log(chalk.yellow("⚠"), chalk.gray("Expected format: gpt-{version}"));
       }
     } else {
       selectedModel = modelSelection;
@@ -350,7 +368,27 @@ async function runConfig(): Promise<void> {
       const agentProviderAdapter = getProvider(agentProviderChoice);
       let agentModelChoice: string;
 
-      if (agentProviderAdapter.supportedModels.length === 0) {
+      // Determine Vertex AI preference for this agent's provider
+      let agentUseVertexAi = false;
+      if (!platformAskedProviders.has(agentProviderChoice) && agentProviderAdapter.vertexModels && agentProviderAdapter.vertexModels.length > 0) {
+        resetTerminalForInput();
+        const agentPlatform = await select({
+          message: `API platform for ${agentProviderChoice}:`,
+          choices: [
+            { name: "Direct API", value: "direct" as const },
+            { name: `Google Vertex AI ${chalk.gray("— see https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai")}`, value: "vertex" as const },
+          ],
+        });
+        agentUseVertexAi = agentPlatform === "vertex";
+        if (agentUseVertexAi) vertexProviders.add(agentProviderChoice);
+        platformAskedProviders.add(agentProviderChoice);
+      }
+
+      const agentModelList = agentUseVertexAi
+        ? (agentProviderAdapter.vertexModels ?? [])
+        : agentProviderAdapter.supportedModels;
+
+      if (agentModelList.length === 0) {
         // Provider has no predefined models — free-text input only
         resetTerminalForInput();
         agentModelChoice = await pasteableInput({
@@ -360,7 +398,7 @@ async function runConfig(): Promise<void> {
       } else {
         // Providers with predefined models — offer list + custom option
         resetTerminalForInput();
-        const agentModelChoices = agentProviderAdapter.supportedModels.map((m) => ({
+        const agentModelChoices = agentModelList.map((m) => ({
           name: `${m.id} — ${m.label}`,
           value: m.id,
         }));
@@ -383,22 +421,21 @@ async function runConfig(): Promise<void> {
             default: agent.model ?? agentProviderAdapter.defaultModel,
           });
 
-          // Basic pattern validation for common typos
-          if (agentProviderChoice === "claude") {
-            if (!agentModelChoice.startsWith("claude-") && !agentModelChoice.includes("projects/")) {
-              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Claude format. Expected: claude-{family}-{version} or Vertex AI full resource name."));
-              console.log(chalk.gray("  Examples: claude-opus-4-6, projects/PROJECT/locations/REGION/publishers/anthropic/models/MODEL"));
+          // Brief pattern hint for unexpected formats
+          if (agentProviderChoice === "claude" && !agentModelChoice.includes("projects/")) {
+            const hasDirectFormat = agentModelChoice.startsWith("claude-") && !agentModelChoice.includes("@");
+            if (!agentUseVertexAi && !hasDirectFormat) {
+              console.log(chalk.yellow("⚠"), chalk.gray("Expected format: claude-{name}-{date}"));
             }
-          } else if (agentProviderChoice === "gemini") {
-            if (!agentModelChoice.startsWith("gemini-") && !agentModelChoice.includes("projects/")) {
-              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Gemini format. Expected: gemini-{version}-{variant} or Vertex AI full resource name."));
-              console.log(chalk.gray("  Examples: gemini-2.5-pro, projects/PROJECT/locations/REGION/publishers/google/models/MODEL"));
+          } else if (agentProviderChoice === "gemini" && !agentModelChoice.includes("projects/")) {
+            const hasVertexFormat = agentModelChoice.includes("@");
+            const hasDirectFormat = agentModelChoice.startsWith("gemini-") && !agentModelChoice.includes("@");
+            if ((agentUseVertexAi && !hasVertexFormat) || (!agentUseVertexAi && !hasDirectFormat)) {
+              const expectedFormat = agentUseVertexAi ? "gemini-{version}@{version}" : "gemini-{version}-{variant}";
+              console.log(chalk.yellow("⚠"), chalk.gray(`Expected format: ${expectedFormat}`));
             }
-          } else if (agentProviderChoice === "codex") {
-            if (!agentModelChoice.startsWith("gpt-")) {
-              console.log(chalk.yellow("⚠"), chalk.yellow("Model ID doesn't look like Codex format. Expected: gpt-{version}"));
-              console.log(chalk.gray("  Examples: gpt-5.4, gpt-6.0"));
-            }
+          } else if (agentProviderChoice === "codex" && !agentModelChoice.startsWith("gpt-")) {
+            console.log(chalk.yellow("⚠"), chalk.gray("Expected format: gpt-{version}"));
           }
         } else {
           agentModelChoice = agentModelSelection;

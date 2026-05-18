@@ -1,9 +1,19 @@
 import { execFile } from "node:child_process";
+import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
 import { getAgents } from "./config.js";
 import { wrapText } from "./format.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
 import { extractJSON } from "./planner.js";
+import {
+  parseRemote,
+  resolveToken,
+  resolveTlsOptions,
+  httpsPost,
+  type RemoteInfo,
+  type Platform,
+  type TlsOptions,
+} from "./pr-create.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
 import type { UsageInfo } from "./usage.js";
@@ -302,16 +312,268 @@ function exec(
   });
 }
 
-function getDiff(prNumber: number): Promise<string> {
-  return exec("gh", ["pr", "diff", String(prNumber)]);
+// ---------------------------------------------------------------------------
+// Platform-aware HTTP helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Sleep for specified milliseconds. Used for retry backoff.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Retry an async operation with exponential backoff for rate limit errors (429).
+ * @param fn - Async function to retry
+ * @param maxRetries - Maximum number of retry attempts (default 3)
+ * @param initialDelay - Initial delay in ms (default 1000)
+ * @returns Result of the async function
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  initialDelay = 1000,
+): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      // Check if this is a rate limit error (429)
+      const is429 = lastError.message.includes("429") ||
+                    lastError.message.toLowerCase().includes("rate limit");
+
+      // Only retry on 429 errors and if we have retries left
+      if (!is429 || attempt === maxRetries) {
+        throw lastError;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = initialDelay * Math.pow(2, attempt);
+      if (process.env.DEBUG) {
+        console.warn(`Rate limited (429), retrying after ${delay}ms... (attempt ${attempt + 1}/${maxRetries})`);
+      }
+      await sleep(delay);
+    }
+  }
+  throw lastError ?? new Error("Retry failed with unknown error");
+}
+
+async function httpsGet(
+  url: string,
+  headers: Record<string, string>,
+  opts?: { insecure?: boolean },
+): Promise<{ status: number; text: string }> {
+  const parsed = new URL(url);
+  const tlsOpts: TlsOptions = opts?.insecure
+    ? { rejectUnauthorized: false }
+    : await resolveTlsOptions(parsed.hostname);
+
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: parsed.pathname + parsed.search,
+        method: "GET",
+        headers,
+        ...tlsOpts,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString("utf-8"),
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+function getApiBase(remote: RemoteInfo): string {
+  if (remote.platform === "gitlab") {
+    const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
+    return `https://${remote.host}/api/v4/projects/${projectPath}`;
+  }
+  if (remote.platform === "github") {
+    const apiHost =
+      remote.host === "github.com"
+        ? "https://api.github.com"
+        : `https://${remote.host}/api/v3`;
+    return `${apiHost}/repos/${remote.owner}/${remote.repo}`;
+  }
+  throw new TaskError(
+    `pr-review: unsupported platform "${remote.platform}". Only "github" and "gitlab" are supported.`,
+  );
+}
+
+function getAuthHeaders(remote: RemoteInfo, token: string): Record<string, string> {
+  if (remote.platform === "gitlab") {
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+  }
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "Content-Type": "application/json",
+    "User-Agent": "reygent",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Platform-aware PR/MR operations (replace gh CLI callsites)
+// ---------------------------------------------------------------------------
+
+async function getRemoteAndToken(): Promise<{ remote: RemoteInfo; token: string }> {
+  const remoteUrl = (await exec("git", ["remote", "get-url", "origin"])).trim();
+  const remote = parseRemote(remoteUrl);
+  const token = await resolveToken(remote.host);
+  return { remote, token };
+}
+
+/**
+ * Get the base branch of a PR/MR.
+ * Consolidates the duplicate baseRefName queries from getPRDiffStat + getPRCommitLog.
+ */
+async function getBaseBranch(
+  prNumber: number,
+  remote: RemoteInfo,
+  token: string,
+  insecure?: boolean,
+): Promise<string> {
+  const apiBase = getApiBase(remote);
+  const headers = getAuthHeaders(remote, token);
+
+  if (remote.platform === "gitlab") {
+    const { status, text } = await httpsGet(
+      `${apiBase}/merge_requests/${prNumber}`,
+      headers,
+      { insecure },
+    );
+    if (status < 200 || status >= 300) {
+      throw new TaskError(`pr-review: GitLab API error ${status}: ${text}`);
+    }
+    const data = JSON.parse(text) as { target_branch: string };
+    return data.target_branch;
+  }
+
+  // GitHub
+  const { status, text } = await httpsGet(
+    `${apiBase}/pulls/${prNumber}`,
+    headers,
+    { insecure },
+  );
+  if (status < 200 || status >= 300) {
+    throw new TaskError(`pr-review: GitHub API error ${status}: ${text}`);
+  }
+  const data = JSON.parse(text) as { base: { ref: string } };
+  return data.base.ref;
+}
+
+/**
+ * Get the unified diff for a PR/MR.
+ */
+async function getDiff(
+  prNumber: number,
+  remote: RemoteInfo,
+  token: string,
+  insecure?: boolean,
+): Promise<string> {
+  const apiBase = getApiBase(remote);
+
+  if (remote.platform === "gitlab") {
+    const headers = getAuthHeaders(remote, token);
+    const { status, text } = await httpsGet(
+      `${apiBase}/merge_requests/${prNumber}/changes`,
+      headers,
+      { insecure },
+    );
+    if (status < 200 || status >= 300) {
+      throw new TaskError(`pr-review: GitLab API error ${status}: ${text}`);
+    }
+    const data = JSON.parse(text) as {
+      changes: Array<{
+        old_path: string;
+        new_path: string;
+        diff: string;
+        new_file?: boolean;
+        deleted_file?: boolean;
+        renamed_file?: boolean;
+      }>;
+    };
+    // Reconstruct unified diff from GitLab changes
+    return data.changes
+      .map((c) => {
+        // Handle binary files: GitLab API may return empty diff or special marker
+        if (!c.diff || c.diff.trim() === "") {
+          return `diff --git a/${c.old_path} b/${c.new_path}\nBinary files differ`;
+        }
+
+        // Handle deleted files
+        if (c.deleted_file) {
+          return `diff --git a/${c.old_path} b/${c.new_path}\ndeleted file mode 100644\n${c.diff}`;
+        }
+
+        // Handle new files
+        if (c.new_file) {
+          return `diff --git a/${c.old_path} b/${c.new_path}\nnew file mode 100644\n${c.diff}`;
+        }
+
+        // Handle renames with or without content changes
+        if (c.renamed_file || c.old_path !== c.new_path) {
+          const renameHeader = `diff --git a/${c.old_path} b/${c.new_path}\nrename from ${c.old_path}\nrename to ${c.new_path}`;
+          // If diff is only whitespace/empty, it's a pure rename
+          if (c.diff.trim() === "") {
+            return renameHeader;
+          }
+          // Rename with content changes
+          return `${renameHeader}\n${c.diff}`;
+        }
+
+        // Regular file modification
+        return `diff --git a/${c.old_path} b/${c.new_path}\n${c.diff}`;
+      })
+      .join("\n");
+  }
+
+  // GitHub: request diff format directly
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github.v3.diff",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "reygent",
+  };
+  const { status, text } = await httpsGet(
+    `${apiBase}/pulls/${prNumber}`,
+    headers,
+    { insecure },
+  );
+  if (status < 200 || status >= 300) {
+    throw new TaskError(`pr-review: GitHub API error ${status}: ${text}`);
+  }
+  return text;
 }
 
 /** Get diff stat for a PR by diffing against the PR base branch */
-async function getPRDiffStat(prNumber: number): Promise<string> {
+async function getPRDiffStat(
+  prNumber: number,
+  remote: RemoteInfo,
+  token: string,
+  insecure?: boolean,
+): Promise<string> {
   try {
-    const baseBranch = (await exec("gh", [
-      "pr", "view", String(prNumber), "--json", "baseRefName", "--jq", ".baseRefName",
-    ])).trim();
+    const baseBranch = await getBaseBranch(prNumber, remote, token, insecure);
     return (await exec("git", ["diff", "--stat", `origin/${baseBranch}...HEAD`])).trim();
   } catch (err) {
     if (process.env.DEBUG) {
@@ -322,11 +584,14 @@ async function getPRDiffStat(prNumber: number): Promise<string> {
 }
 
 /** Get commit log for a PR by logging against the PR base branch */
-async function getPRCommitLog(prNumber: number): Promise<string> {
+async function getPRCommitLog(
+  prNumber: number,
+  remote: RemoteInfo,
+  token: string,
+  insecure?: boolean,
+): Promise<string> {
   try {
-    const baseBranch = (await exec("gh", [
-      "pr", "view", String(prNumber), "--json", "baseRefName", "--jq", ".baseRefName",
-    ])).trim();
+    const baseBranch = await getBaseBranch(prNumber, remote, token, insecure);
     return (await exec("git", ["log", `origin/${baseBranch}..HEAD`, "--oneline"])).trim();
   } catch (err) {
     if (process.env.DEBUG) {
@@ -337,10 +602,14 @@ async function getPRCommitLog(prNumber: number): Promise<string> {
 }
 
 /**
- * Detect PR number from current git branch via GitHub CLI.
- * Returns the PR number or throws if no PR is found.
+ * Detect PR/MR number from current git branch.
+ * Uses platform-aware REST API instead of gh CLI.
  */
-async function detectPRFromBranch(): Promise<{ prNumber: number; branch: string }> {
+async function detectPRFromBranch(
+  remote: RemoteInfo,
+  token: string,
+  insecure?: boolean,
+): Promise<{ prNumber: number; branch: string }> {
   const branch = (await exec("git", ["branch", "--show-current"])).trim();
   if (!branch) {
     throw new TaskError(
@@ -348,34 +617,76 @@ async function detectPRFromBranch(): Promise<{ prNumber: number; branch: string 
     );
   }
 
-  let prJson: string;
-  try {
-    prJson = await exec("gh", ["pr", "view", "--json", "number", "--jq", ".number"]);
-  } catch {
+  const apiBase = getApiBase(remote);
+  const headers = getAuthHeaders(remote, token);
+
+  if (remote.platform === "gitlab") {
+    const encodedBranch = encodeURIComponent(branch);
+    const { status, text } = await httpsGet(
+      `${apiBase}/merge_requests?source_branch=${encodedBranch}&state=opened`,
+      headers,
+      { insecure },
+    );
+    if (status < 200 || status >= 300) {
+      throw new TaskError(
+        `pr-review: no open MR found for branch "${branch}". Create an MR first or provide a number.`,
+      );
+    }
+    const mrs = JSON.parse(text) as Array<{ iid: number }>;
+    if (mrs.length === 0) {
+      throw new TaskError(
+        `pr-review: no open MR found for branch "${branch}". Create an MR first or provide a number.`,
+      );
+    }
+    return { prNumber: mrs[0].iid, branch };
+  }
+
+  // GitHub: search PRs by head branch
+  // First try with repo owner prefix (for same-repo PRs)
+  let encodedHead = encodeURIComponent(`${remote.owner}:${branch}`);
+  let { status, text } = await httpsGet(
+    `${apiBase}/pulls?head=${encodedHead}&state=open`,
+    headers,
+    { insecure },
+  );
+
+  let prs = (status >= 200 && status < 300) ? JSON.parse(text) as Array<{ number: number }> : [];
+
+  // If no PRs found with owner:branch, try without owner prefix (handles cross-fork PRs)
+  if (prs.length === 0) {
+    encodedHead = encodeURIComponent(branch);
+    const retry = await httpsGet(
+      `${apiBase}/pulls?head=${encodedHead}&state=open`,
+      headers,
+      { insecure },
+    );
+    if (retry.status >= 200 && retry.status < 300) {
+      prs = JSON.parse(retry.text) as Array<{ number: number }>;
+    }
+  }
+
+  if (prs.length === 0) {
     throw new TaskError(
       `pr-review: no open PR found for branch "${branch}". Create a PR first or provide a PR number.`,
     );
   }
-
-  const prNumber = parseInt(prJson.trim(), 10);
-  if (isNaN(prNumber) || prNumber <= 0) {
-    throw new TaskError(
-      `pr-review: could not parse PR number from branch "${branch}"`,
-    );
-  }
-
-  return { prNumber, branch };
+  return { prNumber: prs[0].number, branch };
 }
 
 /**
  * Resolve the PR number from context or by detecting from the current branch.
  */
-async function resolvePRNumber(context: TaskContext): Promise<number> {
+async function resolvePRNumber(
+  context: TaskContext,
+  remote: RemoteInfo,
+  token: string,
+  insecure?: boolean,
+): Promise<number> {
   if (context.prCreate) {
     return context.prCreate.prNumber;
   }
   console.log(chalk.blue("No PR number provided — detecting from current branch..."));
-  const detected = await detectPRFromBranch();
+  const detected = await detectPRFromBranch(remote, token, insecure);
   console.log(chalk.green(`Found PR #${detected.prNumber} on branch "${detected.branch}"`));
   return detected.prNumber;
 }
@@ -384,7 +695,8 @@ export async function runPRReview(
   context: TaskContext,
   options?: AgentSpawnOptions,
 ): Promise<{ output: PRReviewOutput; usage?: UsageInfo }> {
-  const prNumber = await resolvePRNumber(context);
+  const { remote, token } = await getRemoteAndToken();
+  const prNumber = await resolvePRNumber(context, remote, token);
 
   const agents = getAgents();
   const agent = agents.find((a) => a.name === "pr-reviewer");
@@ -393,9 +705,9 @@ export async function runPRReview(
   }
 
   const [diff, stat, log] = await Promise.all([
-    getDiff(prNumber),
-    getPRDiffStat(prNumber),
-    getPRCommitLog(prNumber),
+    getDiff(prNumber, remote, token),
+    getPRDiffStat(prNumber, remote, token),
+    getPRCommitLog(prNumber, remote, token),
   ]);
 
   // Split diff by file and select within budget
@@ -422,13 +734,44 @@ export async function runPRReview(
 
 /**
  * Post a formatted PR review as a comment on the pull request.
+ * Supports both GitHub PRs and GitLab MRs.
+ * Includes retry logic with exponential backoff for rate limit (429) errors.
  */
 export async function postPRReviewComment(
   context: TaskContext,
   review: PRReviewOutput,
 ): Promise<void> {
-  const prNumber = await resolvePRNumber(context);
+  const { remote, token } = await getRemoteAndToken();
+  const prNumber = await resolvePRNumber(context, remote, token);
   const body = formatPRReviewOutput(review) +
     "\n\n---\n*Review by [reygent](https://github.com/andrewevans0102/reygent)*";
-  await exec("gh", ["pr", "comment", String(prNumber), "--body", body]);
+
+  const apiBase = getApiBase(remote);
+
+  // Wrap API call in retry logic for rate limiting
+  await retryWithBackoff(async () => {
+    if (remote.platform === "gitlab") {
+      const headers = getAuthHeaders(remote, token);
+      const { status, text } = await httpsPost(
+        `${apiBase}/merge_requests/${prNumber}/notes`,
+        headers,
+        JSON.stringify({ body }),
+      );
+      if (status < 200 || status >= 300) {
+        throw new TaskError(`pr-review: GitLab API error ${status}: ${text}`);
+      }
+      return;
+    }
+
+    // GitHub: post as issue comment
+    const headers = getAuthHeaders(remote, token);
+    const { status, text } = await httpsPost(
+      `${apiBase}/issues/${prNumber}/comments`,
+      headers,
+      JSON.stringify({ body }),
+    );
+    if (status < 200 || status >= 300) {
+      throw new TaskError(`pr-review: GitHub API error ${status}: ${text}`);
+    }
+  });
 }
