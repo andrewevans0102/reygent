@@ -6,6 +6,7 @@ import { formatRelativeTime, formatDuration, parseSince } from "./utils.js";
 export interface RunsListOptions {
   limit?: number;
   since?: string;
+  withAgents?: boolean;
 }
 
 export interface RunsListResult {
@@ -45,12 +46,9 @@ export async function getRunsList(
   // Sort by start time descending (newest first)
   const sorted = filtered.sort((a, b) => b.startTime - a.startTime);
 
-  // Limit results
-  const limited = sorted.slice(0, limit);
-
-  // Build summary rows
+  // Build summary rows (before limiting, so we can filter by agent count)
   const summaries = await Promise.all(
-    limited.map(async (run) => {
+    sorted.map(async (run) => {
       const events = await backend.query({ runId: run.runId });
 
       // Determine status
@@ -87,6 +85,14 @@ export async function getRunsList(
     })
   );
 
+  // Filter by agent count if requested
+  const agentFiltered = options.withAgents
+    ? summaries.filter((s) => s.agentCount > 0)
+    : summaries;
+
+  // Limit results after filtering
+  const limited = agentFiltered.slice(0, limit);
+
   // Create table
   const table = new Table({
     head: [
@@ -100,7 +106,7 @@ export async function getRunsList(
     style: { head: [], border: [] },
   });
 
-  for (const row of summaries) {
+  for (const row of limited) {
     const statusColor =
       row.status === "success"
         ? chalk.green
@@ -119,7 +125,7 @@ export async function getRunsList(
   }
 
   return {
-    runs: summaries,
+    runs: limited,
     table: table.toString(),
   };
 }

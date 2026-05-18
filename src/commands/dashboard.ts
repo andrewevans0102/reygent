@@ -29,6 +29,7 @@ export function registerDashboardCommand(program: Command): void {
     .option("--global", "Use global telemetry scope instead of local")
     .option("--limit <n>", "Maximum runs to display", "50")
     .option("--since <duration>", "Show runs since duration (e.g., 7d, 30d)", "30d")
+    .option("--with-agents", "Only show runs that spawned agents")
     .action(async (options) => {
       const spinner = ora("Loading runs...").start();
       try {
@@ -36,6 +37,7 @@ export function registerDashboardCommand(program: Command): void {
         const runs = await getRunsList(backend, {
           limit: parseInt(options.limit, 10),
           since: options.since,
+          withAgents: options.withAgents,
         });
 
         spinner.stop();
