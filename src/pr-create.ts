@@ -417,9 +417,23 @@ export function buildCommitMessage(context: TaskContext, branchType: CanonicalBr
       break;
   }
 
-  const subject = scope
-    ? `${branchType}(${scope}): ${spec.title}`
-    : `${branchType}: ${spec.title}`;
+  // Normalize title: lowercase first character for commitlint subject-case rule
+  let title = spec.title;
+  if (title.length > 0) {
+    title = title[0].toLowerCase() + title.slice(1);
+  }
+
+  // Build prefix and check total length against commitlint header-max-length (100)
+  const prefix = scope ? `${branchType}(${scope}): ` : `${branchType}: `;
+  const maxLen = 100;
+
+  // Truncate title if needed to fit in 100 chars
+  if (prefix.length + title.length > maxLen) {
+    const availableLen = maxLen - prefix.length - 3; // reserve 3 for "..."
+    title = title.slice(0, availableLen) + "...";
+  }
+
+  const subject = prefix + title;
 
   if (!plan) return subject;
 

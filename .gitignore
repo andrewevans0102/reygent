@@ -27,5 +27,8 @@ Thumbs.db
 # Pack artifacts
 *.tgz
 
+# Generated dashboard
+reygent-dashboard.html
+
 # Reygent config (for testing/development only - not shipped)
 .reygent/
