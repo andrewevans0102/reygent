@@ -462,7 +462,7 @@ reygent run "test task"
 reygent dashboard runs
 ```
 
-### "Run <id> not found"
+### "Run `<id>` not found"
 
 **Cause:** Wrong scope or run ID doesn't exist.
 
