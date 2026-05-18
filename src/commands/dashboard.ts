@@ -47,7 +47,7 @@ export function registerDashboardCommand(program: Command): void {
 
         console.log(
           chalk.bold(
-            `\n${options.global ? "Global" : "Local"} Runs (${runs.length}):\n`
+            `\n${options.global ? "Global" : "Local"} Runs (${runs.runs.length}):\n`
           )
         );
         console.log(runs.table);

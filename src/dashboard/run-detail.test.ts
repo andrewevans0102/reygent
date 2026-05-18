@@ -18,6 +18,7 @@ describe("getRunDetail", () => {
   });
 
   it("returns null when run not found", async () => {
+    vi.mocked(mockBackend.listRuns).mockResolvedValue([]);
     vi.mocked(mockBackend.query).mockResolvedValue([]);
 
     const result = await getRunDetail(mockBackend, "nonexistent-run");
@@ -26,10 +27,11 @@ describe("getRunDetail", () => {
   });
 
   it("returns run detail with summary and events", async () => {
+    const fullRunId = "run-12345678-1234-1234-1234-123456789abc";
     const events: TelemetryEvent[] = [
       {
         id: "1",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 1000,
         category: "command",
         event: "command.start",
@@ -38,7 +40,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "2",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 2000,
         category: "agent",
         event: "agent.spawn",
@@ -47,7 +49,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "3",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 3000,
         category: "command",
         event: "command.end",
@@ -58,10 +60,10 @@ describe("getRunDetail", () => {
 
     vi.mocked(mockBackend.query).mockResolvedValue(events);
 
-    const result = await getRunDetail(mockBackend, "run-1");
+    const result = await getRunDetail(mockBackend, fullRunId);
 
     expect(result).not.toBeNull();
-    expect(result!.runId).toBe("run-1");
+    expect(result!.runId).toBe(fullRunId);
     expect(result!.eventCount).toBe(3);
     expect(result!.summary).toContain("Run ID:");
     expect(result!.summary).toContain("Status:");
@@ -69,10 +71,11 @@ describe("getRunDetail", () => {
   });
 
   it("identifies success status correctly", async () => {
+    const fullRunId = "run-12345678-1234-1234-1234-123456789abc";
     const events: TelemetryEvent[] = [
       {
         id: "1",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 1000,
         category: "command",
         event: "command.start",
@@ -81,7 +84,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "2",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 2000,
         category: "command",
         event: "command.end",
@@ -92,16 +95,17 @@ describe("getRunDetail", () => {
 
     vi.mocked(mockBackend.query).mockResolvedValue(events);
 
-    const result = await getRunDetail(mockBackend, "run-1");
+    const result = await getRunDetail(mockBackend, fullRunId);
 
     expect(result!.summary).toContain("success");
   });
 
   it("identifies failure status correctly", async () => {
+    const fullRunId = "run-12345678-1234-1234-1234-123456789abc";
     const events: TelemetryEvent[] = [
       {
         id: "1",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 1000,
         category: "command",
         event: "command.start",
@@ -110,7 +114,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "2",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 2000,
         category: "error",
         event: "error.task",
@@ -119,7 +123,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "3",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 3000,
         category: "command",
         event: "command.end",
@@ -130,17 +134,18 @@ describe("getRunDetail", () => {
 
     vi.mocked(mockBackend.query).mockResolvedValue(events);
 
-    const result = await getRunDetail(mockBackend, "run-1");
+    const result = await getRunDetail(mockBackend, fullRunId);
 
     expect(result!.summary).toContain("failure");
     expect(result!.summary).toContain("Errors:");
   });
 
   it("shows cost when available", async () => {
+    const fullRunId = "run-12345678-1234-1234-1234-123456789abc";
     const events: TelemetryEvent[] = [
       {
         id: "1",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 1000,
         category: "usage",
         event: "usage.cost",
@@ -149,7 +154,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "2",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 2000,
         category: "usage",
         event: "usage.cost",
@@ -158,7 +163,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "3",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 3000,
         category: "command",
         event: "command.end",
@@ -169,17 +174,18 @@ describe("getRunDetail", () => {
 
     vi.mocked(mockBackend.query).mockResolvedValue(events);
 
-    const result = await getRunDetail(mockBackend, "run-1");
+    const result = await getRunDetail(mockBackend, fullRunId);
 
     expect(result!.summary).toContain("Cost:");
     expect(result!.summary).toContain("$0.1800");
   });
 
   it("counts agents correctly", async () => {
+    const fullRunId = "run-12345678-1234-1234-1234-123456789abc";
     const events: TelemetryEvent[] = [
       {
         id: "1",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 1000,
         category: "agent",
         event: "agent.spawn",
@@ -188,7 +194,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "2",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 2000,
         category: "agent",
         event: "agent.spawn",
@@ -197,7 +203,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "3",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 3000,
         category: "command",
         event: "command.end",
@@ -208,16 +214,17 @@ describe("getRunDetail", () => {
 
     vi.mocked(mockBackend.query).mockResolvedValue(events);
 
-    const result = await getRunDetail(mockBackend, "run-1");
+    const result = await getRunDetail(mockBackend, fullRunId);
 
     expect(result!.summary).toContain("Agents: 2");
   });
 
   it("sorts events by timestamp", async () => {
+    const fullRunId = "run-12345678-1234-1234-1234-123456789abc";
     const events: TelemetryEvent[] = [
       {
         id: "3",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 3000,
         category: "command",
         event: "command.end",
@@ -226,7 +233,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "1",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 1000,
         category: "command",
         event: "command.start",
@@ -235,7 +242,7 @@ describe("getRunDetail", () => {
       },
       {
         id: "2",
-        runId: "run-1",
+        runId: fullRunId,
         timestamp: 2000,
         category: "agent",
         event: "agent.spawn",
@@ -246,7 +253,7 @@ describe("getRunDetail", () => {
 
     vi.mocked(mockBackend.query).mockResolvedValue(events);
 
-    const result = await getRunDetail(mockBackend, "run-1");
+    const result = await getRunDetail(mockBackend, fullRunId);
 
     // Events table should have command.start first
     const eventsTable = result!.events;

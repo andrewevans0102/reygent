@@ -17,7 +17,19 @@ export async function getRunDetail(
   backend: StorageBackend,
   runId: string
 ): Promise<RunDetailResult | null> {
-  const events = await backend.query({ runId });
+  // Support prefix matching: if runId is short, find matching full ID
+  let fullRunId = runId;
+  if (runId.length < 32) {
+    // Likely truncated ID, search for match
+    const runs = await backend.listRuns();
+    const match = runs.find((r) => r.runId.startsWith(runId));
+    if (!match) {
+      return null;
+    }
+    fullRunId = match.runId;
+  }
+
+  const events = await backend.query({ runId: fullRunId });
 
   if (events.length === 0) {
     return null;
@@ -59,7 +71,7 @@ export async function getRunDetail(
     status === "success" ? chalk.green : status === "failure" ? chalk.red : chalk.yellow;
 
   const summaryLines = [
-    `${chalk.bold("Run ID:")} ${chalk.cyan(runId)}`,
+    `${chalk.bold("Run ID:")} ${chalk.cyan(fullRunId)}`,
     `${chalk.bold("Status:")} ${statusColor(status)}`,
     `${chalk.bold("Started:")} ${formatTimestamp(startTime)}`,
     `${chalk.bold("Duration:")} ${formatDuration(duration)}`,
@@ -103,7 +115,7 @@ export async function getRunDetail(
   }
 
   return {
-    runId,
+    runId: fullRunId,
     summary,
     events: table.toString(),
     eventCount: events.length,
