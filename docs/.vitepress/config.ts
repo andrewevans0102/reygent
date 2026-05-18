@@ -38,6 +38,7 @@ export default withMermaid(defineConfig({
         items: [
           { text: 'Knowledge System', link: '/knowledge' },
           { text: 'Telemetry', link: '/telemetry' },
+          { text: 'Dashboard', link: '/dashboard' },
           { text: 'Chesstrace', link: '/chesstrace' }
         ]
       },

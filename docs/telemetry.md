@@ -2,6 +2,8 @@
 
 Analyze Reygent runs to optimize performance and reduce costs. All analysis runs on local telemetry database. No data leaves your machine.
 
+> **New:** Looking for visual exploration? Try the [Dashboard](/dashboard) for interactive views of run history, trends, and agent failures.
+
 ## Commands
 
 - `reygent last` - Show latest run details (quick summary, verbose log, output, errors, or JSON)

@@ -6,6 +6,7 @@ This file contains Claude Code specific integration notes. For general Reygent d
 
 - **Full Documentation**: See [README.md](./README.md) for commands, agents, providers, and workflows
 - **Telemetry**: See [docs/telemetry.md](./docs/telemetry.md) for analysis commands and troubleshooting
+- **Dashboard**: See [docs/dashboard.md](./docs/dashboard.md) for visual telemetry exploration
 - **Living Documentation**: See [docs/knowledge.md](./docs/knowledge.md) for auto-learning knowledge system
 - **Architecture**: See [docs/architecture.md](./docs/architecture.md) for technical implementation details
 

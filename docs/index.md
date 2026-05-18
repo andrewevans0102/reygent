@@ -75,10 +75,10 @@ See the [Providers Guide](/providers) for detailed setup instructions.
 
 - Captures pipeline execution events
 - Stores data locally in SQLite
-- Powers `reygent last`, `reygent analyze`, and `reygent telemetry` commands
+- Powers `reygent last`, `reygent analyze`, `reygent dashboard`, and `reygent telemetry` commands
 - **Keeps all data on your machine** — nothing sent externally
 
-Learn more in the [Chesstrace documentation](/chesstrace).
+Learn more in the [Chesstrace documentation](/chesstrace) and explore your data with the [Dashboard](/dashboard).
 
 ## Example Workflow
 
