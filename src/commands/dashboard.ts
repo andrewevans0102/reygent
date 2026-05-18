@@ -3,7 +3,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { join } from "node:path";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
-import { resolveGlobalConfigPath } from "../config.js";
+import { resolveGlobalConfigDir } from "../config.js";
 import { getProjectRoot } from "../dashboard/utils.js";
 import {
   getRunsList,
@@ -12,6 +12,8 @@ import {
   getAgentFailures,
   exportToCSV,
   exportToXLSX,
+  collectDashboardData,
+  generateHTML,
 } from "../dashboard/index.js";
 
 /**
@@ -204,6 +206,80 @@ export function registerDashboardCommand(program: Command): void {
         process.exit(1);
       }
     });
+
+  // Generate static HTML
+  dashboard
+    .command("generate")
+    .description("Generate standalone HTML dashboard file")
+    .option("--output <file>", "Output file path", "reygent-dashboard.html")
+    .option("--open", "Open dashboard in browser after generation")
+    .action(async (options) => {
+      const spinner = ora("Generating dashboard...").start();
+      try {
+        // Try to load both local and global backends
+        let localBackend = null;
+        let globalBackend = null;
+
+        try {
+          spinner.text = "Loading local telemetry...";
+          localBackend = await loadDashboardBackend(false);
+        } catch (err) {
+          // Local DB doesn't exist or failed to load
+          spinner.info(chalk.yellow("No local telemetry data found"));
+        }
+
+        try {
+          spinner.text = "Loading global telemetry...";
+          const globalDir = resolveGlobalConfigDir();
+          const dbPath = join(globalDir, "chesstrace.db");
+          globalBackend = new SqliteBackend("global", dbPath);
+          await globalBackend.init();
+        } catch (err) {
+          globalBackend = null;
+          spinner.info(chalk.yellow("No global telemetry data found"));
+        }
+
+        if (!localBackend && !globalBackend) {
+          spinner.fail(chalk.red("No telemetry data available (neither local nor global)"));
+          process.exit(1);
+        }
+
+        // Collect data from both backends
+        spinner.text = "Collecting dashboard data...";
+        const data = await collectDashboardData(localBackend, globalBackend);
+
+        // Generate HTML
+        spinner.text = "Generating HTML...";
+        await generateHTML(data, options.output);
+
+        // Build summary
+        const scopes: string[] = [];
+        if (data.local) scopes.push(chalk.cyan(`Local: ${data.local.runs.length} runs`));
+        if (data.global) scopes.push(chalk.cyan(`Global: ${data.global.runs.length} runs`));
+
+        const fullPath = join(process.cwd(), options.output);
+
+        spinner.succeed(
+          chalk.green(
+            `Dashboard generated: ${chalk.cyan(options.output)}\n` +
+              `  Scopes: ${scopes.join(", ")}\n` +
+              `  Path: ${chalk.gray(`file://${fullPath}`)}`
+          )
+        );
+
+        // Open in browser if requested
+        if (options.open) {
+          const { exec } = await import("node:child_process");
+          const openCmd = process.platform === "darwin" ? "open" :
+                         process.platform === "win32" ? "start" : "xdg-open";
+          exec(`${openCmd} "${fullPath}"`);
+          console.log(chalk.gray(`  Opened in browser`));
+        }
+      } catch (err) {
+        spinner.fail(chalk.red(`Failed: ${(err as Error).message}`));
+        process.exit(1);
+      }
+    });
 }
 
 /**
@@ -212,16 +288,16 @@ export function registerDashboardCommand(program: Command): void {
 async function loadDashboardBackend(useGlobal: boolean) {
   if (useGlobal) {
     // Use global backend
-    const globalDir = resolveGlobalConfigPath();
+    const globalDir = resolveGlobalConfigDir();
     const dbPath = join(globalDir, "chesstrace.db");
-    const backend = new SqliteBackend(dbPath);
+    const backend = new SqliteBackend("global", dbPath);
     await backend.init();
     return backend;
   } else {
     // Use local backend (project-specific)
     const projectRoot = await getProjectRoot();
     const dbPath = join(projectRoot, ".reygent", "chesstrace.db");
-    const backend = new SqliteBackend(dbPath);
+    const backend = new SqliteBackend("local", dbPath);
     await backend.init();
     return backend;
   }

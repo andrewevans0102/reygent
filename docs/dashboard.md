@@ -2,9 +2,18 @@
 
 Visual interface for exploring Reygent telemetry data. The dashboard provides interactive views of run history, success/failure trends, agent performance, and data export capabilities.
 
+**Two modes:**
+- **CLI mode:** Terminal-based commands for quick queries
+- **HTML mode:** Static HTML file (like Jest coverage) for interactive exploration
+
 ## Quick Start
 
 ```bash
+# Generate standalone HTML dashboard (recommended)
+reygent dashboard generate --open
+
+# Or use CLI mode for quick queries:
+
 # View recent runs
 reygent dashboard runs
 
@@ -23,6 +32,63 @@ reygent dashboard export --format xlsx
 
 ## Commands
 
+### `dashboard generate`
+
+Generate standalone HTML dashboard file with embedded telemetry data.
+
+```bash
+reygent dashboard generate [options]
+```
+
+**Options:**
+- `--output <file>` - Output file path (default: `reygent-dashboard.html`)
+- `--open` - Open dashboard in browser after generation
+
+**Example:**
+```bash
+# Generate and open in browser (recommended)
+reygent dashboard generate --open
+
+# Generate with default name
+reygent dashboard generate
+
+# Generate with custom name
+reygent dashboard generate --output telemetry-report.html --open
+```
+
+**Features:**
+- **Single file:** Self-contained HTML with embedded data (like Jest coverage)
+- **No server needed:** Open directly in browser
+- **Scope toggle:** Switch between local and global telemetry
+- **Clickable stats:** Click summary boxes to filter/navigate (e.g., click "Failures" to filter failed runs)
+- **Interactive charts:** Stacked bar chart for success/failure trends
+- **Sortable tables:** Click column headers to sort
+- **Pagination:** Shows 10 runs per page with navigation controls
+- **Filtering:** Filter by status (success/failure) via stat boxes, or toggle "With agents only" to show runs that spawned agents
+- **Run drilldown:** Click run row to see full event timeline with all stages
+- **Event navigation:** Previous/Next buttons to step through runs without closing detail panel
+- **Event timeline:** Color-coded events showing category, timestamp, and data
+- **Agent failure drilldown:** Click agent in failures table to see all error details
+- **Data snapshot:** Captures last 90 days of runs
+- **Offline ready:** Works without internet (uses Chart.js CDN but degrades gracefully)
+
+**Output:**
+- File size: ~250-300KB depending on data volume
+- Contains both local and global telemetry (if available)
+- Shows which scopes included in output: `Scopes: Local: 100 runs, Global: 100 runs`
+- Runs list (last 90 days, up to 100 runs per scope with full events, paginated at 10 per page)
+- Each run includes complete event timeline (all telemetry events)
+- Trends chart (daily buckets, 90 days)
+- Agent failures (last 30 days, top 20 agents per scope)
+
+**Use cases:**
+- Share telemetry snapshots with team
+- Archive performance history
+- Visual debugging without CLI
+- Offline analysis
+
+---
+
 ### `dashboard runs`
 
 List runs with summary information.
@@ -35,6 +101,7 @@ reygent dashboard runs [options]
 - `--global` - Use global telemetry scope instead of local project scope
 - `--limit <n>` - Maximum number of runs to display (default: 50)
 - `--since <duration>` - Show runs since duration (e.g., `7d`, `30d`) (default: 30d)
+- `--with-agents` - Only show runs that spawned agents
 
 **Example:**
 ```bash
@@ -43,6 +110,9 @@ reygent dashboard runs --limit 20
 
 # Show global runs from last 7 days
 reygent dashboard runs --global --since 7d
+
+# Show only runs that used agents
+reygent dashboard runs --with-agents
 ```
 
 **Output:**
@@ -207,7 +277,7 @@ The dashboard supports two telemetry scopes:
 - **Use when:** Analyzing project-specific performance
 
 ```bash
-# Local scope (default)
+# CLI mode - local scope (default)
 reygent dashboard runs
 ```
 
@@ -217,8 +287,33 @@ reygent dashboard runs
 - **Use when:** Comparing across projects or seeing aggregate trends
 
 ```bash
-# Global scope (requires --global flag)
+# CLI mode - global scope (requires --global flag)
 reygent dashboard runs --global
+```
+
+### HTML Dashboard Scope
+
+The `dashboard generate` command includes **both** local and global data in the HTML file:
+- Toggle between scopes with radio buttons in the UI
+- No regeneration needed to switch views
+- If only one scope has data, automatically uses that scope
+
+**Scope indicators:**
+- Disabled buttons show unavailable scopes (greyed out)
+- Warning message when project has no local data: `⚠️ No local telemetry in this project. Showing global data.`
+- This prevents confusion when seeing the same data across different projects
+
+**Why you see the same data in different projects:**
+
+If a project has no local telemetry (no `.reygent/chesstrace.db`), the dashboard shows global data from `~/.reygent/chesstrace.db`, which is shared across all projects.
+
+**To get project-specific data:**
+```bash
+# Run some commands in the project to generate local telemetry
+reygent run "your task"
+
+# Then regenerate dashboard
+reygent dashboard generate --open
 ```
 
 **Privacy note:** If you work on both private and public repos, consider disabling global telemetry to prevent cross-project data leakage. See [Telemetry Privacy](./telemetry.md#privacy--control) for details.
@@ -245,7 +340,29 @@ reygent dashboard trends --since 90d
 
 ## Common Workflows
 
-### Debugging Recent Failures
+### Visual Analysis (HTML Dashboard)
+
+```bash
+# Generate and open in browser
+reygent dashboard generate --open
+
+# Use UI to:
+#    - Toggle between local/global scope (radio buttons at top)
+#    - Click summary stat boxes to navigate/filter:
+#      • Total Runs → jump to runs table
+#      • Success Rate → filter to successful runs
+#      • Failures → filter to failed runs
+#      • Agent Failures → jump to agent failures section
+#    - Navigate runs with pagination (10 per page)
+#    - Sort runs by any column (click header)
+#    - Click run row to see full event timeline
+#    - Use Prev/Next buttons to step through runs
+#    - View all stages/events for each run
+#    - Click agent in failures table to see error details
+#    - Click run ID in agent failures to jump to that run
+```
+
+### Debugging Recent Failures (CLI)
 
 ```bash
 # 1. Check recent runs

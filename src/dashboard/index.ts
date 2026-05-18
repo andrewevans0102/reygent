@@ -19,3 +19,8 @@ export type { ExportOptions as CSVExportOptions } from "./export-csv.js";
 
 export { exportToXLSX } from "./export-xlsx.js";
 export type { ExportOptions as XLSXExportOptions } from "./export-xlsx.js";
+
+export { collectDashboardData } from "./collect-data.js";
+export type { DashboardSnapshot, ScopeData, RunWithEvents } from "./collect-data.js";
+
+export { generateHTML } from "./generate-html.js";
