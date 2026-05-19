@@ -416,9 +416,9 @@ async function promptLinearSpec(): Promise<string> {
 async function promptJiraSpec(): Promise<string> {
   loadEnvFile();
   const missing: string[] = [];
-  if (!process.env.JIRA_URL) missing.push("JIRA_URL");
-  if (!process.env.JIRA_EMAIL) missing.push("JIRA_EMAIL");
-  if (!process.env.JIRA_API_TOKEN) missing.push("JIRA_API_TOKEN");
+  if (!process.env.JIRA_BASE_URL) missing.push("JIRA_BASE_URL");
+  if (!process.env.JIRA_USERNAME) missing.push("JIRA_USERNAME");
+  if (!process.env.JIRA_TOKEN) missing.push("JIRA_TOKEN");
   if (missing.length > 0) {
     console.log(chalk.red.bold("Error:"), `Missing env vars: ${missing.join(", ")}. Add them to your .env file.`);
     process.exit(1);
@@ -1261,7 +1261,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         const prStatus = createLiveStatus("reviewing pull request...");
         const { output: reviewOutput, usage: prUsage } = await runPRReview(
           context,
-          withActivity(agentOptions, prStatus, toolTracker),
+          { ...withActivity(agentOptions, prStatus, toolTracker), insecure: options.insecure },
         );
         context.prReview = reviewOutput;
         if (prUsage) tracker.record("pr-review", stage.name, prUsage);
@@ -1271,7 +1271,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
         const commentSpinner = ora(chalk.blue("posting review comment to PR...")).start();
         try {
-          await postPRReviewComment(context, reviewOutput);
+          await postPRReviewComment(context, reviewOutput, { insecure: options.insecure });
           commentSpinner.succeed(chalk.green("Review posted to PR"));
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

@@ -36,9 +36,9 @@ Create a `.env` file in your target project root:
 LINEAR_API_KEY=lin_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Jira
-JIRA_URL=https://your-company.atlassian.net
-JIRA_EMAIL=you@company.com
-JIRA_API_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
+JIRA_BASE_URL=https://your-company.atlassian.net
+JIRA_USERNAME=you@company.com
+JIRA_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ## 4. Initialize Your Project

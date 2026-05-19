@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 // Mock declarations appear before vi.mock calls in source, but vitest
 // hoists vi.mock to the top of the file so the mocks are defined first.
@@ -21,6 +21,7 @@ vi.mock("@inquirer/core", () => ({
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
+  readFileSync: vi.fn(() => ""),
   writeFileSync: vi.fn(),
 }));
 vi.mock("../agents.js", () => ({
@@ -63,6 +64,7 @@ vi.mock("chalk", () => {
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
+const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 
 import { initCommand } from "./init.js";
@@ -74,6 +76,7 @@ describe("initCommand", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mockReadFileSync.mockReturnValue("");
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     exitSpy = vi
       .spyOn(process, "exit")
@@ -264,6 +267,71 @@ describe("initCommand", () => {
 
     // Should contain the mocked DEFAULT_MODEL
     expect(config.model).toBe("test-model");
+  });
+
+  it(".reygent/.gitignore includes chesstrace.db", async () => {
+    mockExistsSync.mockReturnValue(false);
+
+    await initCommand({ dryRun: false });
+
+    const reygentGitignoreCall = mockWriteFileSync.mock.calls.find((c) =>
+      String(c[0]).endsWith(".reygent/.gitignore"),
+    );
+    expect(reygentGitignoreCall).toBeDefined();
+    const content = reygentGitignoreCall?.[1] as string;
+    expect(content).toContain("chesstrace.db");
+  });
+
+  it("creates root .gitignore with reygent-dashboard.html when none exists", async () => {
+    // Nothing exists — including the root .gitignore
+    mockExistsSync.mockReturnValue(false);
+
+    await initCommand({ dryRun: false });
+
+    const rootGitignoreCall = mockWriteFileSync.mock.calls.find((c) => {
+      const path = String(c[0]);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    expect(rootGitignoreCall).toBeDefined();
+    const content = rootGitignoreCall?.[1] as string;
+    expect(content).toContain("reygent-dashboard.html");
+  });
+
+  it("appends to existing root .gitignore without duplicating", async () => {
+    // .reygent does not exist, but root .gitignore does
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    mockReadFileSync.mockReturnValue("node_modules/\nreygent-dashboard.html\n");
+
+    await initCommand({ dryRun: false });
+
+    // No write to root .gitignore because entry already present
+    const rootGitignoreWrites = mockWriteFileSync.mock.calls.filter((c) => {
+      const path = String(c[0]);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    expect(rootGitignoreWrites).toHaveLength(0);
+  });
+
+  it("appends new entries to a root .gitignore missing the entry", async () => {
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    mockReadFileSync.mockReturnValue("node_modules/\n");
+
+    await initCommand({ dryRun: false });
+
+    const rootGitignoreCall = mockWriteFileSync.mock.calls.find((c) => {
+      const path = String(c[0]);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    expect(rootGitignoreCall).toBeDefined();
+    const content = rootGitignoreCall?.[1] as string;
+    expect(content).toContain("node_modules/");
+    expect(content).toContain("reygent-dashboard.html");
   });
 
   it("calls process.exit(2) on filesystem errors", async () => {

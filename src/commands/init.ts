@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ExitPromptError } from "@inquirer/core";
 import { select } from "@inquirer/prompts";
@@ -12,9 +12,29 @@ import { DEFAULT_MODEL } from "../model.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 import { ensureKnowledgeDir } from "../knowledge/manager.js";
 
+function ensureRootGitignoreEntries(cwd: string, entries: string[]): void {
+  const gitignorePath = join(cwd, ".gitignore");
+  const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+
+  const existingLines = new Set(
+    existing.split("\n").map((l) => l.trim()).filter(Boolean),
+  );
+  const toAdd = entries.filter((e) => !existingLines.has(e.trim()));
+  if (toAdd.length === 0) return;
+
+  let next = existing;
+  if (next && !next.endsWith("\n")) next += "\n";
+  if (next) next += "\n";
+  next += "# Reygent generated files\n";
+  next += toAdd.join("\n") + "\n";
+
+  writeFileSync(gitignorePath, next, "utf-8");
+}
+
 export async function initCommand(options: { dryRun: boolean } = { dryRun: false }): Promise<void> {
   const targetDir = join(process.cwd(), ".reygent");
   const configPath = join(targetDir, "config.json");
+  const rootGitignorePath = join(process.cwd(), ".gitignore");
 
   const skillsDir = join(targetDir, "skills");
 
@@ -30,6 +50,11 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
     console.log(chalk.gray("  dir:  "), chalk.cyan(targetDir));
     console.log(chalk.gray("  dir:  "), chalk.cyan(skillsDir));
     console.log(chalk.gray("  file: "), chalk.cyan(configPath));
+    console.log(
+      chalk.gray(existsSync(rootGitignorePath) ? "  update:" : "  file:  "),
+      chalk.cyan(rootGitignorePath),
+      chalk.gray("(adds reygent-dashboard.html)"),
+    );
     console.log("");
     console.log(chalk.bold("Config preview:"));
     console.log(chalk.gray(JSON.stringify(defaultConfig, null, 2)));
@@ -93,7 +118,16 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
 
       // Create .gitignore for auto-generated files
       const gitignorePath = join(targetDir, ".gitignore");
-      const gitignoreContent = `# Auto-generated knowledge files (generated from local telemetry)
+      const gitignoreContent = `# Telemetry database (local-only)
+chesstrace.db
+chesstrace.db-journal
+chesstrace.db-wal
+chesstrace.db-shm
+
+# Generated dashboard
+reygent-dashboard.html
+
+# Auto-generated knowledge files (generated from local telemetry)
 knowledge/common-failures.md
 knowledge/success-patterns.md
 
@@ -104,6 +138,10 @@ knowledge/success-patterns.md
 # - knowledge/agents/*.md (curated agent tips)
 `;
       writeFileSync(gitignorePath, gitignoreContent, "utf-8");
+
+      // Ensure project root .gitignore covers Reygent-generated artifacts
+      spinner.text = "Updating project .gitignore";
+      ensureRootGitignoreEntries(process.cwd(), ["reygent-dashboard.html"]);
 
       spinner.succeed(chalk.green("Initialized .reygent folder"));
 

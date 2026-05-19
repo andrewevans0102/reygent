@@ -79,6 +79,42 @@ describe("parseRemote", () => {
   it("throws on unparseable URL", () => {
     expect(() => parseRemote("not-a-url")).toThrow(/cannot parse remote/i);
   });
+
+  it("parses GitLab SSH URL with one subgroup", () => {
+    const result = parseRemote("git@gitlab.com:group/subgroup/repo.git");
+    expect(result).toEqual({
+      platform: "gitlab",
+      host: "gitlab.com",
+      owner: "group/subgroup",
+      repo: "repo",
+    });
+  });
+
+  it("parses GitLab HTTPS URL with nested subgroups", () => {
+    const result = parseRemote("https://gitlab.com/group/sub1/sub2/repo.git");
+    expect(result).toEqual({
+      platform: "gitlab",
+      host: "gitlab.com",
+      owner: "group/sub1/sub2",
+      repo: "repo",
+    });
+  });
+
+  it("parses self-hosted GitLab subgroup HTTPS URL without .git", () => {
+    const result = parseRemote("https://gitlab.mycompany.com/team/backend/api");
+    expect(result).toEqual({
+      platform: "gitlab",
+      host: "gitlab.mycompany.com",
+      owner: "team/backend",
+      repo: "api",
+    });
+  });
+
+  it("parses repo names containing dots", () => {
+    const result = parseRemote("https://github.com/owner/node.js.git");
+    expect(result.repo).toBe("node.js");
+    expect(result.owner).toBe("owner");
+  });
 });
 
 describe("deriveBranchName", () => {

@@ -1,1 +1,13 @@
-npx --no -- commitlint --edit $1
+if ! npx --no -- commitlint --edit $1; then
+  printf '\n\033[1;31mCommit message rejected by commitlint.\033[0m\n\n'
+  printf '\033[1;36mFormat:\033[0m <type>(<scope>)?: <subject>\n'
+  printf '\033[1;36mTypes:\033[0m feat | fix | chore | refactor | docs | test | style | perf | build | ci | revert\n'
+  printf '\033[1;36mExamples:\033[0m\n'
+  printf '  feat(dashboard): add static HTML export\n'
+  printf '  fix(jira): handle missing issue type field\n'
+  printf '  chore(deps): bump commitlint to v21\n'
+  printf '  refactor(pr-create): extract branch-type detection\n'
+  printf '  docs: clarify provider adapter contract\n'
+  printf '\033[2mTip: use BREAKING CHANGE: <description> in the body for major bumps.\033[0m\n\n'
+  exit 1
+fi

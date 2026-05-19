@@ -33,9 +33,9 @@ describe("readJiraSpec", () => {
 
   beforeEach(() => {
     savedEnv = {
-      JIRA_URL: process.env.JIRA_URL,
-      JIRA_EMAIL: process.env.JIRA_EMAIL,
-      JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
+      JIRA_BASE_URL: process.env.JIRA_BASE_URL,
+      JIRA_USERNAME: process.env.JIRA_USERNAME,
+      JIRA_TOKEN: process.env.JIRA_TOKEN,
     };
   });
 
@@ -49,23 +49,23 @@ describe("readJiraSpec", () => {
   });
 
   it("throws when credentials not set", async () => {
-    delete process.env.JIRA_URL;
-    delete process.env.JIRA_EMAIL;
-    delete process.env.JIRA_API_TOKEN;
+    delete process.env.JIRA_BASE_URL;
+    delete process.env.JIRA_USERNAME;
+    delete process.env.JIRA_TOKEN;
     await expect(readJiraSpec("PROJ-1")).rejects.toThrow(/not configured/i);
   });
 
   it("throws when partial credentials", async () => {
-    process.env.JIRA_URL = "https://test.atlassian.net";
-    delete process.env.JIRA_EMAIL;
-    delete process.env.JIRA_API_TOKEN;
+    process.env.JIRA_BASE_URL = "https://test.atlassian.net";
+    delete process.env.JIRA_USERNAME;
+    delete process.env.JIRA_TOKEN;
     await expect(readJiraSpec("PROJ-1")).rejects.toThrow(/not configured/i);
   });
 
   it("fetches and returns spec for valid issue", async () => {
-    process.env.JIRA_URL = "https://test.atlassian.net";
-    process.env.JIRA_EMAIL = "user@test.com";
-    process.env.JIRA_API_TOKEN = "token123";
+    process.env.JIRA_BASE_URL = "https://test.atlassian.net";
+    process.env.JIRA_USERNAME = "user@test.com";
+    process.env.JIRA_TOKEN = "token123";
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
@@ -87,9 +87,9 @@ describe("readJiraSpec", () => {
   });
 
   it("handles ADF description format", async () => {
-    process.env.JIRA_URL = "https://test.atlassian.net";
-    process.env.JIRA_EMAIL = "user@test.com";
-    process.env.JIRA_API_TOKEN = "token123";
+    process.env.JIRA_BASE_URL = "https://test.atlassian.net";
+    process.env.JIRA_USERNAME = "user@test.com";
+    process.env.JIRA_TOKEN = "token123";
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
@@ -111,9 +111,9 @@ describe("readJiraSpec", () => {
   });
 
   it("throws on API error", async () => {
-    process.env.JIRA_URL = "https://test.atlassian.net";
-    process.env.JIRA_EMAIL = "user@test.com";
-    process.env.JIRA_API_TOKEN = "token123";
+    process.env.JIRA_BASE_URL = "https://test.atlassian.net";
+    process.env.JIRA_USERNAME = "user@test.com";
+    process.env.JIRA_TOKEN = "token123";
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: false,
@@ -125,9 +125,9 @@ describe("readJiraSpec", () => {
   });
 
   it("includes acceptance criteria when present", async () => {
-    process.env.JIRA_URL = "https://test.atlassian.net";
-    process.env.JIRA_EMAIL = "user@test.com";
-    process.env.JIRA_API_TOKEN = "token123";
+    process.env.JIRA_BASE_URL = "https://test.atlassian.net";
+    process.env.JIRA_USERNAME = "user@test.com";
+    process.env.JIRA_TOKEN = "token123";
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,

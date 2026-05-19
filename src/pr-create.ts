@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
-import { rootCertificates } from "node:tls";
+import { rootCertificates, getCACertificates } from "node:tls";
 import { loadEnvFile } from "./env.js";
 import type { BranchType as CanonicalBranchType } from "./branch-type.js";
 import type { SpecPayload } from "./spec.js";
@@ -80,23 +80,35 @@ export async function resolveToken(host: string): Promise<string> {
   });
 }
 
+function splitOwnerAndRepo(host: string, path: string): RemoteInfo | null {
+  // Owner can span multiple segments (GitLab subgroups: group/subgroup/repo).
+  // Repo is always the last segment.
+  let p = path.replace(/\/+$/, "");
+  if (p.endsWith(".git")) p = p.slice(0, -4);
+  const idx = p.lastIndexOf("/");
+  if (idx <= 0 || idx === p.length - 1) return null;
+  const owner = p.slice(0, idx);
+  const repo = p.slice(idx + 1);
+  if (!owner || !repo) return null;
+  const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
+  return { platform, host, owner, repo };
+}
+
 export function parseRemote(remoteUrl: string): RemoteInfo {
   const url = remoteUrl.trim();
 
-  // SSH: git@github.com:owner/repo.git
-  const sshMatch = url.match(/^git@([^:]+):([^/]+)\/([^/.]+?)(\.git)?$/);
+  // SSH: git@host:path/to/repo[.git]
+  const sshMatch = url.match(/^git@([^:]+):(.+)$/);
   if (sshMatch) {
-    const host = sshMatch[1];
-    const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
-    return { platform, host, owner: sshMatch[2], repo: sshMatch[3] };
+    const result = splitOwnerAndRepo(sshMatch[1], sshMatch[2]);
+    if (result) return result;
   }
 
-  // HTTPS: https://github.com/owner/repo.git
-  const httpsMatch = url.match(/^https?:\/\/([^/]+)\/([^/]+)\/([^/.]+?)(\.git)?$/);
+  // HTTPS: https://host/path/to/repo[.git]
+  const httpsMatch = url.match(/^https?:\/\/([^/]+)\/(.+)$/);
   if (httpsMatch) {
-    const host = httpsMatch[1];
-    const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
-    return { platform, host, owner: httpsMatch[2], repo: httpsMatch[3] };
+    const result = splitOwnerAndRepo(httpsMatch[1], httpsMatch[2]);
+    if (result) return result;
   }
 
   throw new TaskError(`pr-create: cannot parse remote URL: ${url}`);
@@ -136,6 +148,20 @@ export interface TlsOptions {
  * @param hostname - Optional hostname to check for URL-specific git config overrides
  * @returns TLS options object for use with Node's https.request
  */
+/**
+ * Returns the OS trust store CAs (macOS Keychain, Windows cert store,
+ * Linux ca-certificates). Always returns an array (empty on failure or
+ * older Node). This is how `git` effectively trusts corporate CAs on
+ * macOS — Node ignores them by default.
+ */
+function getSystemCaCerts(): string[] {
+  try {
+    return getCACertificates("system");
+  } catch {
+    return [];
+  }
+}
+
 export async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
   // Respect GIT_SSL_NO_VERIFY env var
   if (process.env.GIT_SSL_NO_VERIFY) return { rejectUnauthorized: false };
@@ -186,14 +212,21 @@ export async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> 
     return null;
   })();
 
+  // Always trust the OS trust store (macOS Keychain etc.) in addition to
+  // Node's bundled CAs — corporate certs typically live there.
+  const systemCa = getSystemCaCerts();
+
   if (caPath) {
     try {
       const customCa = readFileSync(caPath, "utf-8");
-      // Combine Node's default CAs with the custom bundle so both are trusted
-      return { ca: [...rootCertificates, customCa] };
+      return { ca: [...rootCertificates, ...systemCa, customCa] };
     } catch {
-      // CA file unreadable — fall through to defaults
+      // CA file unreadable — fall through
     }
+  }
+
+  if (systemCa.length > 0) {
+    return { ca: [...rootCertificates, ...systemCa] };
   }
 
   return {};
@@ -234,7 +267,7 @@ function doHttpsPost(
   });
 }
 
-function isSslError(err: unknown): boolean {
+export function isSslError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const code = (err as NodeJS.ErrnoException).code ?? "";
   return (
@@ -277,6 +310,63 @@ export async function httpsPost(
   } catch (err) {
     if (!opts?.insecure && isSslError(err)) {
       return doHttpsPost(url, headers, body, { rejectUnauthorized: false });
+    }
+    throw err;
+  }
+}
+
+function doHttpsGet(
+  url: string,
+  headers: Record<string, string>,
+  tlsOpts: TlsOptions,
+): Promise<{ status: number; text: string }> {
+  const parsed = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: parsed.pathname + parsed.search,
+        method: "GET",
+        headers,
+        ...tlsOpts,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString("utf-8"),
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+/**
+ * Makes an HTTPS GET request with automatic TLS configuration and SSL error retry.
+ * Mirrors httpsPost's behavior: respects git config CA bundles and sslVerify,
+ * and retries once with verification disabled on SSL errors.
+ */
+export async function httpsGet(
+  url: string,
+  headers: Record<string, string>,
+  opts?: { insecure?: boolean },
+): Promise<{ status: number; text: string }> {
+  const parsed = new URL(url);
+  const tlsOpts: TlsOptions = opts?.insecure
+    ? { rejectUnauthorized: false }
+    : await resolveTlsOptions(parsed.hostname);
+
+  try {
+    return await doHttpsGet(url, headers, tlsOpts);
+  } catch (err) {
+    if (!opts?.insecure && isSslError(err)) {
+      return doHttpsGet(url, headers, { rejectUnauthorized: false });
     }
     throw err;
   }

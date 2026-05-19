@@ -830,9 +830,9 @@ Set these in a `.env` file in your project root (or export in your shell).
 | Variable | Used For |
 |---|---|
 | `LINEAR_API_KEY` | Linear issue tracker integration |
-| `JIRA_URL` | Jira instance URL (e.g., `https://company.atlassian.net`) |
-| `JIRA_EMAIL` | Jira account email |
-| `JIRA_API_TOKEN` | Jira API token |
+| `JIRA_BASE_URL` | Jira instance URL (e.g., `https://company.atlassian.net`) |
+| `JIRA_USERNAME` | Jira account email |
+| `JIRA_TOKEN` | Jira API token |
 | `GITHUB_TOKEN` | GitHub API authentication for `reygent skills` commands (raises rate limit from 60 to 5,000 req/hr) |
 | `GIT_SSL_NO_VERIFY` | Skip SSL verification globally |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js TLS override (set to `0` to skip) |
