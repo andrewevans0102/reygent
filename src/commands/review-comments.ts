@@ -151,23 +151,47 @@ async function getCurrentBranch(): Promise<string> {
 }
 
 async function getDefaultBranch(): Promise<string> {
+  // 1. Read the symbolic ref (no network)
   try {
     const ref = (
       await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
     ).trim();
     return ref.replace("refs/remotes/origin/", "");
   } catch {
-    try {
-      const branches = (
-        await exec("git", ["branch", "-r", "--list", "origin/main", "origin/master"])
-      ).trim();
-      const match = branches.match(/origin\/(main|master)/);
-      if (match) return match[1];
-    } catch {
-      // ignore
-    }
-    return "main";
+    // not set — try to set it from the remote
   }
+
+  // 2. Ask the remote and set origin/HEAD, then re-read
+  try {
+    await exec("git", ["remote", "set-head", "origin", "-a"]);
+    const ref = (
+      await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
+    ).trim();
+    return ref.replace("refs/remotes/origin/", "");
+  } catch {
+    // network/remote unavailable — fall through to local probe
+  }
+
+  // 3. Probe common default branch names — accept either a remote tracking
+  //    ref or a local branch (some clones haven't fetched the default branch).
+  for (const name of ["main", "master", "develop", "trunk"]) {
+    try {
+      await exec("git", ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${name}`]);
+      return name;
+    } catch {
+      // try local
+    }
+    try {
+      await exec("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${name}`]);
+      return name;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  throw new TaskError(
+    "review-comments: cannot determine default branch. Set with: git remote set-head origin <branch>",
+  );
 }
 
 async function detectGitHubPR(): Promise<number | null> {
