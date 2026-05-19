@@ -9,6 +9,7 @@ import type { PRCreateOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
+import { isDebug } from "./debug.js";
 
 function exec(
   cmd: string,
@@ -90,6 +91,9 @@ function splitOwnerAndRepo(host: string, path: string): RemoteInfo | null {
   const owner = p.slice(0, idx);
   const repo = p.slice(idx + 1);
   if (!owner || !repo) return null;
+  // Platform detection is heuristic-based: hostname containing "gitlab" → GitLab,
+  // otherwise GitHub. This could theoretically misidentify a GitHub Enterprise
+  // instance with "gitlab" in its hostname, but this is unlikely in practice.
   const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
   return { platform, host, owner, repo };
 }
@@ -112,6 +116,98 @@ export function parseRemote(remoteUrl: string): RemoteInfo {
   }
 
   throw new TaskError(`pr-create: cannot parse remote URL: ${url}`);
+}
+
+/**
+ * Result from GitLab MR detection.
+ * - found: MR exists with the given IID
+ * - none: No MR found for the branch
+ * - error: API call failed (network error, auth error, etc.)
+ */
+export type GitLabMRResult =
+  | { kind: "found"; iid: number }
+  | { kind: "none" }
+  | { kind: "error"; reason: string };
+
+/**
+ * Detects an open GitLab MR for the given branch.
+ * Returns a structured result instead of throwing, allowing callers to handle
+ * different failure modes appropriately (network errors vs. no MR found).
+ *
+ * @param remote - Parsed remote info
+ * @param token - GitLab API token
+ * @param branch - Branch name to search for
+ * @param insecure - Whether to skip SSL verification
+ * @returns Structured result indicating found/none/error
+ */
+export async function detectGitLabMR(
+  remote: RemoteInfo,
+  token: string,
+  branch: string,
+  insecure?: boolean,
+): Promise<GitLabMRResult> {
+  const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
+  const encodedBranch = encodeURIComponent(branch);
+  const baseUrl = `https://${remote.host}/api/v4/projects/${projectPath}/merge_requests`;
+  const url = `${baseUrl}?source_branch=${encodedBranch}&state=opened`;
+  const tlsOpts: TlsOptions = insecure
+    ? { rejectUnauthorized: false }
+    : await resolveTlsOptions(remote.host);
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  if (isDebug()) {
+    console.error(`[debug] GET ${url}`);
+  }
+
+  let res: { status: number; text: string };
+  try {
+    res = await doHttpsGet(url, headers, tlsOpts);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { kind: "error", reason: `network error: ${msg}` };
+  }
+
+  if (res.status < 200 || res.status >= 300) {
+    const snippet = res.text.slice(0, 200).replace(/\s+/g, " ").trim();
+    return {
+      kind: "error",
+      reason: `GitLab API returned HTTP ${res.status} for ${baseUrl}${snippet ? ` — ${snippet}` : ""}`,
+    };
+  }
+
+  let mrs: Array<{ iid: number }>;
+  try {
+    mrs = JSON.parse(res.text) as Array<{ iid: number }>;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { kind: "error", reason: `could not parse GitLab response: ${msg}` };
+  }
+
+  if (mrs.length > 0) return { kind: "found", iid: mrs[0].iid };
+
+  // Fallback: list all open MRs and match branch case-insensitively, in case
+  // the source_branch filter misses (e.g., MR exists from a fork).
+  //
+  // LIMITATION: Only fetches first 100 MRs (per_page=100). Repos with >100 open
+  // MRs may miss the target. This is acceptable for most use cases, but consider
+  // adding pagination if this becomes a problem.
+  if (isDebug()) {
+    console.error(`[debug] No MR found via source_branch filter, listing all open MRs`);
+  }
+  try {
+    const fallback = await doHttpsGet(`${baseUrl}?state=opened&per_page=100`, headers, tlsOpts);
+    if (fallback.status >= 200 && fallback.status < 300) {
+      const all = JSON.parse(fallback.text) as Array<{ iid: number; source_branch?: string }>;
+      const match = all.find(
+        (m) => typeof m.source_branch === "string" && m.source_branch.toLowerCase() === branch.toLowerCase(),
+      );
+      if (match) return { kind: "found", iid: match.iid };
+    }
+  } catch {
+    // ignore fallback errors — original "none" result is still meaningful
+  }
+
+  return { kind: "none" };
 }
 
 export async function createPR(opts: {
@@ -220,8 +316,13 @@ export async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> 
     try {
       const customCa = readFileSync(caPath, "utf-8");
       return { ca: [...rootCertificates, ...systemCa, customCa] };
-    } catch {
-      // CA file unreadable — fall through
+    } catch (err) {
+      // CA file unreadable — fall through to default trust store.
+      // Log in debug mode to help troubleshoot TLS issues.
+      if (isDebug()) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[debug] Could not read custom CA bundle from git config (http.sslCAInfo=${caPath}): ${msg}`);
+      }
     }
   }
 

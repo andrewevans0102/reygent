@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import { resolveGlobalConfigDir } from "../config.js";
 import { getProjectRoot } from "../dashboard/utils.js";
+import { isDebug } from "../debug.js";
 import {
   getRunsList,
   getRunDetail,
@@ -295,7 +296,12 @@ async function resolveDashboardOutputPath(userOutput: string | undefined): Promi
   try {
     const projectRoot = await getProjectRoot();
     return join(projectRoot, ".reygent", "reygent-dashboard.html");
-  } catch {
+  } catch (err) {
+    // No project root detected (not in git repo or .reygent missing) — fall back to cwd
+    if (isDebug()) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[debug] Could not resolve project root, using cwd: ${msg}`);
+    }
     return join(process.cwd(), "reygent-dashboard.html");
   }
 }

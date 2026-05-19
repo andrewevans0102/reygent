@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
 import { select } from "@inquirer/prompts";
 import { pasteableInput } from "../pasteable-input.js";
@@ -11,10 +10,11 @@ import { createLiveStatus } from "../live-status.js";
 import type { ActivityEvent } from "../live-status.js";
 import { loadEnvFile } from "../env.js";
 import { isDebug } from "../debug.js";
-import { parseRemote, resolveToken, resolveTlsOptions } from "../pr-create.js";
-import type { RemoteInfo, TlsOptions } from "../pr-create.js";
+import { parseRemote, resolveToken, resolveTlsOptions, detectGitLabMR, httpsGet } from "../pr-create.js";
+import type { RemoteInfo, TlsOptions, GitLabMRResult } from "../pr-create.js";
 import type { PlannerOutput } from "../task.js";
 import { TaskError } from "../task.js";
+import { getDefaultBranch } from "../git-utils.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 import { withTelemetry } from "../telemetry-lifecycle.js";
 import { getChesstrace } from "../chesstrace/index.js";
@@ -150,50 +150,6 @@ async function getCurrentBranch(): Promise<string> {
   return branch;
 }
 
-async function getDefaultBranch(): Promise<string> {
-  // 1. Read the symbolic ref (no network)
-  try {
-    const ref = (
-      await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
-    ).trim();
-    return ref.replace("refs/remotes/origin/", "");
-  } catch {
-    // not set — try to set it from the remote
-  }
-
-  // 2. Ask the remote and set origin/HEAD, then re-read
-  try {
-    await exec("git", ["remote", "set-head", "origin", "-a"]);
-    const ref = (
-      await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
-    ).trim();
-    return ref.replace("refs/remotes/origin/", "");
-  } catch {
-    // network/remote unavailable — fall through to local probe
-  }
-
-  // 3. Probe common default branch names — accept either a remote tracking
-  //    ref or a local branch (some clones haven't fetched the default branch).
-  for (const name of ["main", "master", "develop", "trunk"]) {
-    try {
-      await exec("git", ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${name}`]);
-      return name;
-    } catch {
-      // try local
-    }
-    try {
-      await exec("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${name}`]);
-      return name;
-    } catch {
-      // try next candidate
-    }
-  }
-
-  throw new TaskError(
-    "review-comments: cannot determine default branch. Set with: git remote set-head origin <branch>",
-  );
-}
-
 async function detectGitHubPR(): Promise<number | null> {
   try {
     const json = await exec("gh", [
@@ -209,109 +165,6 @@ async function detectGitHubPR(): Promise<number | null> {
   } catch {
     return null;
   }
-}
-
-function httpsGet(
-  url: string,
-  headers: Record<string, string>,
-  tlsOpts?: TlsOptions,
-): Promise<{ status: number; text: string }> {
-  const parsed = new URL(url);
-  return new Promise((resolve, reject) => {
-    const req = httpsRequest(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port || 443,
-        path: parsed.pathname + parsed.search,
-        method: "GET",
-        headers,
-        ...tlsOpts,
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () =>
-          resolve({
-            status: res.statusCode ?? 0,
-            text: Buffer.concat(chunks).toString("utf-8"),
-          }),
-        );
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-type GitLabMRResult =
-  | { kind: "found"; iid: number }
-  | { kind: "none" }
-  | { kind: "error"; reason: string };
-
-async function detectGitLabMR(
-  remote: RemoteInfo,
-  token: string,
-  branch: string,
-  insecure?: boolean,
-): Promise<GitLabMRResult> {
-  const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
-  const encodedBranch = encodeURIComponent(branch);
-  const baseUrl = `https://${remote.host}/api/v4/projects/${projectPath}/merge_requests`;
-  const url = `${baseUrl}?source_branch=${encodedBranch}&state=opened`;
-  const tlsOpts: TlsOptions = insecure
-    ? { rejectUnauthorized: false }
-    : await resolveTlsOptions(remote.host);
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-
-  if (isDebug()) {
-    console.error(chalk.gray(`[debug] GET ${url}`));
-  }
-
-  let res: { status: number; text: string };
-  try {
-    res = await httpsGet(url, headers, tlsOpts);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { kind: "error", reason: `network error: ${msg}` };
-  }
-
-  if (res.status < 200 || res.status >= 300) {
-    const snippet = res.text.slice(0, 200).replace(/\s+/g, " ").trim();
-    return {
-      kind: "error",
-      reason: `GitLab API returned HTTP ${res.status} for ${baseUrl}${snippet ? ` — ${snippet}` : ""}`,
-    };
-  }
-
-  let mrs: Array<{ iid: number }>;
-  try {
-    mrs = JSON.parse(res.text) as Array<{ iid: number }>;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { kind: "error", reason: `could not parse GitLab response: ${msg}` };
-  }
-
-  if (mrs.length > 0) return { kind: "found", iid: mrs[0].iid };
-
-  // Fallback: list all open MRs and match branch case-insensitively, in case
-  // the source_branch filter misses (e.g., MR exists from a fork).
-  if (isDebug()) {
-    console.error(chalk.gray(`[debug] No MR found via source_branch filter, listing all open MRs`));
-  }
-  try {
-    const fallback = await httpsGet(`${baseUrl}?state=opened&per_page=100`, headers, tlsOpts);
-    if (fallback.status >= 200 && fallback.status < 300) {
-      const all = JSON.parse(fallback.text) as Array<{ iid: number; source_branch?: string }>;
-      const match = all.find(
-        (m) => typeof m.source_branch === "string" && m.source_branch.toLowerCase() === branch.toLowerCase(),
-      );
-      if (match) return { kind: "found", iid: match.iid };
-    }
-  } catch {
-    // ignore fallback errors — original "none" result is still meaningful
-  }
-
-  return { kind: "none" };
 }
 
 // ── Comment fetching ──

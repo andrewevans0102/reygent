@@ -8,8 +8,9 @@ import { isDebug } from "../debug.js";
 import { createLiveStatus } from "../live-status.js";
 import type { ActivityEvent } from "../providers/types.js";
 import { loadSpec, SpecError } from "../spec.js";
-import { parseRemote, resolveToken, httpsGet, httpsPost } from "../pr-create.js";
+import { parseRemote, resolveToken, httpsGet, httpsPost, detectGitLabMR } from "../pr-create.js";
 import type { RemoteInfo } from "../pr-create.js";
+import { getDefaultBranch } from "../git-utils.js";
 import {
   runPRReview,
   postPRReviewComment,
@@ -72,50 +73,6 @@ async function getCurrentBranch(): Promise<string> {
   return branch;
 }
 
-async function getDefaultBranch(): Promise<string> {
-  // 1. Read the symbolic ref (no network)
-  try {
-    const ref = (
-      await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
-    ).trim();
-    return ref.replace("refs/remotes/origin/", "");
-  } catch {
-    // not set — try to set it from the remote
-  }
-
-  // 2. Ask the remote and set origin/HEAD, then re-read
-  try {
-    await exec("git", ["remote", "set-head", "origin", "-a"]);
-    const ref = (
-      await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
-    ).trim();
-    return ref.replace("refs/remotes/origin/", "");
-  } catch {
-    // network/remote unavailable — fall through to local probe
-  }
-
-  // 3. Probe common default branch names — accept either a remote tracking
-  //    ref or a local branch (some clones haven't fetched the default branch).
-  for (const name of ["main", "master", "develop", "trunk"]) {
-    try {
-      await exec("git", ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${name}`]);
-      return name;
-    } catch {
-      // try local
-    }
-    try {
-      await exec("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${name}`]);
-      return name;
-    } catch {
-      // try next candidate
-    }
-  }
-
-  throw new TaskError(
-    "review-work: cannot determine default branch. Set with: git remote set-head origin <branch>",
-  );
-}
-
 async function detectGitHubPR(): Promise<number | null> {
   try {
     const json = await exec("gh", [
@@ -131,30 +88,6 @@ async function detectGitHubPR(): Promise<number | null> {
   } catch {
     return null;
   }
-}
-
-async function detectGitLabMR(
-  remote: RemoteInfo,
-  token: string,
-  branch: string,
-  insecure?: boolean,
-): Promise<number | null> {
-  const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
-  const encodedBranch = encodeURIComponent(branch);
-  const url = `https://${remote.host}/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodedBranch}&state=opened`;
-
-  const { status, text } = await httpsGet(
-    url,
-    { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    { insecure },
-  );
-  if (status < 200 || status >= 300) {
-    throw new TaskError(
-      `review-work: GitLab API error ${status} when listing MRs for branch "${branch}": ${text}`,
-    );
-  }
-  const mrs = JSON.parse(text) as Array<{ iid: number }>;
-  return mrs.length > 0 ? mrs[0].iid : null;
 }
 
 async function getGitDiff(baseBranch: string): Promise<string> {
@@ -489,13 +422,14 @@ export async function reviewWorkCommand(
 
       let mrIid: number | null = null;
       if (token) {
-        try {
-          mrIid = await detectGitLabMR(remote, token, branch, options.insecure);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          spinner.warn(chalk.yellow(`Could not check for open MR: ${msg}`));
-          if (isDebug()) console.error(err instanceof Error ? err.stack : err);
+        const mrResult = await detectGitLabMR(remote, token, branch, options.insecure);
+        if (mrResult.kind === "found") {
+          mrIid = mrResult.iid;
+        } else if (mrResult.kind === "error") {
+          spinner.warn(chalk.yellow(`Could not check for open MR: ${mrResult.reason}`));
+          if (isDebug()) console.error(`[debug] GitLab MR detection error: ${mrResult.reason}`);
         }
+        // mrResult.kind === "none" → mrIid remains null
       }
 
       if (mrIid !== null) {

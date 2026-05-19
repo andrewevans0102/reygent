@@ -397,9 +397,39 @@ function getAuthHeaders(remote: RemoteInfo, token: string): Record<string, strin
 // Platform-aware PR/MR operations (replace gh CLI callsites)
 // ---------------------------------------------------------------------------
 
+/**
+ * Ask `gh` for the PR's repo URL and parse it. Makes pr-review fork-aware:
+ * when `origin` is a fork but the PR lives on the upstream, `gh pr view`
+ * returns the upstream URL, which is what API calls must target.
+ *
+ * Returns null when gh is unavailable, no PR exists on the current branch,
+ * or the URL isn't a recognizable GitHub pull URL (e.g. GitLab remotes).
+ */
+async function tryDetectRepoFromGh(): Promise<RemoteInfo | null> {
+  let url: string;
+  try {
+    url = (await exec("gh", ["pr", "view", "--json", "url", "--jq", ".url"])).trim();
+  } catch {
+    return null;
+  }
+  if (!url) return null;
+  const m = url.match(/^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/\d+/);
+  if (!m) return null;
+  const host = m[1];
+  const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
+  return { platform, host, owner: m[2], repo: m[3] };
+}
+
 async function getRemoteAndToken(): Promise<{ remote: RemoteInfo; token: string }> {
-  const remoteUrl = (await exec("git", ["remote", "get-url", "origin"])).trim();
-  const remote = parseRemote(remoteUrl);
+  // Prefer gh's view of the PR repo (fork-aware) when available — handles the
+  // common case where `origin` is a fork but the PR lives on the upstream.
+  // Falls back to parsing `origin` when gh is missing, unauthenticated, or
+  // there's no PR on the current branch (e.g. GitLab, or pre-PR-create flows).
+  let remote = await tryDetectRepoFromGh();
+  if (!remote) {
+    const remoteUrl = (await exec("git", ["remote", "get-url", "origin"])).trim();
+    remote = parseRemote(remoteUrl);
+  }
   const token = await resolveToken(remote.host);
   return { remote, token };
 }

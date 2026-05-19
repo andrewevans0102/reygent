@@ -23,7 +23,9 @@ function ensureRootGitignoreEntries(cwd: string, entries: string[]): void {
   if (toAdd.length === 0) return;
 
   let next = existing;
+  // Ensure existing content ends with a newline
   if (next && !next.endsWith("\n")) next += "\n";
+  // Add blank line separator between existing content and new section
   if (next) next += "\n";
   next += "# Reygent generated files\n";
   next += toAdd.join("\n") + "\n";
