@@ -72,7 +72,7 @@ describe("telemetry-path", () => {
           id: "test-event",
           runId: testRunId,
           timestamp: Date.now(),
-          category: "test",
+          category: "command",
           event: "test_event",
           minLevel: 0,
           data: { test: true },

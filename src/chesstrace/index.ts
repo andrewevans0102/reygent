@@ -70,6 +70,20 @@ export class Chesstrace {
   }
 
   /**
+   * Get the current run ID, or null if startRun() hasn't been called.
+   */
+  getCurrentRunId(): string | null {
+    return this.currentRunId;
+  }
+
+  /**
+   * Get the underlying storage backend, or null if init() hasn't been called.
+   */
+  getBackend(): StorageBackend | null {
+    return this.backend;
+  }
+
+  /**
    * Generate and store new run ID
    */
   async startRun(): Promise<string> {

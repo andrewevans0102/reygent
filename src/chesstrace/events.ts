@@ -95,6 +95,8 @@ export const Events = {
   PIPELINE_END: 'pipeline.end',
   PIPELINE_STAGE_START: 'pipeline.stage_start',
   PIPELINE_STAGE_END: 'pipeline.stage_end',
+  /** Emitted at the start of a resumed run - { parentRunId, resumeFromStage, completedStages } */
+  PIPELINE_RESUME: 'pipeline.resume',
 
   // Usage events (verbose level)
   USAGE_TOKENS: 'usage.tokens',
@@ -177,6 +179,7 @@ export const EVENT_LEVELS: Record<string, TelemetryLevel> = {
   [Events.PIPELINE_END]: TelemetryLevel.standard,
   [Events.PIPELINE_STAGE_START]: TelemetryLevel.standard,
   [Events.PIPELINE_STAGE_END]: TelemetryLevel.standard,
+  [Events.PIPELINE_RESUME]: TelemetryLevel.standard,
 
   // Usage events - verbose
   [Events.USAGE_TOKENS]: TelemetryLevel.verbose,

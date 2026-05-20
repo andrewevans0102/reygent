@@ -90,14 +90,16 @@ describe("agent command with --spec flag", () => {
         name: "dev",
         description: "Development agent",
         systemPrompt: "You are a dev agent.",
+        tools: [],
+        role: "developer",
         provider: "anthropic",
       },
     ]);
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
   });
 
   it("passes spec content to agent system prompt when --spec provided", async () => {
@@ -110,10 +112,10 @@ describe("agent command with --spec flag", () => {
       content: specContent,
     });
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
@@ -138,10 +140,10 @@ describe("agent command with --spec flag", () => {
   });
 
   it("works without --spec flag (backward compatibility)", async () => {
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
@@ -209,10 +211,10 @@ describe("agent command with --spec flag", () => {
       issueType: "Story",
     });
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
@@ -242,10 +244,10 @@ describe("agent command with --spec flag", () => {
       labels: ["bug", "urgent"],
     });
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
@@ -283,10 +285,10 @@ describe("agent command with --spec flag", () => {
       content: specContent,
     });
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
@@ -357,6 +359,8 @@ describe("agent command with --spec flag", () => {
         name: "qa",
         description: "QA agent",
         systemPrompt: "You are QA.",
+        tools: [],
+        role: "quality-engineer",
         provider: "anthropic",
       },
     ]);
@@ -386,10 +390,10 @@ describe("agent command with --spec flag", () => {
       content: specContent,
     });
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
@@ -417,6 +421,8 @@ describe("agent command with --spec flag", () => {
         name: "dev",
         description: "Development agent",
         systemPrompt: "You are a dev agent.",
+        tools: [],
+        role: "developer",
         provider: "anthropic",
         model: "claude-opus-4-6",
       },
@@ -431,10 +437,10 @@ describe("agent command with --spec flag", () => {
       content: specContent,
     });
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
@@ -460,7 +466,7 @@ describe("agent command with --spec flag", () => {
     });
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -505,10 +511,10 @@ describe("agent command with --spec flag", () => {
       content: undefined, // Malformed content
     } as any);
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi
@@ -537,10 +543,10 @@ describe("agent command with --spec flag", () => {
       content: specContent,
     });
 
-    const mockSpawnInteractive = vi.fn(() => Promise.resolve(0));
+    const mockSpawnInteractive = vi.fn((_systemPrompt: string, _model: string) => Promise.resolve(0));
     mockGetProvider.mockReturnValue({
       spawnInteractive: mockSpawnInteractive,
-    });
+    } as unknown as ReturnType<typeof getProvider>);
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi

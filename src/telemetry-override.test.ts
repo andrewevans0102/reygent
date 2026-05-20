@@ -122,7 +122,7 @@ describe("telemetry-override", () => {
         { telemetry: { enabled: true } }
       );
       expect(result.enabled).toBe(true);
-      expect(result.level).toBe("standard"); // DEFAULT_TELEMETRY_CONFIG.level
+      expect(result.level).toBe("verbose"); // DEFAULT_TELEMETRY_CONFIG.level
     });
 
     it("override.disabled=true and override.level both applied", () => {
@@ -137,7 +137,7 @@ describe("telemetry-override", () => {
     it("handles empty config gracefully", () => {
       const result = resolveTelemetryEnabled({}, {});
       expect(result.enabled).toBe(false);
-      expect(result.level).toBe("standard");
+      expect(result.level).toBe("verbose");
     });
 
     it("handles config with no telemetry key", () => {

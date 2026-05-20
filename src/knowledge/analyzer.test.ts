@@ -13,7 +13,7 @@ class MockBackend extends SqliteBackend {
   private mockEvents: TelemetryEvent[] = [];
 
   constructor(events: TelemetryEvent[] = []) {
-    super(":memory:");
+    super("local", ":memory:");
     this.mockEvents = events;
   }
 

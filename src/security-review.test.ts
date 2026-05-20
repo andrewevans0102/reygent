@@ -108,6 +108,62 @@ describe("extractSecurityReviewOutput", () => {
     expect(() => extractSecurityReviewOutput("no json")).toThrow(/failed to extract/);
   });
 
+  it("handles fields in reverse order (findings before severity)", () => {
+    const input = JSON.stringify({
+      findings: [{ severity: "LOW", description: "minor" }],
+      severity: "LOW",
+    });
+    const result = extractSecurityReviewOutput(input);
+    expect(result.severity).toBe("LOW");
+    expect(result.findings).toHaveLength(1);
+  });
+
+  it("handles extra trailing fields after findings", () => {
+    const input = JSON.stringify({
+      severity: "LOW",
+      findings: [],
+      summary: "All clear",
+      notes: "Reviewed 3 files",
+    });
+    const result = extractSecurityReviewOutput(input);
+    expect(result.severity).toBe("LOW");
+    expect(result.findings).toEqual([]);
+  });
+
+  it("handles findings with nested arrays inside them", () => {
+    const input = JSON.stringify({
+      severity: "MEDIUM",
+      findings: [
+        {
+          severity: "MEDIUM",
+          description: "Issue with evidence",
+          evidence: ["line 10", "line 20"],
+          references: ["https://owasp.org/x"],
+        },
+      ],
+    });
+    const result = extractSecurityReviewOutput(input);
+    expect(result.severity).toBe("MEDIUM");
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].description).toBe("Issue with evidence");
+  });
+
+  it("handles description string containing ] character", () => {
+    const input = JSON.stringify({
+      severity: "HIGH",
+      findings: [
+        {
+          severity: "HIGH",
+          description: "Array index out of bounds at users[0]",
+        },
+      ],
+    });
+    const result = extractSecurityReviewOutput(input);
+    expect(result.findings[0].description).toBe(
+      "Array index out of bounds at users[0]",
+    );
+  });
+
   it("throws on invalid severity", () => {
     const input = JSON.stringify({ severity: "ULTRA", findings: [] });
     expect(() => extractSecurityReviewOutput(input)).toThrow(/invalid.*severity/i);

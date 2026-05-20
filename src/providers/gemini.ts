@@ -139,7 +139,7 @@ export const geminiAdapter: ProviderAdapter = {
           const parsed = JSON.parse(stdout) as {
             response?: string;
             text?: string;
-            error?: { message?: string; code?: number; status?: number };
+            error?: { message?: string; code?: number | string; status?: number };
             usage_metadata?: {
               prompt_token_count?: number;
               candidates_token_count?: number;

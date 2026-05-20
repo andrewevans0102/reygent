@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
 import { select } from "@inquirer/prompts";
 import { pasteableInput } from "../pasteable-input.js";
@@ -11,10 +10,11 @@ import { createLiveStatus } from "../live-status.js";
 import type { ActivityEvent } from "../live-status.js";
 import { loadEnvFile } from "../env.js";
 import { isDebug } from "../debug.js";
-import { parseRemote, resolveToken } from "../pr-create.js";
-import type { RemoteInfo } from "../pr-create.js";
+import { parseRemote, resolveToken, detectGitLabMR, httpsGet } from "../pr-create.js";
+import type { RemoteInfo, GitLabMRResult } from "../pr-create.js";
 import type { PlannerOutput } from "../task.js";
 import { TaskError } from "../task.js";
+import { getDefaultBranch } from "../git-utils.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 import { withTelemetry } from "../telemetry-lifecycle.js";
 import { getChesstrace } from "../chesstrace/index.js";
@@ -150,26 +150,6 @@ async function getCurrentBranch(): Promise<string> {
   return branch;
 }
 
-async function getDefaultBranch(): Promise<string> {
-  try {
-    const ref = (
-      await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"])
-    ).trim();
-    return ref.replace("refs/remotes/origin/", "");
-  } catch {
-    try {
-      const branches = (
-        await exec("git", ["branch", "-r", "--list", "origin/main", "origin/master"])
-      ).trim();
-      const match = branches.match(/origin\/(main|master)/);
-      if (match) return match[1];
-    } catch {
-      // ignore
-    }
-    return "main";
-  }
-}
-
 async function detectGitHubPR(): Promise<number | null> {
   try {
     const json = await exec("gh", [
@@ -182,67 +162,6 @@ async function detectGitHubPR(): Promise<number | null> {
     ]);
     const num = parseInt(json.trim(), 10);
     return isNaN(num) || num <= 0 ? null : num;
-  } catch {
-    return null;
-  }
-}
-
-interface TlsOptions {
-  rejectUnauthorized?: boolean;
-}
-
-function httpsGet(
-  url: string,
-  headers: Record<string, string>,
-  tlsOpts?: TlsOptions,
-): Promise<{ status: number; text: string }> {
-  const parsed = new URL(url);
-  return new Promise((resolve, reject) => {
-    const req = httpsRequest(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port || 443,
-        path: parsed.pathname + parsed.search,
-        method: "GET",
-        headers,
-        ...tlsOpts,
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () =>
-          resolve({
-            status: res.statusCode ?? 0,
-            text: Buffer.concat(chunks).toString("utf-8"),
-          }),
-        );
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-async function detectGitLabMR(
-  remote: RemoteInfo,
-  token: string,
-  branch: string,
-  insecure?: boolean,
-): Promise<number | null> {
-  const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
-  const encodedBranch = encodeURIComponent(branch);
-  const url = `https://${remote.host}/api/v4/projects/${projectPath}/merge_requests?source_branch=${encodedBranch}&state=opened`;
-  const tlsOpts: TlsOptions = insecure ? { rejectUnauthorized: false } : {};
-
-  try {
-    const { status, text } = await httpsGet(
-      url,
-      { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      tlsOpts,
-    );
-    if (status < 200 || status >= 300) return null;
-    const mrs = JSON.parse(text) as Array<{ iid: number }>;
-    return mrs.length > 0 ? mrs[0].iid : null;
   } catch {
     return null;
   }
@@ -328,12 +247,11 @@ async function fetchGitLabComments(
 ): Promise<ReviewComment[]> {
   const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
   const url = `https://${remote.host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=100`;
-  const tlsOpts: TlsOptions = insecure ? { rejectUnauthorized: false } : {};
 
   const { status, text } = await httpsGet(
     url,
     { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    tlsOpts,
+    { insecure },
   );
   if (status < 200 || status >= 300) {
     throw new TaskError(`review-comments: GitLab API error ${status}: ${text}`);
@@ -749,13 +667,24 @@ export async function reviewCommentsCommand(
         process.exit(1);
       }
 
-      const mrIid = await detectGitLabMR(remote, token, branch, options.insecure);
-      if (mrIid === null) {
-        spinner.fail(chalk.red("No open MR found for this branch"));
+      const mrResult = await detectGitLabMR(remote, token, branch, options.insecure);
+      if (mrResult.kind === "error") {
+        spinner.fail(chalk.red(`Could not check for open MR: ${mrResult.reason}`));
+        console.log();
+        console.log(
+          chalk.yellow(
+            "Tip: verify the GitLab token has api scope and the remote URL is correct. Re-run with --debug to see the request URL.",
+          ),
+        );
+        process.exit(1);
+      }
+      if (mrResult.kind === "none") {
+        spinner.fail(chalk.red(`No open MR found for branch ${branch}`));
         console.log();
         console.log(chalk.yellow("Cannot pull review comments without a PR or MR."));
         process.exit(1);
       }
+      const mrIid = mrResult.iid;
       spinner.succeed(chalk.green(`Found MR !${mrIid}`));
 
       console.log();
@@ -929,7 +858,7 @@ export async function reviewCommentsCommand(
         let retryCount = 0;
         while (retryCount < maxRetries) {
           retryCount++;
-          pushSpinner.text = `pre-commit hook failed, re-staging and retrying (${retryCount}/${maxRetries})...`;
+          pushSpinner.setLabel(`pre-commit hook failed, re-staging and retrying (${retryCount}/${maxRetries})...`);
           try {
             await exec("git", ["add", "-A"]);
             await exec("git", ["commit", "-m", commitMessage]);

@@ -47,27 +47,39 @@ export async function getAgentFailures(
   for (const run of filtered) {
     const events = await backend.query({ runId: run.runId });
 
-    // Find agent spawns and errors
-    const agentSpawns = events.filter((e) => e.event === "agent.spawn");
-    const errors = events.filter((e) => e.category === "error");
+    // An agent failure is an agent.complete with success === false.
+    // Spawning-and-then-some-later-error is not enough — a pipeline that runs
+    // 8 agents successfully and then fails at pr-create would otherwise blame
+    // all 8 agents for the pipeline error.
+    const failedCompletions = events.filter(
+      (e) => e.event === "agent.complete" && e.data?.success === false
+    );
 
-    if (errors.length === 0) {
-      continue; // No failures in this run
+    if (failedCompletions.length === 0) {
+      continue;
     }
 
-    // For each agent spawn, check if there are errors after it
-    for (const spawn of agentSpawns) {
-      const agentName = spawn.data.agent as string;
+    const errors = events.filter((e) => e.category === "error");
+
+    for (const completion of failedCompletions) {
+      const agentName = completion.data.agent as string | undefined;
       if (!agentName) continue;
 
-      // Find errors that occurred after this agent spawned
-      const agentErrors = errors.filter((e) => e.timestamp > spawn.timestamp);
+      const stage = completion.data.stage as string | undefined;
 
-      if (agentErrors.length === 0) {
-        continue; // No errors for this agent
-      }
+      // Errors are associated with a failed agent when their data.agent
+      // matches, or when they share the same stage as the failed completion.
+      // The stage match catches pipeline-level errors like
+      // "error.task {stage: 'implement', agent: 'implement'}" which describe
+      // why the agent at that stage failed.
+      const associatedErrors = errors.filter((e) => {
+        const errAgent = e.data?.agent as string | undefined;
+        const errStage = e.data?.stage as string | undefined;
+        if (errAgent === agentName) return true;
+        if (stage && errStage === stage) return true;
+        return false;
+      });
 
-      // Initialize agent failure summary if needed
       if (!agentFailures.has(agentName)) {
         agentFailures.set(agentName, {
           agent: agentName,
@@ -81,11 +93,22 @@ export async function getAgentFailures(
       const summary = agentFailures.get(agentName)!;
       summary.failureCount++;
       summary.runIds.push(run.runId);
-      summary.lastSeen = Math.max(summary.lastSeen, spawn.timestamp);
+      summary.lastSeen = Math.max(summary.lastSeen, completion.timestamp);
 
-      // Track error types
-      for (const error of agentErrors) {
-        const errorType = error.event; // e.g., "error.task", "error.provider"
+      // Use the completion event itself as the primary failure indicator so
+      // the breakdown isn't empty when associated errors don't carry an
+      // agent/stage tag.
+      summary.errorTypes.set(
+        "agent.complete",
+        (summary.errorTypes.get("agent.complete") ?? 0) + 1
+      );
+      allErrorTypes.set(
+        "agent.complete",
+        (allErrorTypes.get("agent.complete") ?? 0) + 1
+      );
+
+      for (const error of associatedErrors) {
+        const errorType = error.event;
         summary.errorTypes.set(
           errorType,
           (summary.errorTypes.get(errorType) ?? 0) + 1

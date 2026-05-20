@@ -345,7 +345,7 @@ async function enableCommand() {
     const config = loadConfig();
 
     config.telemetry = config.telemetry ?? {
-      level: "standard",
+      level: "verbose",
       backend: "sqlite",
       retention: 30,
     };
@@ -377,7 +377,7 @@ async function disableCommand() {
     const config = loadConfig();
 
     config.telemetry = config.telemetry ?? {
-      level: "standard",
+      level: "verbose",
       backend: "sqlite",
       retention: 30,
     };

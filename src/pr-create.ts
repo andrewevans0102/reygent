@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
-import { rootCertificates } from "node:tls";
+import { rootCertificates, getCACertificates } from "node:tls";
 import { loadEnvFile } from "./env.js";
 import type { BranchType as CanonicalBranchType } from "./branch-type.js";
 import type { SpecPayload } from "./spec.js";
@@ -9,6 +9,7 @@ import type { PRCreateOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
+import { isDebug } from "./debug.js";
 
 function exec(
   cmd: string,
@@ -80,26 +81,133 @@ export async function resolveToken(host: string): Promise<string> {
   });
 }
 
+function splitOwnerAndRepo(host: string, path: string): RemoteInfo | null {
+  // Owner can span multiple segments (GitLab subgroups: group/subgroup/repo).
+  // Repo is always the last segment.
+  let p = path.replace(/\/+$/, "");
+  if (p.endsWith(".git")) p = p.slice(0, -4);
+  const idx = p.lastIndexOf("/");
+  if (idx <= 0 || idx === p.length - 1) return null;
+  const owner = p.slice(0, idx);
+  const repo = p.slice(idx + 1);
+  if (!owner || !repo) return null;
+  // Platform detection is heuristic-based: hostname containing "gitlab" → GitLab,
+  // otherwise GitHub. This could theoretically misidentify a GitHub Enterprise
+  // instance with "gitlab" in its hostname, but this is unlikely in practice.
+  const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
+  return { platform, host, owner, repo };
+}
+
 export function parseRemote(remoteUrl: string): RemoteInfo {
   const url = remoteUrl.trim();
 
-  // SSH: git@github.com:owner/repo.git
-  const sshMatch = url.match(/^git@([^:]+):([^/]+)\/([^/.]+?)(\.git)?$/);
+  // SSH: git@host:path/to/repo[.git]
+  const sshMatch = url.match(/^git@([^:]+):(.+)$/);
   if (sshMatch) {
-    const host = sshMatch[1];
-    const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
-    return { platform, host, owner: sshMatch[2], repo: sshMatch[3] };
+    const result = splitOwnerAndRepo(sshMatch[1], sshMatch[2]);
+    if (result) return result;
   }
 
-  // HTTPS: https://github.com/owner/repo.git
-  const httpsMatch = url.match(/^https?:\/\/([^/]+)\/([^/]+)\/([^/.]+?)(\.git)?$/);
+  // HTTPS: https://host/path/to/repo[.git]
+  const httpsMatch = url.match(/^https?:\/\/([^/]+)\/(.+)$/);
   if (httpsMatch) {
-    const host = httpsMatch[1];
-    const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
-    return { platform, host, owner: httpsMatch[2], repo: httpsMatch[3] };
+    const result = splitOwnerAndRepo(httpsMatch[1], httpsMatch[2]);
+    if (result) return result;
   }
 
   throw new TaskError(`pr-create: cannot parse remote URL: ${url}`);
+}
+
+/**
+ * Result from GitLab MR detection.
+ * - found: MR exists with the given IID
+ * - none: No MR found for the branch
+ * - error: API call failed (network error, auth error, etc.)
+ */
+export type GitLabMRResult =
+  | { kind: "found"; iid: number }
+  | { kind: "none" }
+  | { kind: "error"; reason: string };
+
+/**
+ * Detects an open GitLab MR for the given branch.
+ * Returns a structured result instead of throwing, allowing callers to handle
+ * different failure modes appropriately (network errors vs. no MR found).
+ *
+ * @param remote - Parsed remote info
+ * @param token - GitLab API token
+ * @param branch - Branch name to search for
+ * @param insecure - Whether to skip SSL verification
+ * @returns Structured result indicating found/none/error
+ */
+export async function detectGitLabMR(
+  remote: RemoteInfo,
+  token: string,
+  branch: string,
+  insecure?: boolean,
+): Promise<GitLabMRResult> {
+  const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
+  const encodedBranch = encodeURIComponent(branch);
+  const baseUrl = `https://${remote.host}/api/v4/projects/${projectPath}/merge_requests`;
+  const url = `${baseUrl}?source_branch=${encodedBranch}&state=opened`;
+  const tlsOpts: TlsOptions = insecure
+    ? { rejectUnauthorized: false }
+    : await resolveTlsOptions(remote.host);
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  if (isDebug()) {
+    console.error(`[debug] GET ${url}`);
+  }
+
+  let res: { status: number; text: string };
+  try {
+    res = await doHttpsGet(url, headers, tlsOpts);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { kind: "error", reason: `network error: ${msg}` };
+  }
+
+  if (res.status < 200 || res.status >= 300) {
+    const snippet = res.text.slice(0, 200).replace(/\s+/g, " ").trim();
+    return {
+      kind: "error",
+      reason: `GitLab API returned HTTP ${res.status} for ${baseUrl}${snippet ? ` — ${snippet}` : ""}`,
+    };
+  }
+
+  let mrs: Array<{ iid: number }>;
+  try {
+    mrs = JSON.parse(res.text) as Array<{ iid: number }>;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { kind: "error", reason: `could not parse GitLab response: ${msg}` };
+  }
+
+  if (mrs.length > 0) return { kind: "found", iid: mrs[0].iid };
+
+  // Fallback: list all open MRs and match branch case-insensitively, in case
+  // the source_branch filter misses (e.g., MR exists from a fork).
+  //
+  // LIMITATION: Only fetches first 100 MRs (per_page=100). Repos with >100 open
+  // MRs may miss the target. This is acceptable for most use cases, but consider
+  // adding pagination if this becomes a problem.
+  if (isDebug()) {
+    console.error(`[debug] No MR found via source_branch filter, listing all open MRs`);
+  }
+  try {
+    const fallback = await doHttpsGet(`${baseUrl}?state=opened&per_page=100`, headers, tlsOpts);
+    if (fallback.status >= 200 && fallback.status < 300) {
+      const all = JSON.parse(fallback.text) as Array<{ iid: number; source_branch?: string }>;
+      const match = all.find(
+        (m) => typeof m.source_branch === "string" && m.source_branch.toLowerCase() === branch.toLowerCase(),
+      );
+      if (match) return { kind: "found", iid: match.iid };
+    }
+  } catch {
+    // ignore fallback errors — original "none" result is still meaningful
+  }
+
+  return { kind: "none" };
 }
 
 export async function createPR(opts: {
@@ -136,6 +244,20 @@ export interface TlsOptions {
  * @param hostname - Optional hostname to check for URL-specific git config overrides
  * @returns TLS options object for use with Node's https.request
  */
+/**
+ * Returns the OS trust store CAs (macOS Keychain, Windows cert store,
+ * Linux ca-certificates). Always returns an array (empty on failure or
+ * older Node). This is how `git` effectively trusts corporate CAs on
+ * macOS — Node ignores them by default.
+ */
+function getSystemCaCerts(): string[] {
+  try {
+    return getCACertificates("system");
+  } catch {
+    return [];
+  }
+}
+
 export async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> {
   // Respect GIT_SSL_NO_VERIFY env var
   if (process.env.GIT_SSL_NO_VERIFY) return { rejectUnauthorized: false };
@@ -186,14 +308,26 @@ export async function resolveTlsOptions(hostname?: string): Promise<TlsOptions> 
     return null;
   })();
 
+  // Always trust the OS trust store (macOS Keychain etc.) in addition to
+  // Node's bundled CAs — corporate certs typically live there.
+  const systemCa = getSystemCaCerts();
+
   if (caPath) {
     try {
       const customCa = readFileSync(caPath, "utf-8");
-      // Combine Node's default CAs with the custom bundle so both are trusted
-      return { ca: [...rootCertificates, customCa] };
-    } catch {
-      // CA file unreadable — fall through to defaults
+      return { ca: [...rootCertificates, ...systemCa, customCa] };
+    } catch (err) {
+      // CA file unreadable — fall through to default trust store.
+      // Log in debug mode to help troubleshoot TLS issues.
+      if (isDebug()) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[debug] Could not read custom CA bundle from git config (http.sslCAInfo=${caPath}): ${msg}`);
+      }
     }
+  }
+
+  if (systemCa.length > 0) {
+    return { ca: [...rootCertificates, ...systemCa] };
   }
 
   return {};
@@ -234,7 +368,7 @@ function doHttpsPost(
   });
 }
 
-function isSslError(err: unknown): boolean {
+export function isSslError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const code = (err as NodeJS.ErrnoException).code ?? "";
   return (
@@ -277,6 +411,63 @@ export async function httpsPost(
   } catch (err) {
     if (!opts?.insecure && isSslError(err)) {
       return doHttpsPost(url, headers, body, { rejectUnauthorized: false });
+    }
+    throw err;
+  }
+}
+
+function doHttpsGet(
+  url: string,
+  headers: Record<string, string>,
+  tlsOpts: TlsOptions,
+): Promise<{ status: number; text: string }> {
+  const parsed = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: parsed.pathname + parsed.search,
+        method: "GET",
+        headers,
+        ...tlsOpts,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString("utf-8"),
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+/**
+ * Makes an HTTPS GET request with automatic TLS configuration and SSL error retry.
+ * Mirrors httpsPost's behavior: respects git config CA bundles and sslVerify,
+ * and retries once with verification disabled on SSL errors.
+ */
+export async function httpsGet(
+  url: string,
+  headers: Record<string, string>,
+  opts?: { insecure?: boolean },
+): Promise<{ status: number; text: string }> {
+  const parsed = new URL(url);
+  const tlsOpts: TlsOptions = opts?.insecure
+    ? { rejectUnauthorized: false }
+    : await resolveTlsOptions(parsed.hostname);
+
+  try {
+    return await doHttpsGet(url, headers, tlsOpts);
+  } catch (err) {
+    if (!opts?.insecure && isSslError(err)) {
+      return doHttpsGet(url, headers, { rejectUnauthorized: false });
     }
     throw err;
   }

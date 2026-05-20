@@ -68,14 +68,19 @@ export class DualBackend implements StorageBackend {
     }
   }
 
-  async query(filter?: EventFilter): Promise<TelemetryEvent[]> {
+  async query(filter: EventFilter): Promise<TelemetryEvent[]> {
     // Query from local only (project-specific data)
     return this.localBackend.query(filter);
   }
 
-  async getRunSummaries(limit?: number): Promise<RunSummary[]> {
-    // Get summaries from local only
-    return this.localBackend.getRunSummaries(limit);
+  async listRuns(): Promise<RunSummary[]> {
+    // List runs from local only
+    return this.localBackend.listRuns();
+  }
+
+  async prune(olderThan: number): Promise<number> {
+    // Prune local only; global is managed independently
+    return this.localBackend.prune(olderThan);
   }
 
   getEvents(): TelemetryEvent[] {

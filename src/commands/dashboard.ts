@@ -1,10 +1,12 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
-import { join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import { resolveGlobalConfigDir } from "../config.js";
 import { getProjectRoot } from "../dashboard/utils.js";
+import { isDebug } from "../debug.js";
 import {
   getRunsList,
   getRunDetail,
@@ -44,7 +46,7 @@ export function registerDashboardCommand(program: Command): void {
 
         spinner.stop();
 
-        if (runs.length === 0) {
+        if (runs.runs.length === 0) {
           console.log(chalk.yellow("No runs found"));
           return;
         }
@@ -211,7 +213,7 @@ export function registerDashboardCommand(program: Command): void {
   dashboard
     .command("generate")
     .description("Generate standalone HTML dashboard file")
-    .option("--output <file>", "Output file path", "reygent-dashboard.html")
+    .option("--output <file>", "Output file path (default: <projectRoot>/.reygent/reygent-dashboard.html)")
     .option("--open", "Open dashboard in browser after generation")
     .action(async (options) => {
       const spinner = ora("Generating dashboard...").start();
@@ -248,22 +250,26 @@ export function registerDashboardCommand(program: Command): void {
         spinner.text = "Collecting dashboard data...";
         const data = await collectDashboardData(localBackend, globalBackend);
 
+        // Resolve output path: explicit --output wins; otherwise default to
+        // <projectRoot>/.reygent/reygent-dashboard.html, falling back to cwd
+        // if no project root is detected.
+        const outputPath = await resolveDashboardOutputPath(options.output);
+        mkdirSync(dirname(outputPath), { recursive: true });
+
         // Generate HTML
         spinner.text = "Generating HTML...";
-        await generateHTML(data, options.output);
+        await generateHTML(data, outputPath);
 
         // Build summary
         const scopes: string[] = [];
         if (data.local) scopes.push(chalk.cyan(`Local: ${data.local.runs.length} runs`));
         if (data.global) scopes.push(chalk.cyan(`Global: ${data.global.runs.length} runs`));
 
-        const fullPath = join(process.cwd(), options.output);
-
         spinner.succeed(
           chalk.green(
-            `Dashboard generated: ${chalk.cyan(options.output)}\n` +
+            `Dashboard generated: ${chalk.cyan(outputPath)}\n` +
               `  Scopes: ${scopes.join(", ")}\n` +
-              `  Path: ${chalk.gray(`file://${fullPath}`)}`
+              `  Path: ${chalk.gray(`file://${outputPath}`)}`
           )
         );
 
@@ -272,7 +278,7 @@ export function registerDashboardCommand(program: Command): void {
           const { exec } = await import("node:child_process");
           const openCmd = process.platform === "darwin" ? "open" :
                          process.platform === "win32" ? "start" : "xdg-open";
-          exec(`${openCmd} "${fullPath}"`);
+          exec(`${openCmd} "${outputPath}"`);
           console.log(chalk.gray(`  Opened in browser`));
         }
       } catch (err) {
@@ -280,6 +286,24 @@ export function registerDashboardCommand(program: Command): void {
         process.exit(1);
       }
     });
+}
+
+async function resolveDashboardOutputPath(userOutput: string | undefined): Promise<string> {
+  if (userOutput) {
+    return isAbsolute(userOutput) ? userOutput : resolve(process.cwd(), userOutput);
+  }
+
+  try {
+    const projectRoot = await getProjectRoot();
+    return join(projectRoot, ".reygent", "reygent-dashboard.html");
+  } catch (err) {
+    // No project root detected (not in git repo or .reygent missing) — fall back to cwd
+    if (isDebug()) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[debug] Could not resolve project root, using cwd: ${msg}`);
+    }
+    return join(process.cwd(), "reygent-dashboard.html");
+  }
 }
 
 /**

@@ -146,14 +146,14 @@ describe("UsageTracker", () => {
 
       const calls = emitSpy.mock.calls.filter((call) => call[0] === Events.USAGE_COST);
       expect(calls.length).toBe(1);
-      expect(calls[0][1]).toMatchObject({
+      expect(calls[0]![1]).toMatchObject({
         agent: "dev",
         stage: "implement",
         costUsd: 0.05,
       });
       // Verify cacheSavingsUsd is calculated correctly
       const expectedSavings = calculateCacheSavings(usage);
-      const cacheSavingsUsd = calls[0][1].cacheSavingsUsd as number;
+      const cacheSavingsUsd = (calls[0]![1] as { cacheSavingsUsd: number }).cacheSavingsUsd;
       expect(cacheSavingsUsd).toBeGreaterThan(0);
       expect(cacheSavingsUsd).toBeCloseTo(expectedSavings);
     });
@@ -191,7 +191,7 @@ describe("UsageTracker", () => {
       });
 
       const calls = emitSpy.mock.calls.filter((call) => call[0] === Events.USAGE_COST);
-      expect(calls[0][1].cacheSavingsUsd).toBe(0);
+      expect((calls[0]![1] as { cacheSavingsUsd: number }).cacheSavingsUsd).toBe(0);
     });
 
     it("emits both events for single record call", () => {

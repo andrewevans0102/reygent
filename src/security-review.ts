@@ -84,21 +84,19 @@ export function extractSecurityReviewOutput(
   stdout: string,
 ): SecurityReviewOutput {
   const cleaned = extractJSON(stdout);
-  const match = cleaned.match(
-    /\{\s*"severity"\s*:\s*"[^"]+"\s*,\s*"findings"\s*:\s*\[[\s\S]*?\]\s*\}/,
-  );
-  if (!match) {
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
     throw new TaskError(
       "security-review: failed to extract JSON output from agent response",
     );
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(match[0]);
-  } catch {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new TaskError(
-      "security-review: extracted block is not valid JSON",
+      "security-review: extracted output is not a JSON object",
     );
   }
 

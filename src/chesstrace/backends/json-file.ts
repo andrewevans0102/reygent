@@ -179,15 +179,18 @@ export class JsonFileBackend implements StorageBackend {
     }
 
     if (filter.minLevel !== undefined) {
-      filtered = filtered.filter((e) => e.minLevel >= filter.minLevel);
+      const minLevel = filter.minLevel;
+      filtered = filtered.filter((e) => e.minLevel >= minLevel);
     }
 
     if (filter.startTime !== undefined) {
-      filtered = filtered.filter((e) => e.timestamp >= filter.startTime);
+      const startTime = filter.startTime;
+      filtered = filtered.filter((e) => e.timestamp >= startTime);
     }
 
     if (filter.endTime !== undefined) {
-      filtered = filtered.filter((e) => e.timestamp <= filter.endTime);
+      const endTime = filter.endTime;
+      filtered = filtered.filter((e) => e.timestamp <= endTime);
     }
 
     // Sort by timestamp ascending

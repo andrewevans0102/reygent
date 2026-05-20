@@ -37,9 +37,9 @@ describe("loadSpec", () => {
   beforeEach(() => {
     savedEnv = {
       LINEAR_API_KEY: process.env.LINEAR_API_KEY,
-      JIRA_URL: process.env.JIRA_URL,
-      JIRA_EMAIL: process.env.JIRA_EMAIL,
-      JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
+      JIRA_BASE_URL: process.env.JIRA_BASE_URL,
+      JIRA_USERNAME: process.env.JIRA_USERNAME,
+      JIRA_TOKEN: process.env.JIRA_TOKEN,
     };
     vi.spyOn(process, "cwd").mockReturnValue("/fake");
     mockIsLinearUrl.mockReturnValue(false);
@@ -69,9 +69,9 @@ describe("loadSpec", () => {
 
   it("routes issue key to Linear when LINEAR_API_KEY set", async () => {
     process.env.LINEAR_API_KEY = "lin_api_test";
-    delete process.env.JIRA_URL;
-    delete process.env.JIRA_EMAIL;
-    delete process.env.JIRA_API_TOKEN;
+    delete process.env.JIRA_BASE_URL;
+    delete process.env.JIRA_USERNAME;
+    delete process.env.JIRA_TOKEN;
 
     mockReadLinearSpec.mockResolvedValue({
       source: "linear",
@@ -87,9 +87,9 @@ describe("loadSpec", () => {
 
   it("routes issue key to Jira when Jira configured", async () => {
     delete process.env.LINEAR_API_KEY;
-    process.env.JIRA_URL = "https://test.atlassian.net";
-    process.env.JIRA_EMAIL = "a@b.com";
-    process.env.JIRA_API_TOKEN = "tok";
+    process.env.JIRA_BASE_URL = "https://test.atlassian.net";
+    process.env.JIRA_USERNAME = "a@b.com";
+    process.env.JIRA_TOKEN = "tok";
 
     mockReadJiraSpec.mockResolvedValue({
       source: "jira",
@@ -105,9 +105,9 @@ describe("loadSpec", () => {
 
   it("prefers Jira when both configured", async () => {
     process.env.LINEAR_API_KEY = "lin_api_test";
-    process.env.JIRA_URL = "https://test.atlassian.net";
-    process.env.JIRA_EMAIL = "a@b.com";
-    process.env.JIRA_API_TOKEN = "tok";
+    process.env.JIRA_BASE_URL = "https://test.atlassian.net";
+    process.env.JIRA_USERNAME = "a@b.com";
+    process.env.JIRA_TOKEN = "tok";
 
     mockReadJiraSpec.mockResolvedValue({
       source: "jira",
@@ -123,9 +123,9 @@ describe("loadSpec", () => {
 
   it("throws when issue key and no tracker configured", async () => {
     delete process.env.LINEAR_API_KEY;
-    delete process.env.JIRA_URL;
-    delete process.env.JIRA_EMAIL;
-    delete process.env.JIRA_API_TOKEN;
+    delete process.env.JIRA_BASE_URL;
+    delete process.env.JIRA_USERNAME;
+    delete process.env.JIRA_TOKEN;
 
     await expect(loadSpec("PROJ-1")).rejects.toThrow(/no issue tracker/i);
   });
@@ -197,9 +197,9 @@ describe("loadSpec with explicit provider", () => {
 
   it("provider param bypasses env-based auto-detection", async () => {
     // Even with Jira env vars set, provider=linear should use Linear
-    process.env.JIRA_URL = "https://test.atlassian.net";
-    process.env.JIRA_EMAIL = "a@b.com";
-    process.env.JIRA_API_TOKEN = "tok";
+    process.env.JIRA_BASE_URL = "https://test.atlassian.net";
+    process.env.JIRA_USERNAME = "a@b.com";
+    process.env.JIRA_TOKEN = "tok";
 
     mockReadLinearSpec.mockResolvedValue({
       source: "linear",
@@ -213,9 +213,9 @@ describe("loadSpec with explicit provider", () => {
     expect(mockReadJiraSpec).not.toHaveBeenCalled();
     expect(result.source).toBe("linear");
 
-    delete process.env.JIRA_URL;
-    delete process.env.JIRA_EMAIL;
-    delete process.env.JIRA_API_TOKEN;
+    delete process.env.JIRA_BASE_URL;
+    delete process.env.JIRA_USERNAME;
+    delete process.env.JIRA_TOKEN;
   });
 });
 

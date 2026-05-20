@@ -1,12 +1,23 @@
 import Table from "cli-table3";
 import chalk from "chalk";
 import type { StorageBackend } from "../chesstrace/backends/types.js";
-import { formatRelativeTime, formatDuration, parseSince } from "./utils.js";
+import {
+  formatRelativeTime,
+  formatDuration,
+  parseSince,
+  deriveRunStatus,
+} from "./utils.js";
 
 export interface RunsListOptions {
   limit?: number;
   since?: string;
   withAgents?: boolean;
+  /**
+   * When true, runs with errors that fall outside the limit window are still
+   * included in the result. The runs list is no longer guaranteed to be
+   * exactly `limit` items long.
+   */
+  includeErrors?: boolean;
 }
 
 export interface RunsListResult {
@@ -51,15 +62,7 @@ export async function getRunsList(
     sorted.map(async (run) => {
       const events = await backend.query({ runId: run.runId });
 
-      // Determine status
-      let status: "success" | "failure" | "incomplete" = "incomplete";
-      const commandEnd = events.find((e) => e.event === "command.end");
-      const pipelineEnd = events.find((e) => e.event === "pipeline.end");
-      const hasErrors = events.some((e) => e.category === "error");
-
-      if (commandEnd || pipelineEnd) {
-        status = hasErrors ? "failure" : "success";
-      }
+      const status = deriveRunStatus(events);
 
       // Count agents
       const agentSpawns = events.filter((e) => e.event === "agent.spawn");
@@ -90,8 +93,21 @@ export async function getRunsList(
     ? summaries.filter((s) => s.agentCount > 0)
     : summaries;
 
-  // Limit results after filtering
-  const limited = agentFiltered.slice(0, limit);
+  // Limit results after filtering. When includeErrors is set, also append any
+  // runs with errors that fall outside the limit window — otherwise the
+  // dashboard's "Failures" filter and agent-failure drill-down can reference
+  // runs that aren't in the visible list.
+  const topN = agentFiltered.slice(0, limit);
+  let limited = topN;
+  if (options.includeErrors) {
+    const topIds = new Set(topN.map((s) => s.runId));
+    const extraErrors = agentFiltered.filter(
+      (s) => s.errorCount > 0 && !topIds.has(s.runId)
+    );
+    if (extraErrors.length > 0) {
+      limited = [...topN, ...extraErrors];
+    }
+  }
 
   // Create table
   const table = new Table({

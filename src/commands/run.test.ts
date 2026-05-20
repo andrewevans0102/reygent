@@ -66,6 +66,13 @@ vi.mock("../chesstrace/backends/sqlite.js", () => ({
     close: vi.fn().mockResolvedValue(undefined),
   })),
 }));
+vi.mock("./run-snapshot.js", () => ({
+  saveSnapshot: vi.fn(),
+  loadSnapshot: vi.fn(() => null),
+  deleteSnapshot: vi.fn(),
+  listUnfinishedSnapshots: vi.fn(() => []),
+  getRunsDir: vi.fn((root: string) => `${root}/.reygent/runs`),
+}));
 
 import { loadSpec } from "../spec.js";
 import { runPlanner } from "../planner.js";
@@ -81,6 +88,7 @@ describe("run command - Chesstrace instrumentation", () => {
   let mockChesstrace: {
     init: ReturnType<typeof vi.fn>;
     startRun: ReturnType<typeof vi.fn>;
+    getCurrentRunId: ReturnType<typeof vi.fn>;
     emit: ReturnType<typeof vi.fn>;
     flush: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
@@ -94,6 +102,7 @@ describe("run command - Chesstrace instrumentation", () => {
     mockChesstrace = {
       init: vi.fn().mockResolvedValue(undefined),
       startRun: vi.fn().mockResolvedValue("test-run-id"),
+      getCurrentRunId: vi.fn().mockReturnValue("test-run-id"),
       emit: vi.fn(),
       flush: vi.fn().mockResolvedValue(undefined),
       close: vi.fn().mockResolvedValue(undefined),
@@ -577,7 +586,7 @@ describe("run command - Chesstrace instrumentation", () => {
     it("emits stage_end events for stages that ran before security gate failure", async () => {
       // Make security review fail after unit and functional tests pass
       vi.mocked(runSecurityReview).mockResolvedValue({
-        output: { severity: "CRITICAL", findings: [{ severity: "CRITICAL", file: "test.ts", line: 1, description: "XSS" }] },
+        output: { severity: "CRITICAL", findings: [{ severity: "CRITICAL", description: "XSS", location: { file: "test.ts", line: 1 } }] },
         passed: false,
         usage: { costUsd: 0.01 },
       });

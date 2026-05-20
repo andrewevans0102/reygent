@@ -1,7 +1,7 @@
 import Table from "cli-table3";
 import chalk from "chalk";
 import type { StorageBackend } from "../chesstrace/backends/types.js";
-import { parseSince } from "./utils.js";
+import { parseSince, deriveRunStatus } from "./utils.js";
 
 export interface TrendOptions {
   since?: string;
@@ -57,19 +57,10 @@ export async function getTrendData(
   const runStatuses = await Promise.all(
     sorted.map(async (run) => {
       const events = await backend.query({ runId: run.runId });
-      const commandEnd = events.find((e) => e.event === "command.end");
-      const pipelineEnd = events.find((e) => e.event === "pipeline.end");
-      const hasErrors = events.some((e) => e.category === "error");
-
-      let status: "success" | "failure" | "incomplete" = "incomplete";
-      if (commandEnd || pipelineEnd) {
-        status = hasErrors ? "failure" : "success";
-      }
-
       return {
         runId: run.runId,
         timestamp: run.startTime,
-        status,
+        status: deriveRunStatus(events),
       };
     })
   );

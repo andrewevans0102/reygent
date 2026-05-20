@@ -1,19 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getRunDetail } from "./run-detail.js";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
-import type { TelemetryEvent } from "../chesstrace/events.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
+import type { TelemetryEvent, TelemetryCategory } from "../chesstrace/events.js";
 
 describe("getRunDetail", () => {
-  let mockBackend: TelemetryBackend;
+  let mockBackend: StorageBackend;
 
   beforeEach(() => {
     mockBackend = {
       init: vi.fn(),
-      emit: vi.fn(),
+      write: vi.fn(),
+      writeBatch: vi.fn(),
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
       query: vi.fn(),
+      prune: vi.fn(),
     };
   });
 

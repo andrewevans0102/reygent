@@ -41,7 +41,7 @@ reygent dashboard generate [options]
 ```
 
 **Options:**
-- `--output <file>` - Output file path (default: `reygent-dashboard.html`)
+- `--output <file>` - Output file path (default: `<projectRoot>/.reygent/reygent-dashboard.html`, falls back to `reygent-dashboard.html` in the current directory if no `.reygent` project root is found)
 - `--open` - Open dashboard in browser after generation
 
 **Example:**

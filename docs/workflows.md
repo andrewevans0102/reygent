@@ -237,6 +237,45 @@ sequenceDiagram
     R->>R: Update TaskContext
 ```
 
+## Resuming a Failed Run
+
+After every completed stage, `reygent run` writes a snapshot to `.reygent/runs/<runId>.json` capturing the run options and the accumulated `TaskContext`. If a run fails or is interrupted, `reygent continue` replays from that snapshot.
+
+```mermaid
+flowchart TD
+    A[reygent run] --> B[Stage completes]
+    B --> C[Write snapshot\n.reygent/runs/runId.json]
+    C --> D{More stages?}
+    D -->|Yes| B
+    D -->|No - pr-review done| E[Run complete]
+
+    B -.->|Stage fails or\nprocess interrupted| F[Snapshot has\nfailedStage or\nincomplete stages]
+
+    F --> G[reygent continue]
+    G --> H{--run-id provided?}
+    H -->|Yes| I[Resolve by prefix]
+    H -->|No| J{TTY?}
+    J -->|Yes| K[Interactive picker]
+    J -->|No| L[Error: --run-id required]
+
+    I --> M[Re-invoke reygent run\nwith snapshot's runOptions\nand _resume context]
+    K --> M
+
+    M --> N[Skip completed stages]
+    N --> B
+
+    style E fill:#22c55e,color:#fff
+    style L fill:#ef4444,color:#fff
+    style F fill:#f59e0b,color:#000
+```
+
+**Key behaviors:**
+
+- Snapshots are listed as "unfinished" if any stage failed or the final `pr-review` stage hasn't completed.
+- The picker shows the 5 most recent unfinished runs, sorted by last update time.
+- CLI flags on `continue` (`--auto-approve`, `--verbose`) override the snapshot's stored values; everything else (provider, model, type, security threshold, retry count) is inherited from the original run.
+- Snapshots are not auto-pruned after success — clean up `.reygent/runs/` manually if it grows.
+
 ## Complete Data Flow
 
 How `TaskContext` flows through the reygent workflow:

@@ -1,4 +1,5 @@
-import type { StorageBackend, TelemetryEvent } from "../chesstrace/backends/types.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
+import type { TelemetryEvent } from "../chesstrace/events.js";
 import { getRunsList } from "./runs-list.js";
 import { getTrendData } from "./trends.js";
 import { getAgentFailures } from "./agent-failures.js";
@@ -16,6 +17,10 @@ export interface RunWithEvents extends RunSummaryRow {
   events: TelemetryEvent[];
 }
 
+export type SerializableAgentFailureSummary = Omit<AgentFailureSummary, "errorTypes"> & {
+  errorTypes: { [k: string]: number };
+};
+
 export interface ScopeData {
   runs: RunWithEvents[];
   trends: {
@@ -25,17 +30,21 @@ export interface ScopeData {
     failureCount: number;
     successRate: number;
   };
-  agentFailures: AgentFailureSummary[];
+  agentFailures: SerializableAgentFailureSummary[];
 }
 
 /**
  * Collect all dashboard data from a backend
  */
 async function collectScopeData(backend: StorageBackend): Promise<ScopeData> {
-  // Get runs (last 90 days, up to 100 to keep file size reasonable)
+  // Get runs (last 90 days, up to 100 to keep file size reasonable). Always
+  // include runs with errors even if they fall outside the limit window — the
+  // dashboard's "Failures" filter and agent-failure drill-down depend on the
+  // failed runs being present in the displayed list.
   const runsResult = await getRunsList(backend, {
     limit: 100,
     since: "90d",
+    includeErrors: true,
   });
 
   // Fetch full events for each run
@@ -62,17 +71,11 @@ async function collectScopeData(backend: StorageBackend): Promise<ScopeData> {
     limit: 20,
   });
 
-  // Calculate aggregate stats
-  // Use unique failed run IDs from agent failures (covers runs outside the 100-run display window)
+  // Count distinct failed runs from the displayed set (includeErrors above
+  // guarantees that error runs from the time window are present here).
   const failedRunIds = new Set<string>();
-  for (const agent of failuresResult.agents) {
-    for (const rid of agent.runIds) {
-      failedRunIds.add(rid);
-    }
-  }
-  // Also include runs in display window that have errors
   for (const r of runsWithEvents) {
-    if (r.status === 'failure' || r.errorCount > 0) {
+    if (r.status === "failure" || r.errorCount > 0) {
       failedRunIds.add(r.runId);
     }
   }

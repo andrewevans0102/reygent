@@ -35,9 +35,9 @@ describe("Config telemetry integration", () => {
       expect(config.telemetry?.enabled).toBeUndefined();
     });
 
-    it("default telemetry has level standard", () => {
+    it("default telemetry has level verbose", () => {
       const config = loadConfig();
-      expect(config.telemetry?.level).toBe("standard");
+      expect(config.telemetry?.level).toBe("verbose");
     });
 
     it("default telemetry has backend sqlite", () => {
@@ -322,7 +322,7 @@ describe("Config telemetry integration", () => {
       const configDefaultWins = loadConfig();
       expect(configDefaultWins.telemetry).toEqual(DEFAULT_TELEMETRY_CONFIG);
       expect(configDefaultWins.telemetry?.enabled).toBeUndefined();
-      expect(configDefaultWins.telemetry?.level).toBe("standard");
+      expect(configDefaultWins.telemetry?.level).toBe("verbose");
       expect(configDefaultWins.telemetry?.retention).toBe(30);
     });
   });

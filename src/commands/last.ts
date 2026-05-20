@@ -73,7 +73,7 @@ function displaySummary(runId: string, events: TelemetryEvent[]): void {
   const endTime = pipelineEnd?.timestamp ?? events[events.length - 1]?.timestamp ?? 0;
   const duration = endTime - startTime;
 
-  const totalCost = costEvents.reduce((sum, e) => sum + (e.data.costUsd as number), 0);
+  const totalCost = costEvents.reduce((sum, e) => sum + ((e.data.costUsd as number | undefined) ?? 0), 0);
   const agents = [...new Set(agentSpawns.map(e => e.data.agent as string))];
 
   console.log();

@@ -9,6 +9,7 @@ import type { ReygentConfig } from "../config.js";
 import type { AgentConfig } from "../agents.js";
 import { builtinAgents } from "../agents.js";
 import { PROVIDER_NAMES, getProvider } from "../providers/index.js";
+import type { ProviderName } from "../providers/index.js";
 import { isDebug } from "../debug.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 
@@ -201,7 +202,7 @@ async function runConfig(): Promise<void> {
   let selectedProvider = await select({
     message: "Default provider:",
     choices: providerChoices,
-    default: rawConfig.provider as string | undefined,
+    default: rawConfig.provider as ProviderName | undefined,
   });
 
   // Warn if selected provider unavailable
@@ -322,7 +323,11 @@ async function runConfig(): Promise<void> {
       console.log(chalk.gray("  Provider:"), chalk.cyan(agentProvider));
       console.log(chalk.gray("  Model:   "), chalk.cyan(agentModel));
 
-      const hasOverride = agent.provider !== undefined || agent.model !== undefined;
+      // An "override" means the agent's provider/model differs from the top-level default —
+      // since we now auto-fill matching values on every agent, presence alone isn't enough.
+      const hasOverride =
+        (agent.provider !== undefined && agent.provider !== selectedProvider) ||
+        (agent.model !== undefined && agent.model !== selectedModel);
       resetTerminalForInput();
       const action = await select({
         message: `Configure ${agent.name}:`,
@@ -348,7 +353,7 @@ async function runConfig(): Promise<void> {
       const agentProviderChoice = await select({
         message: `Provider for ${agent.name}:`,
         choices: providerChoices,
-        default: agent.provider ?? selectedProvider,
+        default: (agent.provider as ProviderName | undefined) ?? selectedProvider,
       });
 
       // Warn if selected provider unavailable
@@ -455,7 +460,7 @@ async function runConfig(): Promise<void> {
   for (const updatedAgent of updatedAgents) {
     const rawAgent = rawAgents.find((r) => r.name === updatedAgent.name);
     if (rawAgent) {
-      // Update or remove provider/model fields
+      // Apply customization or clear
       if (updatedAgent.provider !== undefined) {
         rawAgent.provider = updatedAgent.provider;
       } else {
@@ -467,6 +472,13 @@ async function runConfig(): Promise<void> {
         delete rawAgent.model;
       }
     }
+  }
+
+  // Always show provider/model on every agent — fill in top-level defaults where missing
+  // so the resulting config.json explicitly states what each agent will use.
+  for (const rawAgent of rawAgents) {
+    if (rawAgent.provider === undefined) rawAgent.provider = selectedProvider;
+    if (rawAgent.model === undefined) rawAgent.model = selectedModel;
   }
 
   // 9. Write config (atomic write to prevent TOCTOU race)

@@ -922,12 +922,26 @@
             ${agentRuns.map(run => {
               if (!run || !run.events) return '';
 
-              // Find errors in this run related to the agent
-              const errors = run.events.filter(e =>
-                (e.category === 'error' && e.data && e.data.agent === agent.agent) ||
-                (e.category === 'error' && !e.data?.agent) ||
-                (e.data && e.data.agent === agent.agent && e.data.error)
+              // Mirror the attribution in agent-failures.ts: an agent failure
+              // is signalled by agent.complete success=false. Associated
+              // errors share either the agent name or the failed stage.
+              const failedCompletions = run.events.filter(e =>
+                e.event === 'agent.complete' &&
+                e.data?.agent === agent.agent &&
+                e.data?.success === false
               );
+              const failedStages = new Set(
+                failedCompletions.map(e => e.data?.stage).filter(Boolean)
+              );
+              const errors = run.events.filter(e => {
+                if (e.event === 'agent.complete' &&
+                    e.data?.agent === agent.agent &&
+                    e.data?.success === false) return true;
+                if (e.category !== 'error') return false;
+                if (e.data?.agent === agent.agent) return true;
+                if (e.data?.stage && failedStages.has(e.data.stage)) return true;
+                return false;
+              });
 
               if (errors.length === 0) return '';
 
@@ -951,6 +965,10 @@
                       if (err.data) {
                         if (err.data.error) errorMsg = err.data.error;
                         else if (err.data.message) errorMsg = err.data.message;
+                        else if (err.event === 'agent.complete') {
+                          errorMsg = `Agent exited with code ${err.data.exitCode ?? '?'}` +
+                            (err.data.duration ? ` after ${formatDuration(err.data.duration)}` : '');
+                        }
                       }
 
                       let contextData = [];
@@ -958,6 +976,9 @@
                         if (err.data.stage) contextData.push(`stage: ${err.data.stage}`);
                         if (err.data.tool) contextData.push(`tool: ${err.data.tool}`);
                         if (err.data.provider) contextData.push(`provider: ${err.data.provider}`);
+                        if (err.data.agent && err.data.agent !== agent.agent) {
+                          contextData.push(`reported by: ${err.data.agent}`);
+                        }
                       }
 
                       return `

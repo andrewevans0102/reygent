@@ -97,7 +97,7 @@ export async function loadSpec(source: string, provider?: SpecProvider): Promise
       loadEnvFile();
       if (isLinearUrl(source)) {
         const issueId = extractLinearId(source);
-        result = readLinearSpec(issueId);
+        result = await readLinearSpec(issueId);
       } else {
         result = await readLinearSpec(source);
       }
@@ -112,7 +112,7 @@ export async function loadSpec(source: string, provider?: SpecProvider): Promise
     } else if (ISSUE_KEY_PATTERN.test(source)) {
       loadEnvFile();
       const hasLinear = !!process.env.LINEAR_API_KEY;
-      const hasJira = !!(process.env.JIRA_URL && process.env.JIRA_EMAIL && process.env.JIRA_API_TOKEN);
+      const hasJira = !!(process.env.JIRA_BASE_URL && process.env.JIRA_USERNAME && process.env.JIRA_TOKEN);
 
       if (hasLinear && !hasJira) {
         result = await readLinearSpec(source);
@@ -125,9 +125,9 @@ export async function loadSpec(source: string, provider?: SpecProvider): Promise
             `  For Linear:\n` +
             `    LINEAR_API_KEY=lin_api_...\n\n` +
             `  For Jira:\n` +
-            `    JIRA_URL=https://your-domain.atlassian.net\n` +
-            `    JIRA_EMAIL=your-email@example.com\n` +
-            `    JIRA_API_TOKEN=your-jira-token`,
+            `    JIRA_BASE_URL=https://your-domain.atlassian.net\n` +
+            `    JIRA_USERNAME=your-email@example.com\n` +
+            `    JIRA_TOKEN=your-jira-token`,
         );
       }
     } else {

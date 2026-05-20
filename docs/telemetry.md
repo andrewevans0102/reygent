@@ -118,17 +118,24 @@ reygent knowledge export --output knowledge-backup.tar.gz
 ```json
 {
   "telemetry": {
-    "enabled": true,
-    "global_enabled": true,        // Write to global DB (set false for security)
-    "retention_days": 180,         // Event retention (default 180)
-    "error_retention_days": 90,    // Error log retention (default 90)
-    "auto_prune": true,            // Auto-prune on analyze commands
-    "debug": false,                // Enable verbose logging
-    "max_db_size_mb": 50,          // Max DB size before pruning (default 50)
-    "max_events_per_run": 10000    // Max events per run (prevents spam)
+    "enabled": true,        // false to disable; omit to prompt on first interactive run
+    "level": "verbose",     // "minimal" | "standard" | "verbose"
+    "backend": "sqlite",    // storage backend (sqlite is the only supported value today)
+    "retention": 30         // days of events kept before pruning
   }
 }
 ```
+
+**Defaults when the `telemetry` block is missing or partially specified:**
+
+| Field | Default | Notes |
+|---|---|---|
+| `enabled` | `undefined` | Triggers a one-time opt-in prompt on the first interactive run. `reygent telemetry enable`/`disable` set it explicitly. |
+| `level` | `verbose` | Captures `llm.*`, `usage.*`, `performance.*`, and `tool.invoke.full` in addition to standard events. Per-run override: `--telemetry-level <minimal\|standard\|verbose>` or `--telemetry-verbose`. |
+| `backend` | `sqlite` | Stored at `.reygent/chesstrace.db`. |
+| `retention` | `30` | Days. Pruned on init and via `reygent telemetry prune`. |
+
+These defaults live in `DEFAULT_TELEMETRY_CONFIG` in `src/chesstrace/config.ts` and are applied by `loadConfig()` whenever a field is missing.
 
 **Environment variables:**
 ```bash
@@ -176,7 +183,7 @@ Indexes: `run_id`, `timestamp`, `category`, `event`.
 - `error.unhandled`, `error.validation`, `error.task`, `error.parse`, `error.provider`
 - `tool.summary`, `knowledge.prevented_failure`
 
-*Standard (default level):*
+*Standard:*
 - `agent.spawn`, `agent.complete`, `agent.timeout`
 - `pipeline.start`, `pipeline.end`, `pipeline.stage_start`, `pipeline.stage_end`
 - `gate.result`, `gate.retry`
@@ -184,7 +191,7 @@ Indexes: `run_id`, `timestamp`, `category`, `event`.
 - `spec.fetch`, `spec.parse`
 - `tool.invoke`, `knowledge.consulted`, `knowledge.success`
 
-*Verbose (diagnostic):*
+*Verbose (default level, diagnostic):*
 - `llm.request`, `llm.response`, `llm.token_usage`
 - `performance.metric`, `performance.duration`
 - `usage.tokens`, `usage.cost`

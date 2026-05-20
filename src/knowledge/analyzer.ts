@@ -290,7 +290,7 @@ ${commonSequence.map((tool, i) => `${i + 1}. ${tool}`).join('\n')}`
  */
 function extractToolSequence(events: TelemetryEvent[], runId: string, agent: string): string[] {
   const agentEvents = events.filter(
-    (e) => e.runId === runId && e.data.agent === agent && e.event === Events.TOOL_CALL
+    (e) => e.runId === runId && e.data.agent === agent && e.event === Events.AGENT_TOOL_CALL
   );
 
   return agentEvents

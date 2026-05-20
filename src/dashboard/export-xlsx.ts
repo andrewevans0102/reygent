@@ -1,7 +1,8 @@
 import { writeFileSync } from "fs";
 import * as XLSX from "xlsx";
-import type { StorageBackend } from "../chesstrace/backends/types.js";
-import { parseSince, formatTimestamp } from "./utils.js";
+import type { RunSummary, StorageBackend } from "../chesstrace/backends/types.js";
+import type { TelemetryEvent } from "../chesstrace/events.js";
+import { parseSince, formatTimestamp, deriveRunStatus } from "./utils.js";
 
 export interface ExportOptions {
   scope: "local" | "global";
@@ -17,8 +18,8 @@ export async function exportToXLSX(
   backend: StorageBackend,
   options: ExportOptions
 ): Promise<string> {
-  let events;
-  let runs;
+  let events: TelemetryEvent[];
+  let runs: RunSummary[];
 
   if (options.runId) {
     // Export specific run
@@ -26,7 +27,16 @@ export async function exportToXLSX(
     if (events.length === 0) {
       throw new Error(`Run ${options.runId} not found`);
     }
-    runs = [{ runId: options.runId }];
+    const startTime = events[0]?.timestamp ?? 0;
+    const endTime = events[events.length - 1]?.timestamp ?? startTime;
+    const categories = Array.from(new Set(events.map((e) => e.category)));
+    runs = [{
+      runId: options.runId,
+      startTime,
+      endTime,
+      eventCount: events.length,
+      categories,
+    }];
   } else {
     // Export all runs in time range
     const startTime = options.since ? parseSince(options.since) : undefined;
@@ -84,13 +94,7 @@ export async function exportToXLSX(
         runEvents[runEvents.length - 1]?.timestamp ?? run.endTime ?? startTime;
       const duration = endTime - startTime;
 
-      const commandEnd = runEvents.find((e) => e.event === "command.end");
-      const pipelineEnd = runEvents.find((e) => e.event === "pipeline.end");
-      const hasErrors = runEvents.some((e) => e.category === "error");
-      let status = "incomplete";
-      if (commandEnd || pipelineEnd) {
-        status = hasErrors ? "failure" : "success";
-      }
+      const status = deriveRunStatus(runEvents);
 
       const agentCount = runEvents.filter((e) => e.event === "agent.spawn").length;
       const errorCount = runEvents.filter((e) => e.category === "error").length;

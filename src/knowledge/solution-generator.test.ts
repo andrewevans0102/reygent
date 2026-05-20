@@ -41,8 +41,8 @@ function makeBackend(events: TelemetryEvent[] = []): SqliteBackend {
 function makeAdapter(spawnResult?: Partial<{ stdout: string; exitCode: number }>) {
   return {
     name: "claude" as const,
-    isAvailable: vi.fn(() => Promise.resolve({ available: true })),
-    spawn: vi.fn(() =>
+    isAvailable: vi.fn(() => Promise.resolve({ available: true } as { available: boolean; reason?: string })),
+    spawn: vi.fn((_opts: { prompt: string; allowedTools?: string[]; timeoutMs?: number; quiet?: boolean; agentName?: string }) =>
       Promise.resolve({
         stdout: "Check import paths and ensure no circular references between modules. Move shared types to a dedicated types file.",
         exitCode: 0,

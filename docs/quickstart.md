@@ -36,9 +36,9 @@ Create a `.env` file in your target project root:
 LINEAR_API_KEY=lin_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Jira
-JIRA_URL=https://your-company.atlassian.net
-JIRA_EMAIL=you@company.com
-JIRA_API_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
+JIRA_BASE_URL=https://your-company.atlassian.net
+JIRA_USERNAME=you@company.com
+JIRA_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ## 4. Initialize Your Project
@@ -179,6 +179,8 @@ See [Skills](./skills.md) for the full guide.
 | `reygent agent dev` | Start interactive session with an agent |
 | `reygent agent dev --spec spec.md` | Interactive session with spec context |
 | `reygent run --spec spec.md` | Run full 7-stage workflow |
+| `reygent continue` | Resume a previously failed or interrupted run |
+| `reygent dashboard generate --open` | Generate and open an HTML telemetry dashboard |
 | `reygent skills list` | Browse available skills in the registry |
 | `reygent skills add <name>` | Install a skill from the registry |
 | `reygent skills remove <name>` | Remove an installed skill |

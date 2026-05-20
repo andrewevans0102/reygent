@@ -132,6 +132,7 @@ vi.mock("../live-status.js", async (importOriginal) => {
         info: (msg: string) => spinner.info(msg),
         stop: () => spinner.stop(),
         start: () => spinner.start(),
+        setLabel: (_label: string) => {},
       };
     }),
   };
@@ -215,9 +216,9 @@ describe("review-comments TUI cursor alignment", () => {
 
     // Suppress console output during tests
     vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(process, "exit").mockImplementation((code?: number) => {
+    vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
       throw new Error(`process.exit(${code})`);
-    });
+    }) as (code?: string | number | null) => never);
   });
 
   afterEach(() => {

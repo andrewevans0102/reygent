@@ -81,6 +81,7 @@ function formatCost(usd: number): string {
  * Format percentage
  */
 function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) return "0%";
   return `${Math.round(value * 100)}%`;
 }
 
@@ -528,8 +529,8 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
     console.log(chalk.bold(`Cost Analysis (last ${days} days, ${totalRuns} runs)`));
     console.log();
 
-    // Calculate total costs
-    const totalCost = costEvents.reduce((sum, e) => sum + (e.data.costUsd as number), 0);
+    // Calculate total costs (costUsd may be undefined when the provider doesn't report it)
+    const totalCost = costEvents.reduce((sum, e) => sum + ((e.data.costUsd as number | undefined) ?? 0), 0);
 
     // Separate successful vs failed run costs
     const successRunIds = new Set(
@@ -537,12 +538,13 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
     );
     const successCost = costEvents
       .filter(e => successRunIds.has(e.runId))
-      .reduce((sum, e) => sum + (e.data.costUsd as number), 0);
+      .reduce((sum, e) => sum + ((e.data.costUsd as number | undefined) ?? 0), 0);
     const failedCost = totalCost - successCost;
+    const safeShare = (part: number) => (totalCost > 0 ? part / totalCost : 0);
 
     console.log(chalk.bold("Total Spend:"), chalk.cyan(formatCost(totalCost)));
-    console.log(`Successful runs: ${formatCost(successCost)} (${formatPercent(successCost / totalCost)})`);
-    console.log(`Failed runs: ${formatCost(failedCost)} (${formatPercent(failedCost / totalCost)} - wasted)`);
+    console.log(`Successful runs: ${formatCost(successCost)} (${formatPercent(safeShare(successCost))})`);
+    console.log(`Failed runs: ${formatCost(failedCost)} (${formatPercent(safeShare(failedCost))} - wasted)`);
     console.log();
 
     // Cost by stage (if available)
@@ -552,7 +554,7 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
 
       for (const event of costEvents) {
         const agent = event.data.agent as string || "unknown";
-        const cost = event.data.costUsd as number;
+        const cost = (event.data.costUsd as number | undefined) ?? 0;
         const existing = agentCosts.get(agent) || { cost: 0, runs: new Set() };
         existing.cost += cost;
         existing.runs.add(event.runId);
@@ -563,8 +565,8 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
         .sort((a, b) => b[1].cost - a[1].cost);
 
       for (const [agent, data] of sortedAgents) {
-        const percent = (data.cost / totalCost) * 100;
-        const avgCost = data.cost / data.runs.size;
+        const percent = totalCost > 0 ? (data.cost / totalCost) * 100 : 0;
+        const avgCost = data.runs.size > 0 ? data.cost / data.runs.size : 0;
         console.log(`  ${agent}: ${formatCost(data.cost)} (${percent.toFixed(0)}%) - ${data.runs.size} runs, avg ${formatCost(avgCost)}/run`);
       }
       console.log();
@@ -574,7 +576,7 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
 
       for (const event of costEvents) {
         const stage = (event.data.stage as string) ?? "unknown";
-        const cost = event.data.costUsd as number;
+        const cost = (event.data.costUsd as number | undefined) ?? 0;
         const existing = stageCosts.get(stage) || { cost: 0, runs: new Set() };
         existing.cost += cost;
         existing.runs.add(event.runId);
@@ -585,8 +587,8 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
         .sort((a, b) => b[1].cost - a[1].cost);
 
       for (const [stage, data] of sortedStages) {
-        const percent = (data.cost / totalCost) * 100;
-        const avgCost = data.cost / data.runs.size;
+        const percent = totalCost > 0 ? (data.cost / totalCost) * 100 : 0;
+        const avgCost = data.runs.size > 0 ? data.cost / data.runs.size : 0;
         console.log(`  ${stage}: ${formatCost(data.cost)} (${percent.toFixed(0)}%) - ${data.runs.size} runs, avg ${formatCost(avgCost)}/run`);
       }
       console.log();
@@ -606,7 +608,7 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
       for (const event of costEvents) {
         if (failedRunIds.has(event.runId)) {
           const existing = failureRunCosts.get(event.runId) || 0;
-          failureRunCosts.set(event.runId, existing + (event.data.costUsd as number));
+          failureRunCosts.set(event.runId, existing + ((event.data.costUsd as number | undefined) ?? 0));
         }
       }
 
@@ -635,21 +637,20 @@ export async function analyzeCosts(options: AnalyzeOptions): Promise<void> {
     const recommendations: string[] = [];
 
     if (failedCost > 0) {
-      const wastePercent = (failedCost / totalCost) * 100;
-      recommendations.push(`• ${formatPercent(failedCost / totalCost)} spend on failed runs - see 'reygent analyze failures' to reduce`);
+      recommendations.push(`• ${formatPercent(safeShare(failedCost))} spend on failed runs - see 'reygent analyze failures' to reduce`);
     }
 
     const gateRetries = allEvents.filter(e => e.event === Events.GATE_RETRY);
-    if (gateRetries.length > 0) {
+    if (gateRetries.length > 0 && days > 0) {
       const monthlyCost = (totalCost / days) * 30;
       const retryCostEst = monthlyCost * RETRY_COST_ESTIMATE_MULTIPLIER;
       recommendations.push(`• Gate retry loops cost ~${formatCost(retryCostEst)}/month - review gate criteria`);
     }
 
     const potentialSavings = failedCost * POTENTIAL_SAVINGS_MULTIPLIER;
-    if (potentialSavings > 0) {
+    if (potentialSavings > 0 && days > 0) {
       const monthlySavings = (potentialSavings / days) * 30;
-      recommendations.push(`\nPotential Savings: ${formatCost(monthlySavings)}/month (${formatPercent(potentialSavings / totalCost)})`);
+      recommendations.push(`\nPotential Savings: ${formatCost(monthlySavings)}/month (${formatPercent(safeShare(potentialSavings))})`);
     }
 
     if (recommendations.length === 0) {
@@ -769,7 +770,7 @@ export async function analyzeAgents(options: AnalyzeOptions): Promise<void> {
       const agent = cost.data.agent as string;
       const stats = agentStats.get(agent);
       if (stats) {
-        stats.totalCost += cost.data.costUsd as number;
+        stats.totalCost += (cost.data.costUsd as number | undefined) ?? 0;
       }
     }
 
@@ -842,7 +843,7 @@ export async function analyzeAgents(options: AnalyzeOptions): Promise<void> {
           // Find costs for this completion
           const runCosts = costEvents.filter(c => c.runId === complete.runId && c.data.agent === agent);
           for (const costEvent of runCosts) {
-            perf.totalCost += costEvent.data.costUsd as number;
+            perf.totalCost += (costEvent.data.costUsd as number | undefined) ?? 0;
           }
 
           modelPerformance.set(model, perf);
