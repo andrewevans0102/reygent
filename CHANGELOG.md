@@ -1,3 +1,24 @@
+# [1.3.0](https://github.com/andrewevans0102/reygent/compare/v1.2.1...v1.3.0) (2026-05-20)
+
+
+### Bug Fixes
+
+* add chesstrace.db entries to root .gitignore during init ([b8e1b19](https://github.com/andrewevans0102/reygent/commit/b8e1b19d69cdfc33aeb6531b51a5a2a1db9e6f22))
+* address PR review comments ([caffb73](https://github.com/andrewevans0102/reygent/commit/caffb7347ca35221dd004ab488d0c515ab478da0))
+* **dashboard:** fixing issues with dashboard visualization ([0ee3da9](https://github.com/andrewevans0102/reygent/commit/0ee3da9f84968399de84df4e1b9179745f7c1376))
+* drop brittle regex in security-review JSON extraction ([3978f23](https://github.com/andrewevans0102/reygent/commit/3978f23b42ab14b48a2474595fdd655e035077b0))
+* fixes for analyze cost commands ([0dfbfd9](https://github.com/andrewevans0102/reygent/commit/0dfbfd973fac46ded9af603210d93b2a8e7c1160))
+* misc fixes for jira, Vertex AI usage, and GitLab support ([c8fa877](https://github.com/andrewevans0102/reygent/commit/c8fa8774b00b800f956cf085b8feb4b784f68945))
+* resolve default branch when origin/HEAD is unset ([1da550d](https://github.com/andrewevans0102/reygent/commit/1da550d67564b228af4794e79f4eedca5dfdf722))
+
+
+### Features
+
+* add `reygent continue` to resume failed or interrupted runs ([5cb43d4](https://github.com/andrewevans0102/reygent/commit/5cb43d4d7991a2deffaa4cf97adc22cf918e1b08))
+* always populate provider and model on every agent in config.json ([f99ad99](https://github.com/andrewevans0102/reygent/commit/f99ad99c4eb657b00438a43b87a1a523aa9f3cea))
+* default telemetry level to verbose ([fd024be](https://github.com/andrewevans0102/reygent/commit/fd024be473000d10cf37d93b6a71659a32b9b08c))
+* prompt for default provider, platform, and model on init ([d9119dc](https://github.com/andrewevans0102/reygent/commit/d9119dc03d1423342d13eba9f655d5be562ecc02))
+
 ## [1.2.1](https://github.com/andrewevans0102/reygent/compare/v1.2.0...v1.2.1) (2026-05-18)
 
 
