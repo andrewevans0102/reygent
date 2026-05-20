@@ -1,3 +1,30 @@
+import type { TelemetryEvent } from "../chesstrace/events.js";
+
+export type RunStatus = "success" | "failure" | "incomplete";
+
+/**
+ * Determine run status from its events.
+ *
+ * command.end / pipeline.end mark a clean completion; if errors were also
+ * recorded, the run failed. command.error fires when the command body threw,
+ * which is always a failure.
+ */
+export function deriveRunStatus(events: TelemetryEvent[]): RunStatus {
+  const completed = events.some(
+    (e) => e.event === "command.end" || e.event === "pipeline.end"
+  );
+  const threw = events.some((e) => e.event === "command.error");
+  const hasErrors = events.some((e) => e.category === "error");
+
+  if (completed) {
+    return hasErrors ? "failure" : "success";
+  }
+  if (threw) {
+    return "failure";
+  }
+  return "incomplete";
+}
+
 /**
  * Parse duration string like "30d", "7d" into timestamp
  */

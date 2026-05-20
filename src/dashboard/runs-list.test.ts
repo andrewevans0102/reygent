@@ -227,6 +227,106 @@ describe("getRunsList", () => {
     expect(result.runs).toHaveLength(10);
   });
 
+  it("marks command.error runs as failure", async () => {
+    const run = {
+      runId: "run-1",
+      startTime: 1000,
+      endTime: 2000,
+      eventCount: 2,
+      categories: ["command"] as TelemetryCategory[],
+    };
+
+    vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
+    vi.mocked(mockBackend.query).mockResolvedValue([
+      {
+        id: "1",
+        runId: "run-1",
+        timestamp: 1000,
+        category: "command",
+        event: "command.start",
+        minLevel: 0,
+        data: { command: "spec" },
+      },
+      {
+        id: "2",
+        runId: "run-1",
+        timestamp: 1500,
+        category: "command",
+        event: "command.error",
+        minLevel: 0,
+        data: { command: "spec", error: "boom" },
+      },
+    ] as TelemetryEvent[]);
+
+    const result = await getRunsList(mockBackend);
+
+    expect(result.runs[0].status).toBe("failure");
+  });
+
+  it("includeErrors keeps error runs that fall outside the limit window", async () => {
+    // 12 runs total, the oldest two have errors. With limit=10 the error runs
+    // would normally be dropped; includeErrors should bring them back.
+    const runs = Array.from({ length: 12 }, (_, i) => ({
+      runId: `run-${i}`,
+      startTime: 1000 + i, // newer = higher index
+      endTime: 2000 + i,
+      eventCount: 5,
+      categories: ["command"] as TelemetryCategory[],
+    }));
+
+    vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
+    vi.mocked(mockBackend.query).mockImplementation(async (q) => {
+      const runId = (q as { runId: string }).runId;
+      // run-0 and run-1 are the two oldest and have errors
+      if (runId === "run-0" || runId === "run-1") {
+        return [
+          {
+            id: `${runId}-1`,
+            runId,
+            timestamp: 1000,
+            category: "command",
+            event: "command.end",
+            minLevel: 0,
+            data: {},
+          },
+          {
+            id: `${runId}-2`,
+            runId,
+            timestamp: 1500,
+            category: "error",
+            event: "error.task",
+            minLevel: 0,
+            data: { message: "x" },
+          },
+        ] as TelemetryEvent[];
+      }
+      return [
+        {
+          id: `${runId}-1`,
+          runId,
+          timestamp: 1000,
+          category: "command",
+          event: "command.end",
+          minLevel: 0,
+          data: {},
+        },
+      ] as TelemetryEvent[];
+    });
+
+    const withoutFlag = await getRunsList(mockBackend, { limit: 10 });
+    expect(withoutFlag.runs).toHaveLength(10);
+    expect(withoutFlag.runs.some((r) => r.runId === "run-0")).toBe(false);
+    expect(withoutFlag.runs.some((r) => r.runId === "run-1")).toBe(false);
+
+    const withFlag = await getRunsList(mockBackend, {
+      limit: 10,
+      includeErrors: true,
+    });
+    expect(withFlag.runs).toHaveLength(12);
+    expect(withFlag.runs.some((r) => r.runId === "run-0")).toBe(true);
+    expect(withFlag.runs.some((r) => r.runId === "run-1")).toBe(true);
+  });
+
   it("filters by time range when since is provided", async () => {
     const run1 = {
       runId: "run-1",

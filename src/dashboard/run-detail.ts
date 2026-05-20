@@ -1,7 +1,7 @@
 import Table from "cli-table3";
 import chalk from "chalk";
 import type { StorageBackend } from "../chesstrace/backends/types.js";
-import { formatTimestamp, formatDuration } from "./utils.js";
+import { formatTimestamp, formatDuration, deriveRunStatus } from "./utils.js";
 
 export interface RunDetailResult {
   runId: string;
@@ -42,14 +42,7 @@ export async function getRunDetail(
   const endTime = events[events.length - 1].timestamp;
   const duration = endTime - startTime;
 
-  // Determine status
-  const commandEnd = events.find((e) => e.event === "command.end");
-  const pipelineEnd = events.find((e) => e.event === "pipeline.end");
-  const hasErrors = events.some((e) => e.category === "error");
-  let status: "success" | "failure" | "incomplete" = "incomplete";
-  if (commandEnd || pipelineEnd) {
-    status = hasErrors ? "failure" : "success";
-  }
+  const status = deriveRunStatus(events);
 
   // Count agents
   const agentSpawns = events.filter((e) => e.event === "agent.spawn");

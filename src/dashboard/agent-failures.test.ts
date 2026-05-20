@@ -69,14 +69,23 @@ describe("getAgentFailures", () => {
       {
         id: "2",
         runId: "run-1",
+        timestamp: 1400,
+        category: "agent",
+        event: "agent.complete",
+        minLevel: 1,
+        data: { agent: "Dev", exitCode: 1, success: false },
+      },
+      {
+        id: "3",
+        runId: "run-1",
         timestamp: 1500,
         category: "error",
         event: "error.task",
         minLevel: 0,
-        data: { message: "Test error" },
+        data: { agent: "Dev", message: "Test error" },
       },
       {
-        id: "3",
+        id: "4",
         runId: "run-1",
         timestamp: 2000,
         category: "command",
@@ -111,28 +120,37 @@ describe("getAgentFailures", () => {
         category: "agent",
         event: "agent.spawn",
         minLevel: 1,
-        data: { agent: "Dev" },
+        data: { agent: "Dev", stage: "implement" },
       },
       {
         id: "2",
+        runId: "run-1",
+        timestamp: 1400,
+        category: "agent",
+        event: "agent.complete",
+        minLevel: 1,
+        data: { agent: "Dev", stage: "implement", success: false, exitCode: 1 },
+      },
+      {
+        id: "3",
         runId: "run-1",
         timestamp: 1500,
         category: "error",
         event: "error.task",
         minLevel: 0,
-        data: { message: "Task failed" },
+        data: { agent: "Dev", message: "Task failed" },
       },
       {
-        id: "3",
+        id: "4",
         runId: "run-1",
         timestamp: 1600,
         category: "error",
         event: "error.provider",
         minLevel: 0,
-        data: { message: "API error" },
+        data: { stage: "implement", message: "API error" },
       },
       {
-        id: "4",
+        id: "5",
         runId: "run-1",
         timestamp: 2000,
         category: "command",
@@ -144,7 +162,8 @@ describe("getAgentFailures", () => {
 
     const result = await getAgentFailures(mockBackend);
 
-    expect(result.agents[0].errorTypes.size).toBe(2);
+    // Includes the agent.complete signal itself plus the two associated errors
+    expect(result.agents[0].errorTypes.get("agent.complete")).toBe(1);
     expect(result.agents[0].errorTypes.get("error.task")).toBe(1);
     expect(result.agents[0].errorTypes.get("error.provider")).toBe(1);
   });
@@ -180,16 +199,25 @@ describe("getAgentFailures", () => {
         {
           id: "2",
           runId: "run-1",
+          timestamp: 1400,
+          category: "agent",
+          event: "agent.complete",
+          minLevel: 1,
+          data: { agent: "Dev", success: false, exitCode: 1 },
+        },
+        {
+          id: "3",
+          runId: "run-1",
           timestamp: 1500,
           category: "error",
           event: "error.task",
           minLevel: 0,
-          data: { message: "Error 1" },
+          data: { agent: "Dev", message: "Error 1" },
         },
       ] as TelemetryEvent[])
       .mockResolvedValueOnce([
         {
-          id: "3",
+          id: "4",
           runId: "run-2",
           timestamp: 3000,
           category: "agent",
@@ -198,22 +226,31 @@ describe("getAgentFailures", () => {
           data: { agent: "QE" },
         },
         {
-          id: "4",
+          id: "5",
+          runId: "run-2",
+          timestamp: 3100,
+          category: "agent",
+          event: "agent.complete",
+          minLevel: 1,
+          data: { agent: "QE", success: false, exitCode: 1 },
+        },
+        {
+          id: "6",
           runId: "run-2",
           timestamp: 3200,
           category: "error",
           event: "error.task",
           minLevel: 0,
-          data: { message: "Error 2" },
+          data: { agent: "QE", message: "Error 2" },
         },
         {
-          id: "5",
+          id: "7",
           runId: "run-2",
           timestamp: 3400,
           category: "error",
           event: "error.task",
           minLevel: 0,
-          data: { message: "Error 3" },
+          data: { agent: "QE", message: "Error 3" },
         },
       ] as TelemetryEvent[]);
 
@@ -251,11 +288,20 @@ describe("getAgentFailures", () => {
       {
         id: "2",
         runId: "run-1",
+        timestamp: 1400,
+        category: "agent",
+        event: "agent.complete",
+        minLevel: 1,
+        data: { agent: `Agent-1`, success: false, exitCode: 1 },
+      },
+      {
+        id: "3",
+        runId: "run-1",
         timestamp: 1500,
         category: "error",
         event: "error.task",
         minLevel: 0,
-        data: { message: "Error" },
+        data: { agent: `Agent-1`, message: "Error" },
       },
     ] as TelemetryEvent[]);
 
@@ -287,20 +333,29 @@ describe("getAgentFailures", () => {
       {
         id: "2",
         runId: "run-1",
+        timestamp: 1400,
+        category: "agent",
+        event: "agent.complete",
+        minLevel: 1,
+        data: { agent: "Dev", success: false, exitCode: 1 },
+      },
+      {
+        id: "3",
+        runId: "run-1",
         timestamp: 1500,
         category: "error",
         event: "error.task",
         minLevel: 0,
-        data: { message: "Error 1" },
+        data: { agent: "Dev", message: "Error 1" },
       },
       {
-        id: "3",
+        id: "4",
         runId: "run-1",
         timestamp: 1600,
         category: "error",
         event: "error.task",
         minLevel: 0,
-        data: { message: "Error 2" },
+        data: { agent: "Dev", message: "Error 2" },
       },
     ] as TelemetryEvent[]);
 
@@ -310,11 +365,14 @@ describe("getAgentFailures", () => {
     expect(result.errorBreakdown).toContain("error.task");
   });
 
-  it("only counts errors after agent spawn", async () => {
+  it("does not blame agents that completed successfully when a later stage errors", async () => {
+    // Simulates the real-world bug: planner+qe+dev all succeed, then pr-create
+    // (which isn't an agent) fails and emits error.task with agent='pipeline'.
+    // Previously every prior spawn was credited with the pipeline error.
     const run = {
       runId: "run-1",
       startTime: 1000,
-      endTime: 3000,
+      endTime: 5000,
       eventCount: 10,
       categories: ["agent", "error"] as TelemetryCategory[],
     };
@@ -325,35 +383,51 @@ describe("getAgentFailures", () => {
         id: "1",
         runId: "run-1",
         timestamp: 1000,
-        category: "error",
-        event: "error.task",
-        minLevel: 0,
-        data: { message: "Error before spawn" },
+        category: "agent",
+        event: "agent.spawn",
+        minLevel: 1,
+        data: { agent: "qe" },
       },
       {
         id: "2",
         runId: "run-1",
-        timestamp: 1500,
+        timestamp: 2000,
         category: "agent",
-        event: "agent.spawn",
+        event: "agent.complete",
         minLevel: 1,
-        data: { agent: "Dev" },
+        data: { agent: "qe", success: true, exitCode: 0 },
       },
       {
         id: "3",
         runId: "run-1",
-        timestamp: 2000,
+        timestamp: 2100,
+        category: "agent",
+        event: "agent.spawn",
+        minLevel: 1,
+        data: { agent: "security-review" },
+      },
+      {
+        id: "4",
+        runId: "run-1",
+        timestamp: 3000,
+        category: "agent",
+        event: "agent.complete",
+        minLevel: 1,
+        data: { agent: "security-review", success: true, exitCode: 0 },
+      },
+      {
+        id: "5",
+        runId: "run-1",
+        timestamp: 4000,
         category: "error",
         event: "error.task",
         minLevel: 0,
-        data: { message: "Error after spawn" },
+        data: { agent: "pipeline", stage: "pr-create", message: "pr-create failed" },
       },
     ] as TelemetryEvent[]);
 
     const result = await getAgentFailures(mockBackend);
 
-    expect(result.agents).toHaveLength(1);
-    // Should only count 1 failure (error after spawn)
-    expect(result.agents[0].errorTypes.get("error.task")).toBe(1);
+    expect(result.agents).toHaveLength(0);
   });
 });
