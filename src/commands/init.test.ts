@@ -289,7 +289,7 @@ describe("initCommand", () => {
     const writtenContent = mockWriteFileSync.mock.calls[0]?.[1] as string;
     const config = JSON.parse(writtenContent.trim());
 
-    // Should contain the mocked builtinAgents
+    // Should contain the mocked builtinAgents with provider/model populated from prompt selection
     expect(config.agents).toEqual([
       {
         name: "dev",
@@ -297,6 +297,8 @@ describe("initCommand", () => {
         systemPrompt: "You are dev",
         tools: ["read"],
         role: "developer",
+        provider: "claude",
+        model: "claude-default",
       },
     ]);
 

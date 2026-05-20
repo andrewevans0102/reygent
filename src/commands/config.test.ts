@@ -277,9 +277,9 @@ describe("configCommand", () => {
     const written = JSON.parse((mockWriteFileSync.mock.calls[0]![1] as string).trim());
     expect(written.agents[0].provider).toBe("gemini");
     expect(written.agents[0].model).toBe("gemini-2.5-pro");
-    // qe unchanged
-    expect(written.agents[1].provider).toBeUndefined();
-    expect(written.agents[1].model).toBeUndefined();
+    // qe inherits top-level provider/model (auto-filled so every agent shows what it uses)
+    expect(written.agents[1].provider).toBe("claude");
+    expect(written.agents[1].model).toBe("claude-sonnet-4-5");
   });
 
   it("exits 2 on write error", async () => {
@@ -396,8 +396,9 @@ describe("configCommand", () => {
     await configCommand();
 
     const written = JSON.parse((mockWriteFileSync.mock.calls[0]![1] as string).trim());
-    expect(written.agents[0].provider).toBeUndefined();
-    expect(written.agents[0].model).toBeUndefined();
+    // After clearing, the agent inherits the top-level provider/model (auto-fill)
+    expect(written.agents[0].provider).toBe("claude");
+    expect(written.agents[0].model).toBe("claude-sonnet-4-5");
     // Other fields preserved
     expect(written.agents[0].name).toBe("dev");
     expect(written.agents[0].systemPrompt).toBe("sp");

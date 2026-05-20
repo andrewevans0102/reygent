@@ -93,10 +93,12 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
 
   const skillsDir = join(targetDir, "skills");
 
+  const defaultProvider = "claude";
   const defaultConfig: ReygentConfig = {
-    agents: builtinAgents,
+    agents: builtinAgents.map((a) => ({ ...a, provider: defaultProvider, model: DEFAULT_MODEL })),
     skills: { path: "skills" },
     model: DEFAULT_MODEL,
+    provider: defaultProvider,
   };
 
   // Dry-run shows the defaults without prompting so it stays non-interactive.
@@ -160,6 +162,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
       const { provider, model } = await promptForProviderAndModel();
       defaultConfig.provider = provider;
       defaultConfig.model = model;
+      defaultConfig.agents = builtinAgents.map((a) => ({ ...a, provider, model }));
     }
 
     const spinnerText = existsSync(targetDir) ? "Writing config" : "Creating .reygent folder";
