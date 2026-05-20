@@ -141,8 +141,8 @@ describe('DEFAULT_TELEMETRY_CONFIG', () => {
     expect(DEFAULT_TELEMETRY_CONFIG.enabled).toBeUndefined();
   });
 
-  it('has level set to standard', () => {
-    expect(DEFAULT_TELEMETRY_CONFIG.level).toBe('standard');
+  it('has level set to verbose', () => {
+    expect(DEFAULT_TELEMETRY_CONFIG.level).toBe('verbose');
   });
 
   it('has backend set to sqlite', () => {
@@ -418,7 +418,7 @@ describe('DEFAULT_TELEMETRY_CONFIG immutability', () => {
 
   it('matches expected default values', () => {
     expect(DEFAULT_TELEMETRY_CONFIG.enabled).toBeUndefined();
-    expect(DEFAULT_TELEMETRY_CONFIG.level).toBe('standard');
+    expect(DEFAULT_TELEMETRY_CONFIG.level).toBe('verbose');
     expect(DEFAULT_TELEMETRY_CONFIG.backend).toBe('sqlite');
     expect(DEFAULT_TELEMETRY_CONFIG.retention).toBe(30);
   });

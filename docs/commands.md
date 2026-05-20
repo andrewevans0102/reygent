@@ -470,6 +470,19 @@ Manage telemetry data and configuration. Telemetry captures workflow execution d
 reygent telemetry [command]
 ```
 
+### Defaults
+
+When no `telemetry` block exists in `.reygent/config.json`, Reygent applies these defaults:
+
+| Field | Default | Notes |
+|---|---|---|
+| `enabled` | `undefined` | Triggers a one-time opt-in prompt on first interactive run. Use `enable`/`disable` to set explicitly. |
+| `level` | `verbose` | Captures all events including `llm.request`, `llm.response`, `usage.tokens`, `performance.metric`, and `tool.invoke.full`. Override per-run with `--telemetry-level <minimal\|standard\|verbose>`. |
+| `backend` | `sqlite` | Stored at `.reygent/chesstrace.db`. |
+| `retention` | `30` | Days of events kept before pruning. |
+
+`reygent telemetry enable` and `reygent telemetry disable` only flip the `enabled` flag; if `level`, `backend`, or `retention` are missing they're written with the defaults above.
+
 ### Subcommands
 
 #### `reygent telemetry status`
@@ -557,7 +570,9 @@ Enable telemetry in configuration.
 reygent telemetry enable
 ```
 
-Sets `telemetry.enabled = true` in `.reygent/config.json`.
+Sets `telemetry.enabled = true` in `.reygent/config.json`. If no `telemetry` block exists, one is created with the defaults from the [Defaults](#defaults) table (`level: verbose`, `backend: sqlite`, `retention: 30`). Existing `level`, `backend`, and `retention` values are preserved.
+
+Writes to the local config (`.reygent/config.json`) if found by walking up from the current directory; otherwise writes to the global config (`~/.reygent/config.json`).
 
 #### `reygent telemetry disable`
 
@@ -567,7 +582,7 @@ Disable telemetry in configuration.
 reygent telemetry disable
 ```
 
-Sets `telemetry.enabled = false` in `.reygent/config.json`.
+Sets `telemetry.enabled = false` in `.reygent/config.json`. Same defaults and local/global scoping rules as `enable` — only the `enabled` flag changes; other fields are left as-is or seeded with defaults if missing.
 
 ---
 

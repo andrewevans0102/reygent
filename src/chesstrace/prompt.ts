@@ -131,7 +131,7 @@ async function saveTelemetryChoice(enabled: boolean): Promise<void> {
   telemetry.enabled = enabled;
 
   // Apply defaults if missing
-  telemetry.level = telemetry.level ?? "standard";
+  telemetry.level = telemetry.level ?? "verbose";
   telemetry.backend = telemetry.backend ?? "sqlite";
   telemetry.retention = telemetry.retention ?? 30;
 

@@ -53,7 +53,7 @@ export const TelemetryUserConfigSchema = z.object({
  */
 export const DEFAULT_TELEMETRY_CONFIG: TelemetryUserConfig = {
   enabled: undefined,
-  level: 'standard',
+  level: 'verbose',
   backend: 'sqlite',
   retention: 30,
 };

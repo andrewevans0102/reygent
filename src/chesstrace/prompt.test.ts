@@ -213,7 +213,7 @@ describe("promptForTelemetryOptIn", () => {
 
     const written = JSON.parse(readFileSync(configPath, "utf-8"));
     expect(written.telemetry.enabled).toBe(true);
-    expect(written.telemetry.level).toBe("standard");
+    expect(written.telemetry.level).toBe("verbose");
     expect(written.telemetry.backend).toBe("sqlite");
     expect(written.telemetry.retention).toBe(30);
   });
