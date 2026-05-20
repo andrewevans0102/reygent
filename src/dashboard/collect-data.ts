@@ -1,4 +1,5 @@
-import type { StorageBackend, TelemetryEvent } from "../chesstrace/backends/types.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
+import type { TelemetryEvent } from "../chesstrace/events.js";
 import { getRunsList } from "./runs-list.js";
 import { getTrendData } from "./trends.js";
 import { getAgentFailures } from "./agent-failures.js";
@@ -16,6 +17,10 @@ export interface RunWithEvents extends RunSummaryRow {
   events: TelemetryEvent[];
 }
 
+export type SerializableAgentFailureSummary = Omit<AgentFailureSummary, "errorTypes"> & {
+  errorTypes: { [k: string]: number };
+};
+
 export interface ScopeData {
   runs: RunWithEvents[];
   trends: {
@@ -25,7 +30,7 @@ export interface ScopeData {
     failureCount: number;
     successRate: number;
   };
-  agentFailures: AgentFailureSummary[];
+  agentFailures: SerializableAgentFailureSummary[];
 }
 
 /**

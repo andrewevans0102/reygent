@@ -97,7 +97,7 @@ export async function loadSpec(source: string, provider?: SpecProvider): Promise
       loadEnvFile();
       if (isLinearUrl(source)) {
         const issueId = extractLinearId(source);
-        result = readLinearSpec(issueId);
+        result = await readLinearSpec(issueId);
       } else {
         result = await readLinearSpec(source);
       }

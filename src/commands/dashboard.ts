@@ -46,7 +46,7 @@ export function registerDashboardCommand(program: Command): void {
 
         spinner.stop();
 
-        if (runs.length === 0) {
+        if (runs.runs.length === 0) {
           console.log(chalk.yellow("No runs found"));
           return;
         }

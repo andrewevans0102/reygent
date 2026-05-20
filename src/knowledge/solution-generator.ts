@@ -4,7 +4,7 @@ import { Events } from "../chesstrace/events.js";
 import { resolveProvider, resolveModel } from "../model.js";
 import { getProvider } from "../providers/index.js";
 
-const RELEVANT_EVENTS = new Set([
+const RELEVANT_EVENTS = new Set<string>([
   Events.ERROR_TASK,
   Events.AGENT_SPAWN,
   Events.AGENT_COMPLETE,

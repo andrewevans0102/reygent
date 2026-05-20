@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, lstatSync, renameSync, unlinkSync } from "node:fs";
 
 vi.mock("node:fs", () => ({
@@ -115,7 +116,7 @@ const mockUnlinkSync = vi.mocked(unlinkSync);
 
 describe("configCommand", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: MockInstance<typeof process.exit>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -673,9 +674,9 @@ describe("configCommand", () => {
           supportedModels: [{ id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" }],
           vertexModels: [{ id: "claude-sonnet-4-5@20250929", label: "Sonnet 4.5 (Vertex)" }],
           isAvailable: mockClaudeAvailable,
-        };
+        } as unknown as ReturnType<typeof getProvider>;
       }
-      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) };
+      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) } as unknown as ReturnType<typeof getProvider>;
     });
 
     mockSelect.mockResolvedValueOnce("local"); // scope
@@ -709,9 +710,9 @@ describe("configCommand", () => {
           supportedModels: [{ id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" }],
           vertexModels: [{ id: "claude-sonnet-4-5@20250929", label: "Sonnet 4.5 (Vertex)" }],
           isAvailable: mockClaudeAvailable,
-        };
+        } as unknown as ReturnType<typeof getProvider>;
       }
-      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) };
+      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) } as unknown as ReturnType<typeof getProvider>;
     });
 
     mockSelect.mockResolvedValueOnce("local"); // scope
@@ -745,9 +746,9 @@ describe("configCommand", () => {
           supportedModels: [{ id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" }],
           vertexModels: [{ id: "claude-sonnet-4-5@20250929", label: "Sonnet 4.5 (Vertex)" }],
           isAvailable: mockClaudeAvailable,
-        };
+        } as unknown as ReturnType<typeof getProvider>;
       }
-      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) };
+      return { name, defaultModel: "", supportedModels: [], isAvailable: async () => ({ available: false }) } as unknown as ReturnType<typeof getProvider>;
     });
 
     mockSelect.mockResolvedValueOnce("local"); // scope

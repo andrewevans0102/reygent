@@ -12,6 +12,7 @@ import { agentCommand } from "./commands/agent.js";
 import { generateSpecCommand } from "./commands/generate-spec.js";
 import { specCommand } from "./commands/spec.js";
 import { runCommand } from "./commands/run.js";
+import { registerContinueCommand } from "./commands/continue.js";
 import { initCommand } from "./commands/init.js";
 import { registerSkillsCommand } from "./commands/skills.js";
 import { reviewWorkCommand } from "./commands/review-work.js";
@@ -127,6 +128,7 @@ registerLastCommand(program);
 registerSkillsCommand(program);
 registerKnowledgeCommand(program);
 registerDashboardCommand(program);
+registerContinueCommand(program);
 
 // Show header on commands that do actual work (not --help or --version)
 const isHelpOrVersion = process.argv.includes("--help") ||

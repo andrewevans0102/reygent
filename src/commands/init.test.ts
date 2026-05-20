@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 // Mock declarations appear before vi.mock calls in source, but vitest
@@ -94,7 +95,7 @@ import { initCommand } from "./init.js";
 
 describe("initCommand", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: MockInstance<typeof process.exit>;
   let originalIsTTY: boolean | undefined;
 
   beforeEach(() => {

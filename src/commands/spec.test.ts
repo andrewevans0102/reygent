@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ const markdownPayload = {
 
 describe("specCommand — provider prompt", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: MockInstance<typeof process.exit>;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -311,7 +312,7 @@ describe("specCommand — provider prompt", () => {
           constraints: ["Constraint 1"],
           dod: ["DoD 1"],
         },
-        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },
       });
 
       mockLoadSpec.mockResolvedValue(linearPayload);

@@ -215,8 +215,8 @@ describe("verify-pricing skill integration behavior", () => {
     });
 
     it("detects mismatch", () => {
-      const current = 2.50;
-      const actual = 3.00;
+      const current: number = 2.50;
+      const actual: number = 3.00;
       const match = current === actual;
       expect(match).toBe(false);
     });

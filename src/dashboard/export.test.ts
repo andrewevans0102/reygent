@@ -71,7 +71,7 @@ describe("Dashboard export functionality", () => {
 
       // Prepare CSV data structure
       const csvData = runs.map(run => {
-        const endEvent = backend
+        void backend
           .query({ runId: run.runId, event: Events.PIPELINE_END })
           .then(events => events[0]);
 
@@ -80,7 +80,7 @@ describe("Dashboard export functionality", () => {
           startTime: new Date(run.startTime).toISOString(),
           endTime: new Date(run.endTime).toISOString(),
           eventCount: run.eventCount,
-          success: endEvent ? "pending" : "unknown",
+          success: "pending",
         };
       });
 
@@ -341,7 +341,7 @@ describe("Dashboard export functionality", () => {
 
       // Flatten for single sheet
       const flatRows = events.map(event => {
-        const baseRow = {
+        const baseRow: Record<string, unknown> = {
           id: event.id,
           runId: event.runId,
           timestamp: new Date(event.timestamp).toISOString(),

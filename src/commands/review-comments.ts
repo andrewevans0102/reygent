@@ -10,8 +10,8 @@ import { createLiveStatus } from "../live-status.js";
 import type { ActivityEvent } from "../live-status.js";
 import { loadEnvFile } from "../env.js";
 import { isDebug } from "../debug.js";
-import { parseRemote, resolveToken, resolveTlsOptions, detectGitLabMR, httpsGet } from "../pr-create.js";
-import type { RemoteInfo, TlsOptions, GitLabMRResult } from "../pr-create.js";
+import { parseRemote, resolveToken, detectGitLabMR, httpsGet } from "../pr-create.js";
+import type { RemoteInfo, GitLabMRResult } from "../pr-create.js";
 import type { PlannerOutput } from "../task.js";
 import { TaskError } from "../task.js";
 import { getDefaultBranch } from "../git-utils.js";
@@ -247,14 +247,11 @@ async function fetchGitLabComments(
 ): Promise<ReviewComment[]> {
   const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
   const url = `https://${remote.host}/api/v4/projects/${projectPath}/merge_requests/${mrIid}/notes?per_page=100`;
-  const tlsOpts: TlsOptions = insecure
-    ? { rejectUnauthorized: false }
-    : await resolveTlsOptions(remote.host);
 
   const { status, text } = await httpsGet(
     url,
     { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    tlsOpts,
+    { insecure },
   );
   if (status < 200 || status >= 300) {
     throw new TaskError(`review-comments: GitLab API error ${status}: ${text}`);
@@ -861,7 +858,7 @@ export async function reviewCommentsCommand(
         let retryCount = 0;
         while (retryCount < maxRetries) {
           retryCount++;
-          pushSpinner.text = `pre-commit hook failed, re-staging and retrying (${retryCount}/${maxRetries})...`;
+          pushSpinner.setLabel(`pre-commit hook failed, re-staging and retrying (${retryCount}/${maxRetries})...`);
           try {
             await exec("git", ["add", "-A"]);
             await exec("git", ["commit", "-m", commitMessage]);

@@ -142,13 +142,13 @@ describe("--type CLI flag", () => {
 
 describe("type flag integration", () => {
   it("overrides auto-detected type from jira", () => {
-    const opts = { typeFlag: "fix", detectedType: "feat" };
+    const opts = { typeFlag: "fix", detectedType: "feat" as BranchType };
     const result = resolveType(opts);
     expect(result).toBe("fix");
   });
 
   it("overrides auto-detected type from linear", () => {
-    const opts = { typeFlag: "chore", detectedType: "feat" };
+    const opts = { typeFlag: "chore", detectedType: "feat" as BranchType };
     const result = resolveType(opts);
     expect(result).toBe("chore");
   });
@@ -166,7 +166,7 @@ describe("type flag integration", () => {
   });
 
   it("uses detected type when no flag", () => {
-    const opts = { typeFlag: null, detectedType: "feat" };
+    const opts = { typeFlag: null, detectedType: "feat" as BranchType };
     const result = resolveType(opts);
     expect(result).toBe("feat");
   });

@@ -90,8 +90,11 @@ describe("review-work --spec prefix parsing", () => {
     // Mock getAgents to return reviewer agent
     mockGetAgents.mockReturnValue([
       {
+        name: "reviewer",
+        description: "Code reviewer",
         role: "reviewer",
         systemPrompt: "You are a code reviewer",
+        tools: [],
         provider: "anthropic",
         model: "claude-3-7-sonnet-20250219",
       },

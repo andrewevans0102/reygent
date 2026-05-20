@@ -9,6 +9,7 @@ import type { ReygentConfig } from "../config.js";
 import type { AgentConfig } from "../agents.js";
 import { builtinAgents } from "../agents.js";
 import { PROVIDER_NAMES, getProvider } from "../providers/index.js";
+import type { ProviderName } from "../providers/index.js";
 import { isDebug } from "../debug.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 
@@ -201,7 +202,7 @@ async function runConfig(): Promise<void> {
   let selectedProvider = await select({
     message: "Default provider:",
     choices: providerChoices,
-    default: rawConfig.provider as string | undefined,
+    default: rawConfig.provider as ProviderName | undefined,
   });
 
   // Warn if selected provider unavailable
@@ -352,7 +353,7 @@ async function runConfig(): Promise<void> {
       const agentProviderChoice = await select({
         message: `Provider for ${agent.name}:`,
         choices: providerChoices,
-        default: agent.provider ?? selectedProvider,
+        default: (agent.provider as ProviderName | undefined) ?? selectedProvider,
       });
 
       // Warn if selected provider unavailable

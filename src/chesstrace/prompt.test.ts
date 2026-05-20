@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -11,8 +12,8 @@ vi.mock("@inquirer/prompts", () => ({
 
 describe("shouldPromptForTelemetry", () => {
   let tmpDir: string;
-  let findLocalConfigDirSpy: ReturnType<typeof vi.spyOn>;
-  let resolveGlobalConfigPathSpy: ReturnType<typeof vi.spyOn>;
+  let findLocalConfigDirSpy: MockInstance<typeof config.findLocalConfigDir>;
+  let resolveGlobalConfigPathSpy: MockInstance<typeof config.resolveGlobalConfigPath>;
   let originalIsTTY: boolean | undefined;
 
   beforeEach(() => {
@@ -174,8 +175,8 @@ describe("shouldPromptForTelemetry", () => {
 
 describe("promptForTelemetryOptIn", () => {
   let tmpDir: string;
-  let findLocalConfigDirSpy: ReturnType<typeof vi.spyOn>;
-  let resolveGlobalConfigPathSpy: ReturnType<typeof vi.spyOn>;
+  let findLocalConfigDirSpy: MockInstance<typeof config.findLocalConfigDir>;
+  let resolveGlobalConfigPathSpy: MockInstance<typeof config.resolveGlobalConfigPath>;
 
   beforeEach(async () => {
     tmpDir = join(tmpdir(), `reygent-test-${Date.now()}`);

@@ -96,8 +96,8 @@ export function readMarkdown(filePath: string): string | null {
  * Each top-level ## heading becomes an entry.
  * Returns array of entries with id, title, content.
  */
-export function parseMarkdownEntries(markdown: string, source: string): KnowledgeEntry[] {
-  if (!markdown.trim()) return [];
+export function parseMarkdownEntries(markdown: string | null, source: string): KnowledgeEntry[] {
+  if (!markdown || !markdown.trim()) return [];
 
   let tokens;
   try {
@@ -165,7 +165,8 @@ function slugify(text: string): string {
  * Searches for agent name in entry content (case-insensitive).
  * Matches both "Agent: name" and "**Agent**: name" formats.
  */
-export function filterByAgent(markdown: string, agentName: string, source: string): string {
+export function filterByAgent(markdown: string | null, agentName: string, source: string): string {
+  if (!markdown) return "";
   const entries = parseMarkdownEntries(markdown, source);
   const agentLower = agentName.toLowerCase();
   const filtered = entries.filter((entry) => {
@@ -186,7 +187,8 @@ export function filterByAgent(markdown: string, agentName: string, source: strin
  * Searches for "Last seen: YYYY-MM-DD" in entry content.
  * Handles both bold (**Last seen**:) and plain (Last seen:) formats.
  */
-export function filterByRecency(markdown: string, source: string, days: number): string {
+export function filterByRecency(markdown: string | null, source: string, days: number): string {
+  if (!markdown) return "";
   const entries = parseMarkdownEntries(markdown, source);
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
@@ -273,10 +275,10 @@ export async function loadKnowledge(agentName: string, stage?: string): Promise<
   }
 
   return {
-    agentTips,
+    agentTips: agentTips ?? "",
     commonFailures: relevantFailures,
     successPatterns: recentPatterns,
-    projectConventions,
+    projectConventions: projectConventions ?? "",
     entriesLoaded,
   };
 }

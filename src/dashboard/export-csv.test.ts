@@ -1,21 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { exportToCSV } from "./export-csv.js";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
-import type { TelemetryEvent } from "../chesstrace/events.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
+import type { TelemetryEvent, TelemetryCategory } from "../chesstrace/events.js";
 import { readFileSync, unlinkSync, existsSync } from "fs";
 
 describe("exportToCSV", () => {
-  let mockBackend: TelemetryBackend;
+  let mockBackend: StorageBackend;
   const testFiles: string[] = [];
 
   beforeEach(() => {
     mockBackend = {
       init: vi.fn(),
-      emit: vi.fn(),
+      write: vi.fn(),
+      writeBatch: vi.fn(),
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
       query: vi.fn(),
+      prune: vi.fn(),
     };
   });
 
@@ -78,14 +80,14 @@ describe("exportToCSV", () => {
         startTime: 1000,
         endTime: 2000,
         eventCount: 2,
-        categories: ["command"],
+        categories: ["command"] as TelemetryCategory[],
       },
       {
         runId: "run-2",
         startTime: 3000,
         endTime: 4000,
         eventCount: 2,
-        categories: ["command"],
+        categories: ["command"] as TelemetryCategory[],
       },
     ];
 

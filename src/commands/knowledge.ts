@@ -16,8 +16,10 @@ import {
 } from "../knowledge/loader.js";
 import { getChesstrace } from "../chesstrace/index.js";
 import { measureKnowledgeEffectiveness } from "../knowledge/analyzer.js";
+import type { SqliteBackend } from "../chesstrace/backends/sqlite.js";
 import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
-import { AgentName, builtinAgents } from "../agents.js";
+import { builtinAgents } from "../agents.js";
+import type { AgentName } from "../task.js";
 
 /**
  * Register knowledge subcommands under main CLI program
@@ -449,7 +451,11 @@ async function statsCommand(options: { since?: string }) {
       return;
     }
 
-    const backend = chesstrace.getBackend();
+    const backend = chesstrace.getBackend() as SqliteBackend | null;
+    if (!backend) {
+      spinner.fail(chalk.yellow("Telemetry backend not available."));
+      return;
+    }
     const effectiveness = measureKnowledgeEffectiveness(backend, sinceMs);
 
     spinner.succeed(chalk.green("Stats calculated"));

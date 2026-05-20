@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import chalk from "chalk";
 import ora from "ora";
@@ -35,6 +36,7 @@ import { DualBackend } from "../chesstrace/backends/dual.js";
 import { existsSync, mkdirSync } from "node:fs";
 import { isTestEnvironment } from "../test-env.js";
 import { promptForRetry } from "../retry-prompt.js";
+import { deleteSnapshot, saveSnapshot, type RunSnapshot, type RunSnapshotOptions } from "./run-snapshot.js";
 
 const VALID_SEVERITIES = new Set<string>(["CRITICAL", "HIGH", "MEDIUM", "LOW"]);
 
@@ -262,6 +264,8 @@ interface RunOptions {
   skipClarification: boolean;
   maxRetries: string;
   verbose: boolean;
+  /** Internal: set by `continue` command to resume a prior run. Not exposed via CLI. */
+  _resume?: RunSnapshot;
 }
 
 const MAX_TEST_OUTPUT_CHARS = 8000;
@@ -535,21 +539,32 @@ export async function runCommand(options: RunOptions): Promise<void> {
   }
 
   const commandStartTime = Date.now();
+  const resumeSnapshot = options._resume;
+
+  // Hoisted refs so the catch handler can persist a failure snapshot using the
+  // same buildSnapshot closure that the success path uses.
+  let snapshotRunIdRef: string | undefined;
+  let persistSnapshotRef: ((errMessage?: string) => void) | undefined;
 
   try {
-    let specSource = options.spec;
-    if (!specSource) {
-      if (!process.stdin.isTTY) {
-        console.log(chalk.red.bold("Error:"), "--spec is required in non-interactive environments.");
-        await chesstrace?.close();
-        process.exit(1);
+    let spec;
+    if (resumeSnapshot) {
+      spec = resumeSnapshot.context.spec;
+    } else {
+      let specSource = options.spec;
+      if (!specSource) {
+        if (!process.stdin.isTTY) {
+          console.log(chalk.red.bold("Error:"), "--spec is required in non-interactive environments.");
+          await chesstrace?.close();
+          process.exit(1);
+        }
+        specSource = await promptForSpec();
       }
-      specSource = await promptForSpec();
+      spec = await loadSpec(specSource);
     }
-    const spec = await loadSpec(specSource);
 
-    // Skip telemetry in dry-run mode
-    if (options.dryRun) {
+    // Skip telemetry in dry-run mode (also skip when resuming - resume implies real run)
+    if (options.dryRun && !resumeSnapshot) {
       console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
       console.log("");
       console.log(chalk.bold.cyan("┌─ Specification"));
@@ -594,8 +609,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
       try { chesstrace.emit(Events.COMMAND_START, { command: 'run' }); } catch { /* swallow */ }
     }
 
-    // Initialize context after dry-run check
-    context = { spec, results: [] };
+    // Initialize context after dry-run check (rehydrate from snapshot when resuming)
+    context = resumeSnapshot
+      ? { ...resumeSnapshot.context, spec }
+      : { spec, results: [] };
 
     const threshold = options.securityThreshold.toUpperCase();
     if (!VALID_SEVERITIES.has(threshold)) {
@@ -603,9 +620,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
       process.exit(1);
     }
 
-    // Prompt for permission mode if not specified
+    // Prompt for permission mode if not specified (skip when resuming - use snapshot value)
     let autoApprove = options.autoApprove;
-    if (!autoApprove) {
+    if (resumeSnapshot) {
+      autoApprove = options.autoApprove || resumeSnapshot.runOptions.autoApprove;
+    } else if (!autoApprove) {
       resetTerminalForInput();
       const rl = createInterface({
         input: process.stdin,
@@ -624,9 +643,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
       console.log("");
     }
 
-    // Prompt for clarification preference if not specified
+    // Prompt for clarification preference if not specified (skip when resuming - use snapshot value)
     let skipClarification = options.skipClarification;
-    if (!skipClarification && !options.dryRun) {
+    if (resumeSnapshot) {
+      skipClarification = options.skipClarification || resumeSnapshot.runOptions.skipClarification;
+    } else if (!skipClarification && !options.dryRun) {
       resetTerminalForInput();
       const rl = createInterface({
         input: process.stdin,
@@ -649,7 +670,33 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
     const agentOptions = { autoApprove };
 
-    // Emit pipeline.start
+    // Snapshot bookkeeping
+    const snapshotRunId = resumeSnapshot?.runId ?? chesstrace?.getCurrentRunId() ?? randomUUID();
+    const snapshotStartedAt = resumeSnapshot?.startedAt ?? Date.now();
+    const snapshotRunOptions: RunSnapshotOptions = {
+      autoApprove,
+      skipClarification,
+      maxRetries: String(maxRetries),
+      securityThreshold: options.securityThreshold,
+      insecure: options.insecure,
+      verbose: options.verbose,
+      type: options.type,
+    };
+
+    // Determine where to resume from
+    let resumeFromIndex = 0;
+    if (resumeSnapshot) {
+      if (resumeSnapshot.failedStage) {
+        const idx = PIPELINE.findIndex((s) => s.name === resumeSnapshot.failedStage);
+        resumeFromIndex = idx >= 0 ? idx : 0;
+      } else if (resumeSnapshot.completedStages.length > 0) {
+        const lastCompleted = resumeSnapshot.completedStages[resumeSnapshot.completedStages.length - 1];
+        const idx = PIPELINE.findIndex((s) => s.name === lastCompleted);
+        resumeFromIndex = idx >= 0 ? idx + 1 : 0;
+      }
+    }
+
+    // Emit pipeline.start (resume gets pipeline.resume after, so telemetry can link the two)
     if (chesstrace) {
       try {
         chesstrace.emit(Events.PIPELINE_START, {
@@ -668,9 +715,72 @@ export async function runCommand(options: RunOptions): Promise<void> {
       } catch {
         // Swallow emit errors
       }
+
+      if (resumeSnapshot) {
+        try {
+          chesstrace.emit(Events.PIPELINE_RESUME, {
+            parentRunId: resumeSnapshot.runId,
+            resumeFromStage: PIPELINE[resumeFromIndex]?.name ?? null,
+            completedStages: resumeSnapshot.completedStages,
+          });
+        } catch {
+          // Swallow emit errors
+        }
+      }
     }
 
-    for (const stage of PIPELINE) {
+    let currentStage: string | undefined;
+
+    const buildSnapshot = (errMessage?: string): RunSnapshot => {
+      const ctx = context!;
+      const completedStages = ctx.results.map((r) => r.stage);
+      const failedResult = ctx.results.find((r) => !r.success);
+      let failedStage: string | undefined = failedResult?.stage;
+      if (!failedStage && errMessage && currentStage && !completedStages.includes(currentStage)) {
+        failedStage = currentStage;
+      }
+      return {
+        runId: snapshotRunId,
+        startedAt: snapshotStartedAt,
+        updatedAt: Date.now(),
+        specSource: spec.source,
+        specTitle: spec.title,
+        runOptions: snapshotRunOptions,
+        completedStages,
+        failedStage,
+        lastError: errMessage,
+        context: ctx,
+      };
+    };
+
+    const persistSnapshot = (errMessage?: string): void => {
+      if (!projectRoot) return;
+      try {
+        saveSnapshot(projectRoot, buildSnapshot(errMessage));
+      } catch (err) {
+        if (isDebug()) {
+          console.error(chalk.gray("Failed to save run snapshot:"), err);
+        }
+      }
+    };
+
+    snapshotRunIdRef = snapshotRunId;
+    persistSnapshotRef = persistSnapshot;
+
+    if (resumeSnapshot) {
+      console.log(chalk.cyan("Resuming run"), chalk.gray(snapshotRunId.substring(0, 8)),
+        chalk.gray(`(${resumeSnapshot.completedStages.length} stages already complete)`));
+    }
+
+    for (let stageIndex = 0; stageIndex < PIPELINE.length; stageIndex++) {
+      const stage = PIPELINE[stageIndex];
+
+      if (stageIndex < resumeFromIndex) {
+        console.log(chalk.gray(`[${stage.name}] resumed from snapshot`));
+        continue;
+      }
+
+      currentStage = stage.name;
       const stageStartTime = Date.now();
       const toolTracker = createToolTracker();
 
@@ -817,6 +927,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         });
 
         emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+        persistSnapshot();
         continue;
       }
 
@@ -944,6 +1055,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         });
 
         emitStageEnd(chesstrace, stage.name, stageStartTime, devSuccess && qeSuccess, undefined, toolTracker);
+        persistSnapshot();
         continue;
       }
 
@@ -985,16 +1097,18 @@ export async function runCommand(options: RunOptions): Promise<void> {
             output: gateResult.output,
           });
           emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+          persistSnapshot();
           continue;
         }
 
         unitStatus.fail(chalk.red("Unit tests FAILED"));
 
         // Retry loop — dev agent only for unit test failures
+        const unitCtx = context;
         try {
           gateResult = await retryGate({
             gateName: "unit tests",
-            gateRunner: (attempt) => runUnitTestGate(context, { ...agentOptions, attempt, verbose: options.verbose }),
+            gateRunner: (attempt) => runUnitTestGate(unitCtx, { ...agentOptions, attempt, verbose: options.verbose }),
             agentsToRun: ["dev"],
             context,
             agentOptions,
@@ -1017,6 +1131,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         });
 
         emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed, undefined, toolTracker);
+        persistSnapshot();
         continue;
       }
 
@@ -1058,6 +1173,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             output: gateResult.output,
           });
           emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+          persistSnapshot();
           continue;
         }
 
@@ -1065,10 +1181,11 @@ export async function runCommand(options: RunOptions): Promise<void> {
         console.log(gateResult.output);
 
         // Retry loop — both dev + qe agents for functional test failures
+        const funcCtx = context;
         try {
           gateResult = await retryGate({
             gateName: "functional tests",
-            gateRunner: (attempt) => runFunctionalTestGate(context, { ...agentOptions, attempt, verbose: options.verbose }),
+            gateRunner: (attempt) => runFunctionalTestGate(funcCtx, { ...agentOptions, attempt, verbose: options.verbose }),
             agentsToRun: ["dev", "qe"],
             context,
             agentOptions,
@@ -1091,6 +1208,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         });
 
         emitStageEnd(chesstrace, stage.name, stageStartTime, gateResult.passed, undefined, toolTracker);
+        persistSnapshot();
         continue;
       }
 
@@ -1139,6 +1257,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
             output: JSON.stringify(output),
           });
           emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+          persistSnapshot();
           continue;
         }
 
@@ -1150,6 +1269,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         });
 
         emitStageEnd(chesstrace, stage.name, stageStartTime, false, undefined, toolTracker);
+        persistSnapshot(`security review failed at ${threshold} threshold`);
 
         if (autoApprove) {
           console.log(chalk.yellow("Auto-approved — bypassing security gate..."));
@@ -1182,6 +1302,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           console.log(chalk.yellow("Skipping PR creation — not inside a git repository."));
           context.results.push({ stage: stage.name, success: true, output: "skipped (not a git repo)" });
           emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+          persistSnapshot();
           continue;
         }
 
@@ -1247,6 +1368,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         });
 
         emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+        persistSnapshot();
         continue;
       }
 
@@ -1255,6 +1377,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
           console.log(chalk.yellow("Skipping PR review — not inside a git repository."));
           context.results.push({ stage: stage.name, success: true, output: "skipped (not a git repo)" });
           emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+          persistSnapshot();
           continue;
         }
 
@@ -1285,6 +1408,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
         });
 
         emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+        persistSnapshot();
         continue;
       }
 
@@ -1296,10 +1420,21 @@ export async function runCommand(options: RunOptions): Promise<void> {
       console.log(chalk.gray(`[${stage.name}] skipped`));
       context.results.push(result);
       emitStageEnd(chesstrace, stage.name, stageStartTime, true, undefined, toolTracker);
+      persistSnapshot();
     }
 
     // Emit pipeline.end
     const allSuccess = context.results.every((r) => r.success);
+
+    // On success, clear the snapshot so `continue` doesn't offer this run
+    if (allSuccess && projectRoot && snapshotRunIdRef) {
+      try {
+        deleteSnapshot(projectRoot, snapshotRunIdRef);
+      } catch {
+        // Swallow
+      }
+    }
+
     if (chesstrace) {
       try {
         chesstrace.emit(Events.PIPELINE_END, {
@@ -1345,6 +1480,22 @@ export async function runCommand(options: RunOptions): Promise<void> {
       printVerboseUsage(tracker);
     }
   } catch (err) {
+    // Persist a snapshot with failure info so `reygent continue` can resume.
+    // Skipped on user-cancellation (ExitPromptError) since the user explicitly aborted.
+    if (
+      context &&
+      projectRoot &&
+      persistSnapshotRef &&
+      !(err instanceof Error && err.name === "ExitPromptError")
+    ) {
+      try {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        persistSnapshotRef(errMessage);
+      } catch {
+        // Swallow
+      }
+    }
+
     // Emit error.task telemetry for TaskError
     if (chesstrace && err instanceof TaskError) {
       try {

@@ -1,19 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getRunsList } from "./runs-list.js";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
-import type { TelemetryEvent } from "../chesstrace/events.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
+import type { TelemetryEvent, TelemetryCategory } from "../chesstrace/events.js";
 
 describe("getRunsList", () => {
-  let mockBackend: TelemetryBackend;
+  let mockBackend: StorageBackend;
 
   beforeEach(() => {
     mockBackend = {
       init: vi.fn(),
-      emit: vi.fn(),
+      write: vi.fn(),
+      writeBatch: vi.fn(),
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
       query: vi.fn(),
+      prune: vi.fn(),
     };
   });
 
@@ -32,14 +34,14 @@ describe("getRunsList", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 10,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     };
     const run2 = {
       runId: "run-2",
       startTime: 3000,
       endTime: 4000,
       eventCount: 15,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run1, run2]);
@@ -68,7 +70,7 @@ describe("getRunsList", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 5,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
@@ -95,7 +97,7 @@ describe("getRunsList", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 5,
-      categories: ["command", "error"],
+      categories: ["command", "error"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
@@ -130,9 +132,9 @@ describe("getRunsList", () => {
     const run = {
       runId: "run-1",
       startTime: 1000,
-      endTime: undefined,
+      endTime: undefined as unknown as number,
       eventCount: 3,
-      categories: ["agent"],
+      categories: ["agent"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
@@ -159,7 +161,7 @@ describe("getRunsList", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 10,
-      categories: ["agent"],
+      categories: ["agent"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
@@ -204,7 +206,7 @@ describe("getRunsList", () => {
       startTime: 1000 + i,
       endTime: 2000 + i,
       eventCount: 5,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     }));
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
@@ -231,14 +233,14 @@ describe("getRunsList", () => {
       startTime: Date.now() - 86400000 * 40, // 40 days ago
       endTime: Date.now() - 86400000 * 40 + 1000,
       eventCount: 5,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     };
     const run2 = {
       runId: "run-2",
       startTime: Date.now() - 86400000 * 20, // 20 days ago
       endTime: Date.now() - 86400000 * 20 + 1000,
       eventCount: 5,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run1, run2]);

@@ -1,19 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getAgentFailures } from "./agent-failures.js";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
-import type { TelemetryEvent } from "../chesstrace/events.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
+import type { TelemetryEvent, TelemetryCategory } from "../chesstrace/events.js";
 
 describe("getAgentFailures", () => {
-  let mockBackend: TelemetryBackend;
+  let mockBackend: StorageBackend;
 
   beforeEach(() => {
     mockBackend = {
       init: vi.fn(),
-      emit: vi.fn(),
+      write: vi.fn(),
+      writeBatch: vi.fn(),
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
       query: vi.fn(),
+      prune: vi.fn(),
     };
   });
 
@@ -23,7 +25,7 @@ describe("getAgentFailures", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 5,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
@@ -50,7 +52,7 @@ describe("getAgentFailures", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 10,
-      categories: ["agent", "error"],
+      categories: ["agent", "error"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
@@ -97,7 +99,7 @@ describe("getAgentFailures", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 10,
-      categories: ["agent", "error"],
+      categories: ["agent", "error"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
@@ -153,14 +155,14 @@ describe("getAgentFailures", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 10,
-      categories: ["agent", "error"],
+      categories: ["agent", "error"] as TelemetryCategory[],
     };
     const run2 = {
       runId: "run-2",
       startTime: 3000,
       endTime: 4000,
       eventCount: 10,
-      categories: ["agent", "error"],
+      categories: ["agent", "error"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run1, run2]);
@@ -232,7 +234,7 @@ describe("getAgentFailures", () => {
       startTime: 1000 + i * 1000,
       endTime: 2000 + i * 1000,
       eventCount: 5,
-      categories: ["agent", "error"],
+      categories: ["agent", "error"] as TelemetryCategory[],
     }));
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue(runs);
@@ -268,7 +270,7 @@ describe("getAgentFailures", () => {
       startTime: 1000,
       endTime: 2000,
       eventCount: 10,
-      categories: ["agent", "error"],
+      categories: ["agent", "error"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
@@ -314,7 +316,7 @@ describe("getAgentFailures", () => {
       startTime: 1000,
       endTime: 3000,
       eventCount: 10,
-      categories: ["agent", "error"],
+      categories: ["agent", "error"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run]);
