@@ -1,19 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getTrendData } from "./trends.js";
-import type { TelemetryBackend } from "../chesstrace/backends/types.js";
-import type { TelemetryEvent } from "../chesstrace/events.js";
+import type { StorageBackend } from "../chesstrace/backends/types.js";
+import type { TelemetryEvent, TelemetryCategory } from "../chesstrace/events.js";
 
 describe("getTrendData", () => {
-  let mockBackend: TelemetryBackend;
+  let mockBackend: StorageBackend;
 
   beforeEach(() => {
     mockBackend = {
       init: vi.fn(),
-      emit: vi.fn(),
+      write: vi.fn(),
+      writeBatch: vi.fn(),
       flush: vi.fn(),
       close: vi.fn(),
       listRuns: vi.fn(),
       query: vi.fn(),
+      prune: vi.fn(),
     };
   });
 
@@ -36,21 +38,21 @@ describe("getTrendData", () => {
         startTime: baseTime,
         endTime: baseTime + 1000,
         eventCount: 5,
-        categories: ["command"],
+        categories: ["command"] as TelemetryCategory[],
       },
       {
         runId: "run-2",
         startTime: baseTime + 3600000, // 1 hour later (same day)
         endTime: baseTime + 3601000,
         eventCount: 5,
-        categories: ["command"],
+        categories: ["command"] as TelemetryCategory[],
       },
       {
         runId: "run-3",
         startTime: baseTime + 86400000, // 1 day later
         endTime: baseTime + 86401000,
         eventCount: 5,
-        categories: ["command"],
+        categories: ["command"] as TelemetryCategory[],
       },
     ];
 
@@ -105,14 +107,14 @@ describe("getTrendData", () => {
         startTime: baseTime,
         endTime: baseTime + 1000,
         eventCount: 5,
-        categories: ["command"],
+        categories: ["command"] as TelemetryCategory[],
       },
       {
         runId: "run-2",
         startTime: baseTime + 1000,
         endTime: baseTime + 2000,
         eventCount: 5,
-        categories: ["command", "error"],
+        categories: ["command", "error"] as TelemetryCategory[],
       },
     ];
 
@@ -166,14 +168,14 @@ describe("getTrendData", () => {
         startTime: baseTime,
         endTime: baseTime + 1000,
         eventCount: 5,
-        categories: ["command"],
+        categories: ["command"] as TelemetryCategory[],
       },
       {
         runId: "run-2",
         startTime: baseTime + 1000,
         endTime: baseTime + 2000,
         eventCount: 5,
-        categories: ["command", "error"],
+        categories: ["command", "error"] as TelemetryCategory[],
       },
     ];
 
@@ -224,9 +226,9 @@ describe("getTrendData", () => {
       {
         runId: "run-1",
         startTime: baseTime,
-        endTime: undefined,
+        endTime: undefined as unknown as number,
         eventCount: 3,
-        categories: ["agent"],
+        categories: ["agent"] as TelemetryCategory[],
       },
     ];
 
@@ -256,14 +258,14 @@ describe("getTrendData", () => {
       startTime: Date.now() - 86400000 * 40, // 40 days ago
       endTime: Date.now() - 86400000 * 40 + 1000,
       eventCount: 5,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     };
     const run2 = {
       runId: "run-2",
       startTime: Date.now() - 86400000 * 20, // 20 days ago
       endTime: Date.now() - 86400000 * 20 + 1000,
       eventCount: 5,
-      categories: ["command"],
+      categories: ["command"] as TelemetryCategory[],
     };
 
     vi.mocked(mockBackend.listRuns).mockResolvedValue([run1, run2]);

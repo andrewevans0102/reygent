@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import type { MockInstance } from "vitest";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 // Mock declarations appear before vi.mock calls in source, but vitest
 // hoists vi.mock to the top of the file so the mocks are defined first.
 const mockSelect = vi.fn();
+const mockInput = vi.fn();
 vi.mock("@inquirer/prompts", () => ({
   select: (...args: unknown[]) => mockSelect(...args),
+  input: (...args: unknown[]) => mockInput(...args),
 }));
 
 const inquirerCoreMock = vi.hoisted(() => {
@@ -21,6 +24,7 @@ vi.mock("@inquirer/core", () => ({
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
+  readFileSync: vi.fn(() => ""),
   writeFileSync: vi.fn(),
 }));
 vi.mock("../agents.js", () => ({
@@ -36,6 +40,27 @@ vi.mock("../agents.js", () => ({
 }));
 vi.mock("../debug.js", () => ({ isDebug: vi.fn(() => false) }));
 vi.mock("../model.js", () => ({ DEFAULT_MODEL: "test-model" }));
+vi.mock("../providers/index.js", () => ({
+  PROVIDER_NAMES: ["claude", "gemini"],
+  getProvider: (name: string) => {
+    if (name === "claude") {
+      return {
+        defaultModel: "claude-default",
+        supportedModels: [
+          { id: "claude-default", label: "Claude Default" },
+          { id: "claude-other", label: "Claude Other" },
+        ],
+        vertexModels: [
+          { id: "claude-vertex", label: "Claude Vertex" },
+        ],
+      };
+    }
+    return {
+      defaultModel: "gemini-default",
+      supportedModels: [],
+    };
+  },
+}));
 vi.mock("../knowledge/manager.js", () => ({
   ensureKnowledgeDir: vi.fn(async () => {}),
 }));
@@ -63,17 +88,28 @@ vi.mock("chalk", () => {
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
+const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 
 import { initCommand } from "./init.js";
 
 describe("initCommand", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let exitSpy: MockInstance<typeof process.exit>;
   let originalIsTTY: boolean | undefined;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mockReadFileSync.mockReturnValue("");
+    // Drive select() based on its prompt message so the same default works for
+    // the provider, API platform, and model picks during init.
+    mockSelect.mockImplementation(async (opts: { message: string }) => {
+      if (/platform/i.test(opts.message)) return "direct";
+      if (/provider/i.test(opts.message)) return "claude";
+      if (/model/i.test(opts.message)) return "claude-default";
+      throw new Error(`Unexpected select prompt: ${opts.message}`);
+    });
+    mockInput.mockResolvedValue("gemini-default");
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     exitSpy = vi
       .spyOn(process, "exit")
@@ -148,7 +184,13 @@ describe("initCommand", () => {
 
   it("reset choice overwrites config with defaults", async () => {
     mockExistsSync.mockReturnValue(true);
-    mockSelect.mockResolvedValue("reset");
+    // First select() handles the existing-config action, then provider, platform, model.
+    mockSelect.mockReset();
+    mockSelect
+      .mockResolvedValueOnce("reset")
+      .mockResolvedValueOnce("claude")
+      .mockResolvedValueOnce("direct")
+      .mockResolvedValueOnce("claude-default");
 
     await initCommand({ dryRun: false });
 
@@ -248,7 +290,7 @@ describe("initCommand", () => {
     const writtenContent = mockWriteFileSync.mock.calls[0]?.[1] as string;
     const config = JSON.parse(writtenContent.trim());
 
-    // Should contain the mocked builtinAgents
+    // Should contain the mocked builtinAgents with provider/model populated from prompt selection
     expect(config.agents).toEqual([
       {
         name: "dev",
@@ -256,14 +298,106 @@ describe("initCommand", () => {
         systemPrompt: "You are dev",
         tools: ["read"],
         role: "developer",
+        provider: "claude",
+        model: "claude-default",
       },
     ]);
 
     // Should contain skills config
     expect(config.skills).toEqual({ path: "skills" });
 
-    // Should contain the mocked DEFAULT_MODEL
-    expect(config.model).toBe("test-model");
+    // Provider and model come from the init prompt selection
+    expect(config.provider).toBe("claude");
+    expect(config.model).toBe("claude-default");
+  });
+
+  it("uses vertex model list when user picks Google Vertex AI", async () => {
+    mockExistsSync.mockReturnValue(false);
+    mockSelect.mockImplementation(async (opts: { message: string }) => {
+      if (/platform/i.test(opts.message)) return "vertex";
+      if (/provider/i.test(opts.message)) return "claude";
+      if (/model/i.test(opts.message)) return "claude-vertex";
+      throw new Error(`Unexpected select prompt: ${opts.message}`);
+    });
+
+    await initCommand({ dryRun: false });
+
+    const writtenContent = mockWriteFileSync.mock.calls[0]?.[1] as string;
+    const config = JSON.parse(writtenContent.trim());
+    expect(config.provider).toBe("claude");
+    expect(config.model).toBe("claude-vertex");
+  });
+
+  it(".reygent/.gitignore includes chesstrace.db", async () => {
+    mockExistsSync.mockReturnValue(false);
+
+    await initCommand({ dryRun: false });
+
+    const reygentGitignoreCall = mockWriteFileSync.mock.calls.find((c) =>
+      String(c[0]).endsWith(".reygent/.gitignore"),
+    );
+    expect(reygentGitignoreCall).toBeDefined();
+    const content = reygentGitignoreCall?.[1] as string;
+    expect(content).toContain("chesstrace.db");
+  });
+
+  it("creates root .gitignore with reygent-dashboard.html and chesstrace.db entries when none exists", async () => {
+    // Nothing exists — including the root .gitignore
+    mockExistsSync.mockReturnValue(false);
+
+    await initCommand({ dryRun: false });
+
+    const rootGitignoreCall = mockWriteFileSync.mock.calls.find((c) => {
+      const path = String(c[0]);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    expect(rootGitignoreCall).toBeDefined();
+    const content = rootGitignoreCall?.[1] as string;
+    expect(content).toContain("reygent-dashboard.html");
+    expect(content).toContain(".reygent/chesstrace.db");
+    expect(content).toContain(".reygent/chesstrace.db-journal");
+    expect(content).toContain(".reygent/chesstrace.db-wal");
+    expect(content).toContain(".reygent/chesstrace.db-shm");
+  });
+
+  it("appends to existing root .gitignore without duplicating", async () => {
+    // .reygent does not exist, but root .gitignore does with ALL entries already present
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    mockReadFileSync.mockReturnValue(
+      "node_modules/\nreygent-dashboard.html\n.reygent/chesstrace.db\n.reygent/chesstrace.db-journal\n.reygent/chesstrace.db-wal\n.reygent/chesstrace.db-shm\n",
+    );
+
+    await initCommand({ dryRun: false });
+
+    // No write to root .gitignore because all entries already present
+    const rootGitignoreWrites = mockWriteFileSync.mock.calls.filter((c) => {
+      const path = String(c[0]);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    expect(rootGitignoreWrites).toHaveLength(0);
+  });
+
+  it("appends new entries to a root .gitignore missing the entry", async () => {
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    mockReadFileSync.mockReturnValue("node_modules/\n");
+
+    await initCommand({ dryRun: false });
+
+    const rootGitignoreCall = mockWriteFileSync.mock.calls.find((c) => {
+      const path = String(c[0]);
+      return path.endsWith("/.gitignore") && !path.includes(".reygent/");
+    });
+    expect(rootGitignoreCall).toBeDefined();
+    const content = rootGitignoreCall?.[1] as string;
+    expect(content).toContain("node_modules/");
+    expect(content).toContain("reygent-dashboard.html");
+    expect(content).toContain(".reygent/chesstrace.db");
   });
 
   it("calls process.exit(2) on filesystem errors", async () => {

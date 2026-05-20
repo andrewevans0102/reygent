@@ -36,7 +36,7 @@ import {
   makeTheme,
   type Theme,
 } from "@inquirer/core";
-import type { PartialDeep } from "@inquirer/type";
+import type { PartialDeep, Prompt } from "@inquirer/type";
 import { pasteState } from "./paste-state.js";
 
 type InputTheme = {
@@ -59,7 +59,7 @@ const inputTheme: InputTheme = {
   validationFailureMode: "keep",
 };
 
-export default createPrompt<string, InputConfig>((config, done) => {
+const cursorAwareInput: Prompt<string, InputConfig> = createPrompt<string, InputConfig>((config, done) => {
   const { prefill = "tab" } = config;
   const theme = makeTheme(inputTheme, config.theme);
   const [status, setStatus] = useState<"idle" | "loading" | "done">("idle");
@@ -97,15 +97,17 @@ export default createPrompt<string, InputConfig>((config, done) => {
       pasteState.text = "";
 
       // Insert at current cursor position
-      const before = rl.line.slice(0, rl.cursor);
-      const after = rl.line.slice(rl.cursor);
-      rl.line = before + text + after;
-      rl.cursor = before.length + text.length;
+      // InquirerReadline omits `cursor` from its type but readline.Interface exposes it.
+      const rlAny = rl as typeof rl & { cursor: number; line: string };
+      const before = rlAny.line.slice(0, rlAny.cursor);
+      const after = rlAny.line.slice(rlAny.cursor);
+      rlAny.line = before + text + after;
+      rlAny.cursor = before.length + text.length;
 
       setDefaultValue("");
-      setValue(rl.line);
+      setValue(rlAny.line);
       setError(undefined);
-      setCursorPos(rl.cursor);
+      setCursorPos(rlAny.cursor);
       return;
     }
 
@@ -134,9 +136,10 @@ export default createPrompt<string, InputConfig>((config, done) => {
       rl.write(defaultValue);
       setValue(defaultValue);
     } else {
+      const rlAny = rl as typeof rl & { cursor: number };
       setValue(rl.line);
       setError(undefined);
-      setCursorPos(rl.cursor); // force re-render on cursor movement
+      setCursorPos(rlAny.cursor); // force re-render on cursor movement
     }
   });
 
@@ -187,3 +190,5 @@ export default createPrompt<string, InputConfig>((config, done) => {
 
   return [promptLine + "\n" + formattedValue, error];
 });
+
+export default cursorAwareInput;

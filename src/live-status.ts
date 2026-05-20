@@ -84,9 +84,11 @@ export interface LiveStatus {
   info: (msg: string) => void;
   stop: () => void;
   start: () => void;
+  setLabel: (label: string) => void;
 }
 
-export function createLiveStatus(label: string): LiveStatus {
+export function createLiveStatus(initialLabel: string): LiveStatus {
+  let label = initialLabel;
   const spinner = ora({
     spinner: { frames: [""], interval: 200 },
     text: "",
@@ -215,6 +217,10 @@ export function createLiveStatus(label: string): LiveStatus {
         sigintHandlerCount++;
       }
 
+      render();
+    },
+    setLabel(newLabel: string) {
+      label = newLabel;
       render();
     },
   };

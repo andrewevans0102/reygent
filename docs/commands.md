@@ -213,6 +213,100 @@ When running without `--auto-approve`, you'll be prompted for:
 
 ---
 
+## `reygent continue`
+
+Resume a previously failed or interrupted reygent run. Each `reygent run` writes a snapshot to `.reygent/runs/<runId>.json` after every completed stage; `continue` lets you pick one up where it left off.
+
+```bash
+reygent continue [--run-id <id>] [--auto-approve] [--verbose]
+```
+
+| Option | Description |
+|---|---|
+| `--run-id <id>` | Run id (or unique prefix) to resume — skips the interactive picker |
+| `--auto-approve` | Auto-approve all file edits and actions without prompting |
+| `--verbose` | Show detailed per-agent token and cost breakdown |
+
+**What it does:**
+
+1. Looks up unfinished snapshots in `<projectRoot>/.reygent/runs/` (any run whose last completed stage is not `pr-review`, or that has a `failedStage`)
+2. Displays up to 5 most recent unfinished runs with short id, spec title, last completed stage, failed stage, and age
+3. Re-invokes `reygent run` with the original run options (provider, model, type, security threshold, etc.) and replays state from the snapshot so completed stages are skipped
+4. CLI flags passed to `continue` (`--auto-approve`, `--verbose`) override the values stored in the snapshot
+
+**Examples:**
+
+```bash
+# Interactive picker
+reygent continue
+
+# Resume a specific run by id prefix
+reygent continue --run-id a1b2c3d4
+
+# Resume non-interactively (e.g., CI) — --run-id is required
+reygent continue --run-id a1b2c3d4 --auto-approve
+```
+
+**Requirements and behavior:**
+
+- Must be run from a project with a `.reygent/` directory (same as `reygent run`)
+- In non-TTY environments, `--run-id` is required — the interactive picker is skipped
+- Ambiguous prefixes (matching more than one run) error out; use a longer prefix
+- Snapshots stay on disk after a successful resume completes the `pr-review` stage
+
+---
+
+## `reygent dashboard`
+
+Visual interface for exploring Reygent telemetry data. Generates a self-contained HTML dashboard or runs CLI queries against the local telemetry DB. See [Dashboard](./dashboard.md) for full details and screenshots.
+
+```bash
+reygent dashboard <subcommand> [options]
+```
+
+### Subcommands
+
+#### `reygent dashboard generate`
+
+Generate a standalone HTML dashboard with embedded telemetry data.
+
+```bash
+reygent dashboard generate [--output <file>] [--open]
+```
+
+| Option | Description |
+|---|---|
+| `--output <file>` | Output file path (default: `<projectRoot>/.reygent/reygent-dashboard.html`) |
+| `--open` | Open the dashboard in the default browser after generation |
+
+#### `reygent dashboard runs`
+
+List recent runs in the terminal with status, duration, and cost.
+
+#### `reygent dashboard trends`
+
+Show success/failure trends over time.
+
+#### `reygent dashboard agent-failures`
+
+Aggregate failure counts by agent to find unstable stages.
+
+#### `reygent dashboard run <runId>`
+
+Show the full event timeline for a specific run.
+
+#### `reygent dashboard export`
+
+Export telemetry data for offline analysis.
+
+```bash
+reygent dashboard export [--format csv|xlsx] [--output <file>]
+```
+
+See [Dashboard](./dashboard.md) for full options on each subcommand.
+
+---
+
 ## `reygent review-work`
 
 Review the current branch's changes and optionally post the review to an open PR or MR.
@@ -470,6 +564,19 @@ Manage telemetry data and configuration. Telemetry captures workflow execution d
 reygent telemetry [command]
 ```
 
+### Defaults
+
+When no `telemetry` block exists in `.reygent/config.json`, Reygent applies these defaults:
+
+| Field | Default | Notes |
+|---|---|---|
+| `enabled` | `undefined` | Triggers a one-time opt-in prompt on first interactive run. Use `enable`/`disable` to set explicitly. |
+| `level` | `verbose` | Captures all events including `llm.request`, `llm.response`, `usage.tokens`, `performance.metric`, and `tool.invoke.full`. Override per-run with `--telemetry-level <minimal\|standard\|verbose>`. |
+| `backend` | `sqlite` | Stored at `.reygent/chesstrace.db`. |
+| `retention` | `30` | Days of events kept before pruning. |
+
+`reygent telemetry enable` and `reygent telemetry disable` only flip the `enabled` flag; if `level`, `backend`, or `retention` are missing they're written with the defaults above.
+
 ### Subcommands
 
 #### `reygent telemetry status`
@@ -557,7 +664,9 @@ Enable telemetry in configuration.
 reygent telemetry enable
 ```
 
-Sets `telemetry.enabled = true` in `.reygent/config.json`.
+Sets `telemetry.enabled = true` in `.reygent/config.json`. If no `telemetry` block exists, one is created with the defaults from the [Defaults](#defaults) table (`level: verbose`, `backend: sqlite`, `retention: 30`). Existing `level`, `backend`, and `retention` values are preserved.
+
+Writes to the local config (`.reygent/config.json`) if found by walking up from the current directory; otherwise writes to the global config (`~/.reygent/config.json`).
 
 #### `reygent telemetry disable`
 
@@ -567,7 +676,7 @@ Disable telemetry in configuration.
 reygent telemetry disable
 ```
 
-Sets `telemetry.enabled = false` in `.reygent/config.json`.
+Sets `telemetry.enabled = false` in `.reygent/config.json`. Same defaults and local/global scoping rules as `enable` — only the `enabled` flag changes; other fields are left as-is or seeded with defaults if missing.
 
 ---
 
@@ -830,9 +939,9 @@ Set these in a `.env` file in your project root (or export in your shell).
 | Variable | Used For |
 |---|---|
 | `LINEAR_API_KEY` | Linear issue tracker integration |
-| `JIRA_URL` | Jira instance URL (e.g., `https://company.atlassian.net`) |
-| `JIRA_EMAIL` | Jira account email |
-| `JIRA_API_TOKEN` | Jira API token |
+| `JIRA_BASE_URL` | Jira instance URL (e.g., `https://company.atlassian.net`) |
+| `JIRA_USERNAME` | Jira account email |
+| `JIRA_TOKEN` | Jira API token |
 | `GITHUB_TOKEN` | GitHub API authentication for `reygent skills` commands (raises rate limit from 60 to 5,000 req/hr) |
 | `GIT_SSL_NO_VERIFY` | Skip SSL verification globally |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js TLS override (set to `0` to skip) |

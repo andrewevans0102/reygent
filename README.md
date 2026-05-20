@@ -75,12 +75,14 @@ reygent run --spec spec.md                                 # run the full workfl
 | [`reygent spec`](./docs/commands.md#reygent-spec-source) | Load and display a parsed spec |
 | [`reygent agent`](./docs/commands.md#reygent-agent-name) | Start an interactive agent session |
 | [`reygent run`](./docs/commands.md#reygent-run) | Run the full 7-stage workflow |
+| [`reygent continue`](./docs/commands.md#reygent-continue) | Resume a previously failed or interrupted run |
 | [`reygent review-work`](./docs/commands.md#reygent-review-work) | Review current branch and post to PR/MR |
 | [`reygent review-comments`](./docs/commands.md#reygent-review-comments) | Fetch PR comments and address with dev agent |
 | [`reygent config`](./docs/commands.md#reygent-config) | Configure provider, model, and per-agent overrides |
 | [`reygent skills`](./docs/commands.md#reygent-skills) | Manage skills from the registry |
 | [`reygent telemetry`](./docs/commands.md#reygent-telemetry) | Manage telemetry data and configuration |
 | [`reygent analyze`](./docs/commands.md#reygent-analyze) | Analyze telemetry data for insights |
+| [`reygent dashboard`](./docs/commands.md#reygent-dashboard) | Generate HTML dashboard or run CLI telemetry queries |
 | [`reygent last`](./docs/commands.md#reygent-last) | Show latest run details |
 | [`reygent knowledge`](./docs/commands.md#reygent-knowledge) | Manage knowledge base |
 

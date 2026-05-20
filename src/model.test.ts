@@ -56,6 +56,17 @@ describe("validateModel", () => {
       expect(validateModel(m.id)).toBe(m.id);
     }
   });
+
+  it("accepts Vertex AI model IDs without warning", () => {
+    const warnSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(validateModel("claude-sonnet-4-5@20250929")).toBe("claude-sonnet-4-5@20250929");
+    // No custom-model warning should be emitted for known Vertex IDs
+    const warned = warnSpy.mock.calls.some((args) =>
+      args.some((a) => typeof a === "string" && a.includes("not in claude supported models list"))
+    );
+    expect(warned).toBe(false);
+    warnSpy.mockRestore();
+  });
 });
 
 describe("setModelOverride / getModel", () => {

@@ -92,6 +92,12 @@ reygent run --jira PROJ-123
 # Or from a Linear issue
 reygent run --linear DT-456
 
+# Resume a previously failed or interrupted run
+reygent continue
+
+# Generate an HTML telemetry dashboard
+reygent dashboard generate --open
+
 # Review last run telemetry
 reygent last
 

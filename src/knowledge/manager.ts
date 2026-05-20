@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { AgentName } from '../agents.js';
+import type { AgentName } from '../task.js';
 
 export interface FailureEntryOptions {
   issue: string;

@@ -45,17 +45,17 @@ function parseADF(adf: { content: unknown[] }): string {
 }
 
 export async function readJiraSpec(issueKey: string): Promise<JiraSpecPayload> {
-  const jiraUrl = process.env.JIRA_URL;
-  const jiraEmail = process.env.JIRA_EMAIL;
-  const jiraToken = process.env.JIRA_API_TOKEN;
+  const jiraUrl = process.env.JIRA_BASE_URL;
+  const jiraEmail = process.env.JIRA_USERNAME;
+  const jiraToken = process.env.JIRA_TOKEN;
 
   if (!jiraUrl || !jiraEmail || !jiraToken) {
     throw new SpecError(
       `Jira API credentials not configured.\n\n` +
         `Add the following to your .env file:\n\n` +
-        `  JIRA_URL=https://your-company.atlassian.net\n` +
-        `  JIRA_EMAIL=you@company.com\n` +
-        `  JIRA_API_TOKEN=your-api-token\n\n` +
+        `  JIRA_BASE_URL=https://your-company.atlassian.net\n` +
+        `  JIRA_USERNAME=you@company.com\n` +
+        `  JIRA_TOKEN=your-api-token\n\n` +
         `Get an API token at: https://id.atlassian.com/manage-profile/security/api-tokens`,
     );
   }

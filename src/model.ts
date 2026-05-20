@@ -47,8 +47,10 @@ export function validateModel(id: string, providerName?: string): string {
   // OpenRouter accepts any model slug — pass-through
   if (name === "openrouter") return resolved;
 
-  // Check if model in supported list
-  const valid = provider.supportedModels.some((m) => m.id === resolved);
+  // Check if model in supported list (or Vertex AI list, if provider has one)
+  const valid =
+    provider.supportedModels.some((m) => m.id === resolved) ||
+    (provider.vertexModels?.some((m) => m.id === resolved) ?? false);
   if (!valid) {
     // Allow custom models but warn user only once per model per session
     const warningKey = `${name}:${resolved}`;

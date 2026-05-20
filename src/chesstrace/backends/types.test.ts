@@ -30,7 +30,7 @@ describe('StorageBackend interface', () => {
         query: async (_filter: EventFilter) => [],
         listRuns: async () => [],
         flush: async () => {},
-        prune: async (_retentionDays: number) => {},
+        prune: async (_retentionDays: number) => 0,
         close: async () => {},
       };
 
@@ -48,7 +48,7 @@ describe('StorageBackend interface', () => {
         query: async () => [],
         listRuns: async () => [],
         flush: async () => {},
-        prune: async () => {},
+        prune: async () => 0,
         close: async () => {},
       };
 
@@ -73,7 +73,7 @@ describe('StorageBackend interface', () => {
         query: async () => [],
         listRuns: async () => [],
         flush: async () => {},
-        prune: async () => {},
+        prune: async () => 0,
         close: async () => {},
       };
 
@@ -102,7 +102,7 @@ describe('StorageBackend interface', () => {
         query: async () => [],
         listRuns: async () => [],
         flush: async () => {},
-        prune: async () => {},
+        prune: async () => 0,
         close: async () => {},
       };
 
@@ -134,7 +134,7 @@ describe('StorageBackend interface', () => {
         },
         listRuns: async () => [],
         flush: async () => {},
-        prune: async () => {},
+        prune: async () => 0,
         close: async () => {},
       };
 
@@ -150,6 +150,7 @@ describe('StorageBackend interface', () => {
           startTime: 1000,
           endTime: 2000,
           eventCount: 5,
+          categories: [],
         },
       ];
 
@@ -160,7 +161,7 @@ describe('StorageBackend interface', () => {
         query: async () => [],
         listRuns: async () => mockRuns,
         flush: async () => {},
-        prune: async () => {},
+        prune: async () => 0,
         close: async () => {},
       };
 
@@ -181,7 +182,7 @@ describe('StorageBackend interface', () => {
         query: async () => [],
         listRuns: async () => [],
         flush: async () => {},
-        prune: async () => {},
+        prune: async () => 0,
         close: async () => {},
       };
 
@@ -200,13 +201,14 @@ describe('StorageBackend interface', () => {
         flush: async () => {},
         prune: async (retentionDays: number) => {
           expect(typeof retentionDays).toBe('number');
+          return 0;
         },
         close: async () => {},
       };
 
       const result = backend.prune(30);
       expect(result).toBeInstanceOf(Promise);
-      await expect(result).resolves.toBeUndefined();
+      await expect(result).resolves.toBe(0);
     });
 
     it('close returns Promise<void>', async () => {
@@ -217,7 +219,7 @@ describe('StorageBackend interface', () => {
         query: async () => [],
         listRuns: async () => [],
         flush: async () => {},
-        prune: async () => {},
+        prune: async () => 0,
         close: async () => {},
       };
 
@@ -338,6 +340,7 @@ describe('RunSummary interface', () => {
         startTime: 1000,
         endTime: 2000,
         eventCount: 42,
+        categories: [],
       };
 
       expect(summary.runId).toBe('run_123');
@@ -352,6 +355,7 @@ describe('RunSummary interface', () => {
         startTime: 0,
         endTime: 0,
         eventCount: 0,
+        categories: [],
       };
 
       expect(typeof summary.runId).toBe('string');
@@ -363,6 +367,7 @@ describe('RunSummary interface', () => {
         startTime: Date.now(),
         endTime: Date.now(),
         eventCount: 0,
+        categories: [],
       };
 
       expect(typeof summary.startTime).toBe('number');
@@ -374,6 +379,7 @@ describe('RunSummary interface', () => {
         startTime: 0,
         endTime: Date.now(),
         eventCount: 0,
+        categories: [],
       };
 
       expect(typeof summary.endTime).toBe('number');
@@ -385,6 +391,7 @@ describe('RunSummary interface', () => {
         startTime: 0,
         endTime: 0,
         eventCount: 100,
+        categories: [],
       };
 
       expect(typeof summary.eventCount).toBe('number');
@@ -398,6 +405,7 @@ describe('RunSummary interface', () => {
         startTime: 1000,
         endTime: 2000,
         eventCount: 5,
+        categories: [],
       };
 
       expect(summary.startTime).toBeLessThanOrEqual(summary.endTime);
@@ -409,6 +417,7 @@ describe('RunSummary interface', () => {
         startTime: 0,
         endTime: 0,
         eventCount: 0,
+        categories: [],
       };
 
       expect(summary.eventCount).toBeGreaterThanOrEqual(0);
@@ -420,6 +429,7 @@ describe('RunSummary interface', () => {
         startTime: 1000,
         endTime: 1000,
         eventCount: 1,
+        categories: [],
       };
 
       expect(summary.startTime).toBe(summary.endTime);
@@ -433,6 +443,7 @@ describe('RunSummary interface', () => {
         startTime: now - 3600000, // 1 hour ago
         endTime: now,
         eventCount: 1000,
+        categories: [],
       };
 
       expect(summary.endTime - summary.startTime).toBe(3600000);
@@ -448,18 +459,21 @@ describe('RunSummary interface', () => {
           startTime: 1000,
           endTime: 2000,
           eventCount: 10,
+          categories: [],
         },
         {
           runId: 'run_2',
           startTime: 3000,
           endTime: 4000,
           eventCount: 20,
+          categories: [],
         },
         {
           runId: 'run_3',
           startTime: 5000,
           endTime: 6000,
           eventCount: 30,
+          categories: [],
         },
       ];
 
@@ -476,18 +490,21 @@ describe('RunSummary interface', () => {
           startTime: 5000,
           endTime: 6000,
           eventCount: 30,
+          categories: [],
         },
         {
           runId: 'run_1',
           startTime: 1000,
           endTime: 2000,
           eventCount: 10,
+          categories: [],
         },
         {
           runId: 'run_2',
           startTime: 3000,
           endTime: 4000,
           eventCount: 20,
+          categories: [],
         },
       ];
 
@@ -505,18 +522,21 @@ describe('RunSummary interface', () => {
           startTime: 1000,
           endTime: 2000,
           eventCount: 50,
+          categories: [],
         },
         {
           runId: 'run_2',
           startTime: 3000,
           endTime: 4000,
           eventCount: 10,
+          categories: [],
         },
         {
           runId: 'run_3',
           startTime: 5000,
           endTime: 6000,
           eventCount: 30,
+          categories: [],
         },
       ];
 
@@ -546,7 +566,7 @@ describe('interface integration', () => {
       },
       listRuns: async () => [],
       flush: async () => {},
-      prune: async () => {},
+      prune: async () => 0,
       close: async () => {},
     };
 
@@ -560,6 +580,7 @@ describe('interface integration', () => {
         startTime: 1000,
         endTime: 2000,
         eventCount: 5,
+        categories: [],
       },
     ];
 
@@ -570,7 +591,7 @@ describe('interface integration', () => {
       query: async () => [],
       listRuns: async () => runs,
       flush: async () => {},
-      prune: async () => {},
+      prune: async () => 0,
       close: async () => {},
     };
 
@@ -590,7 +611,7 @@ describe('interface integration', () => {
       query: async () => (stored ? [stored] : []),
       listRuns: async () => [],
       flush: async () => {},
-      prune: async () => {},
+      prune: async () => 0,
       close: async () => {},
     };
 

@@ -18,7 +18,7 @@ vi.mock("fs", async () => {
 });
 
 vi.mock("../knowledge/loader.js", () => ({
-  loadMarkdownFile: vi.fn(),
+  readMarkdown: vi.fn(),
   loadKnowledge: vi.fn(),
 }));
 
@@ -71,8 +71,9 @@ vi.mock("@inquirer/prompts", () => ({
   confirm: vi.fn(),
 }));
 
-import { loadMarkdownFile } from "../knowledge/loader.js";
+import { readMarkdown } from "../knowledge/loader.js";
 import { addFailureEntry, addPatternEntry } from "../knowledge/manager.js";
+import type { FailureEntryOptions, PatternEntryOptions } from "../knowledge/manager.js";
 import {
   suggestFromFailures,
   suggestFromSuccesses,
@@ -128,22 +129,22 @@ describe("commands/knowledge", () => {
 ## Circular imports
 **Solution**: Use deferred imports`;
 
-      vi.mocked(loadMarkdownFile).mockResolvedValue(mockContent);
+      vi.mocked(readMarkdown).mockResolvedValue(mockContent);
 
-      await loadMarkdownFile(".reygent/knowledge/common-failures.md");
+      await readMarkdown(".reygent/knowledge/common-failures.md");
 
-      expect(loadMarkdownFile).toHaveBeenCalledWith(
+      expect(readMarkdown).toHaveBeenCalledWith(
         ".reygent/knowledge/common-failures.md",
       );
     });
 
     it("should handle agent-specific file paths", async () => {
       const mockContent = "# Agent Tips";
-      vi.mocked(loadMarkdownFile).mockResolvedValue(mockContent);
+      vi.mocked(readMarkdown).mockResolvedValue(mockContent);
 
-      await loadMarkdownFile(".reygent/knowledge/agents/spec-writer.md");
+      await readMarkdown(".reygent/knowledge/agents/spec-writer.md");
 
-      expect(loadMarkdownFile).toHaveBeenCalledWith(
+      expect(readMarkdown).toHaveBeenCalledWith(
         ".reygent/knowledge/agents/spec-writer.md",
       );
     });
@@ -151,10 +152,10 @@ describe("commands/knowledge", () => {
     it("should handle missing file", async () => {
       const error = new Error("ENOENT");
       (error as any).code = "ENOENT";
-      vi.mocked(loadMarkdownFile).mockRejectedValue(error);
+      vi.mocked(readMarkdown).mockRejectedValue(error);
 
       await expect(
-        loadMarkdownFile(".reygent/knowledge/missing.md"),
+        readMarkdown(".reygent/knowledge/missing.md"),
       ).rejects.toThrow();
     });
   });
@@ -198,9 +199,9 @@ No match here`,
         example: "from .models import User",
       };
 
-      await addFailureEntry(entry);
+      await addFailureEntry(".", entry as FailureEntryOptions);
 
-      expect(addFailureEntry).toHaveBeenCalledWith(entry);
+      expect(addFailureEntry).toHaveBeenCalledWith(".", entry);
     });
 
     it("should add failure from run ID", async () => {
@@ -244,9 +245,10 @@ No match here`,
         runIds: ["manual"],
       };
 
-      await addFailureEntry(entry);
+      await addFailureEntry(".", entry as FailureEntryOptions);
 
       expect(addFailureEntry).toHaveBeenCalledWith(
+        ".",
         expect.not.objectContaining({ example: expect.anything() }),
       );
     });
@@ -269,9 +271,9 @@ No match here`,
         approach: "1. List files\n2. Identify deps",
       };
 
-      await addPatternEntry(entry);
+      await addPatternEntry(".", entry as PatternEntryOptions);
 
-      expect(addPatternEntry).toHaveBeenCalledWith(entry);
+      expect(addPatternEntry).toHaveBeenCalledWith(".", entry);
     });
 
     it("should analyze pattern from successful run", async () => {
@@ -318,7 +320,7 @@ No match here`,
         },
       ];
 
-      vi.mocked(suggestFromFailures).mockResolvedValue(mockSuggestions);
+      vi.mocked(suggestFromFailures).mockReturnValue(mockSuggestions as unknown as string[]);
       vi.mocked(select).mockResolvedValue("document");
 
       await suggestFromFailures({} as any, 30);
@@ -338,7 +340,7 @@ No match here`,
         },
       ];
 
-      vi.mocked(suggestFromSuccesses).mockResolvedValue(mockSuggestions);
+      vi.mocked(suggestFromSuccesses).mockReturnValue(mockSuggestions as unknown as string[]);
       vi.mocked(select).mockResolvedValue("document");
 
       await suggestFromSuccesses({} as any, 30);
@@ -359,7 +361,7 @@ No match here`,
         },
       ];
 
-      vi.mocked(suggestFromFailures).mockResolvedValue(mockSuggestions);
+      vi.mocked(suggestFromFailures).mockReturnValue(mockSuggestions as unknown as string[]);
       vi.mocked(select).mockResolvedValue("skip");
 
       // User selects skip, no entry added
@@ -389,7 +391,7 @@ No match here`,
         }),
       };
 
-      vi.mocked(suggestFromFailures).mockResolvedValue(mockSuggestions);
+      vi.mocked(suggestFromFailures).mockReturnValue(mockSuggestions as unknown as string[]);
       vi.mocked(getChesstrace).mockReturnValue(mockChesstrace as any);
       vi.mocked(select).mockResolvedValue("view-runs");
 

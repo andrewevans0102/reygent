@@ -292,8 +292,8 @@ describe("telemetry override integration", () => {
           throw new Error(`Invalid telemetry level: ${level}`);
         }
 
-        const numericLevel = { minimal: 0, standard: 1, verbose: 2 }[level];
-        return new Chesstrace({ level: numericLevel });
+        const numericLevel = { minimal: 0, standard: 1, verbose: 2 }[level]!;
+        return new Chesstrace({ level: numericLevel as TelemetryLevel });
       };
 
       expect(() => validateAndCreateInstance("invalid")).toThrow(
@@ -380,8 +380,8 @@ describe("telemetry override integration", () => {
           throw new Error(`Invalid telemetry level: ${level}`);
         }
 
-        const numericLevel = { minimal: 0, standard: 1, verbose: 2 }[level];
-        return new Chesstrace({ level: numericLevel });
+        const numericLevel = { minimal: 0, standard: 1, verbose: 2 }[level]!;
+        return new Chesstrace({ level: numericLevel as TelemetryLevel });
       };
 
       expect(() => initTelemetry("debug")).toThrow("Invalid telemetry level");

@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ExitPromptError } from "@inquirer/core";
-import { select } from "@inquirer/prompts";
+import { input, select } from "@inquirer/prompts";
 import chalk from "chalk";
 import ora from "ora";
 import { builtinAgents } from "../agents.js";
@@ -9,27 +9,110 @@ import type { ReygentConfig } from "../config.js";
 import { promptForTelemetryOptIn } from "../chesstrace/prompt.js";
 import { isDebug } from "../debug.js";
 import { DEFAULT_MODEL } from "../model.js";
+import { getProvider, PROVIDER_NAMES } from "../providers/index.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 import { ensureKnowledgeDir } from "../knowledge/manager.js";
+
+async function promptForProviderAndModel(): Promise<{ provider: string; model: string }> {
+  resetTerminalForInput();
+
+  const provider = await select({
+    message: "Default provider for this project?",
+    choices: PROVIDER_NAMES.map((name) => {
+      const adapter = getProvider(name);
+      return { name: `${name} (default model: ${adapter.defaultModel})`, value: name };
+    }),
+    default: "claude",
+  });
+
+  const adapter = getProvider(provider);
+
+  // Providers with a Vertex AI model list get an extra platform question, mirroring `reygent config`.
+  let useVertexAi = false;
+  if (adapter.vertexModels && adapter.vertexModels.length > 0) {
+    resetTerminalForInput();
+    const platform = await select({
+      message: "API platform?",
+      choices: [
+        { name: "Direct API (local setup)", value: "direct" as const },
+        {
+          name: `Google Vertex AI ${chalk.gray("— see https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai")}`,
+          value: "vertex" as const,
+        },
+      ],
+      default: "direct",
+    });
+    useVertexAi = platform === "vertex";
+  }
+
+  const modelList = useVertexAi ? (adapter.vertexModels ?? []) : adapter.supportedModels;
+
+  resetTerminalForInput();
+  if (modelList.length === 0) {
+    const model = await input({
+      message: `Default model for ${provider}?`,
+      default: adapter.defaultModel,
+    });
+    return { provider, model: model.trim() || adapter.defaultModel };
+  }
+
+  const model = await select({
+    message: `Default model for ${provider}?`,
+    choices: modelList.map((m) => ({ name: `${m.id} — ${m.label}`, value: m.id })),
+    default: useVertexAi ? modelList[0]?.id : adapter.defaultModel,
+  });
+
+  return { provider, model };
+}
+
+function ensureRootGitignoreEntries(cwd: string, entries: string[]): void {
+  const gitignorePath = join(cwd, ".gitignore");
+  const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+
+  const existingLines = new Set(
+    existing.split("\n").map((l) => l.trim()).filter(Boolean),
+  );
+  const toAdd = entries.filter((e) => !existingLines.has(e.trim()));
+  if (toAdd.length === 0) return;
+
+  let next = existing;
+  // Ensure existing content ends with a newline
+  if (next && !next.endsWith("\n")) next += "\n";
+  // Add blank line separator between existing content and new section
+  if (next) next += "\n";
+  next += "# Reygent generated files\n";
+  next += toAdd.join("\n") + "\n";
+
+  writeFileSync(gitignorePath, next, "utf-8");
+}
 
 export async function initCommand(options: { dryRun: boolean } = { dryRun: false }): Promise<void> {
   const targetDir = join(process.cwd(), ".reygent");
   const configPath = join(targetDir, "config.json");
+  const rootGitignorePath = join(process.cwd(), ".gitignore");
 
   const skillsDir = join(targetDir, "skills");
 
+  const defaultProvider = "claude";
   const defaultConfig: ReygentConfig = {
-    agents: builtinAgents,
+    agents: builtinAgents.map((a) => ({ ...a, provider: defaultProvider, model: DEFAULT_MODEL })),
     skills: { path: "skills" },
     model: DEFAULT_MODEL,
+    provider: defaultProvider,
   };
 
+  // Dry-run shows the defaults without prompting so it stays non-interactive.
   if (options.dryRun) {
     console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
     console.log(chalk.bold("Would create:"));
     console.log(chalk.gray("  dir:  "), chalk.cyan(targetDir));
     console.log(chalk.gray("  dir:  "), chalk.cyan(skillsDir));
     console.log(chalk.gray("  file: "), chalk.cyan(configPath));
+    console.log(
+      chalk.gray(existsSync(rootGitignorePath) ? "  update:" : "  file:  "),
+      chalk.cyan(rootGitignorePath),
+      chalk.gray("(adds reygent-dashboard.html, .reygent/chesstrace.db*)"),
+    );
     console.log("");
     console.log(chalk.bold("Config preview:"));
     console.log(chalk.gray(JSON.stringify(defaultConfig, null, 2)));
@@ -74,6 +157,14 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
       }
     }
 
+    // Prompt for default provider + model before writing config (TTY only).
+    if (process.stdin.isTTY) {
+      const { provider, model } = await promptForProviderAndModel();
+      defaultConfig.provider = provider;
+      defaultConfig.model = model;
+      defaultConfig.agents = builtinAgents.map((a) => ({ ...a, provider, model }));
+    }
+
     const spinnerText = existsSync(targetDir) ? "Writing config" : "Creating .reygent folder";
     const spinner = ora(spinnerText).start();
 
@@ -93,7 +184,16 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
 
       // Create .gitignore for auto-generated files
       const gitignorePath = join(targetDir, ".gitignore");
-      const gitignoreContent = `# Auto-generated knowledge files (generated from local telemetry)
+      const gitignoreContent = `# Telemetry database (local-only)
+chesstrace.db
+chesstrace.db-journal
+chesstrace.db-wal
+chesstrace.db-shm
+
+# Generated dashboard
+reygent-dashboard.html
+
+# Auto-generated knowledge files (generated from local telemetry)
 knowledge/common-failures.md
 knowledge/success-patterns.md
 
@@ -104,6 +204,16 @@ knowledge/success-patterns.md
 # - knowledge/agents/*.md (curated agent tips)
 `;
       writeFileSync(gitignorePath, gitignoreContent, "utf-8");
+
+      // Ensure project root .gitignore covers Reygent-generated artifacts
+      spinner.text = "Updating project .gitignore";
+      ensureRootGitignoreEntries(process.cwd(), [
+        "reygent-dashboard.html",
+        ".reygent/chesstrace.db",
+        ".reygent/chesstrace.db-journal",
+        ".reygent/chesstrace.db-wal",
+        ".reygent/chesstrace.db-shm",
+      ]);
 
       spinner.succeed(chalk.green("Initialized .reygent folder"));
 

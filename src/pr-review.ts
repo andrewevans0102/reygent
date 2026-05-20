@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { request as httpsRequest } from "node:https";
 import chalk from "chalk";
 import { getAgents } from "./config.js";
 import { wrapText } from "./format.js";
@@ -8,11 +7,10 @@ import { extractJSON } from "./planner.js";
 import {
   parseRemote,
   resolveToken,
-  resolveTlsOptions,
+  httpsGet,
   httpsPost,
   type RemoteInfo,
   type Platform,
-  type TlsOptions,
 } from "./pr-create.js";
 import type { PRReviewComment, PRReviewOutput, TaskContext } from "./task.js";
 import { TaskError } from "./task.js";
@@ -362,42 +360,6 @@ async function retryWithBackoff<T>(
   throw lastError ?? new Error("Retry failed with unknown error");
 }
 
-async function httpsGet(
-  url: string,
-  headers: Record<string, string>,
-  opts?: { insecure?: boolean },
-): Promise<{ status: number; text: string }> {
-  const parsed = new URL(url);
-  const tlsOpts: TlsOptions = opts?.insecure
-    ? { rejectUnauthorized: false }
-    : await resolveTlsOptions(parsed.hostname);
-
-  return new Promise((resolve, reject) => {
-    const req = httpsRequest(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port || 443,
-        path: parsed.pathname + parsed.search,
-        method: "GET",
-        headers,
-        ...tlsOpts,
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () =>
-          resolve({
-            status: res.statusCode ?? 0,
-            text: Buffer.concat(chunks).toString("utf-8"),
-          }),
-        );
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
-}
-
 function getApiBase(remote: RemoteInfo): string {
   if (remote.platform === "gitlab") {
     const projectPath = encodeURIComponent(`${remote.owner}/${remote.repo}`);
@@ -435,9 +397,39 @@ function getAuthHeaders(remote: RemoteInfo, token: string): Record<string, strin
 // Platform-aware PR/MR operations (replace gh CLI callsites)
 // ---------------------------------------------------------------------------
 
+/**
+ * Ask `gh` for the PR's repo URL and parse it. Makes pr-review fork-aware:
+ * when `origin` is a fork but the PR lives on the upstream, `gh pr view`
+ * returns the upstream URL, which is what API calls must target.
+ *
+ * Returns null when gh is unavailable, no PR exists on the current branch,
+ * or the URL isn't a recognizable GitHub pull URL (e.g. GitLab remotes).
+ */
+async function tryDetectRepoFromGh(): Promise<RemoteInfo | null> {
+  let url: string;
+  try {
+    url = (await exec("gh", ["pr", "view", "--json", "url", "--jq", ".url"])).trim();
+  } catch {
+    return null;
+  }
+  if (!url) return null;
+  const m = url.match(/^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/\d+/);
+  if (!m) return null;
+  const host = m[1];
+  const platform: Platform = host.includes("gitlab") ? "gitlab" : "github";
+  return { platform, host, owner: m[2], repo: m[3] };
+}
+
 async function getRemoteAndToken(): Promise<{ remote: RemoteInfo; token: string }> {
-  const remoteUrl = (await exec("git", ["remote", "get-url", "origin"])).trim();
-  const remote = parseRemote(remoteUrl);
+  // Prefer gh's view of the PR repo (fork-aware) when available — handles the
+  // common case where `origin` is a fork but the PR lives on the upstream.
+  // Falls back to parsing `origin` when gh is missing, unauthenticated, or
+  // there's no PR on the current branch (e.g. GitLab, or pre-PR-create flows).
+  let remote = await tryDetectRepoFromGh();
+  if (!remote) {
+    const remoteUrl = (await exec("git", ["remote", "get-url", "origin"])).trim();
+    remote = parseRemote(remoteUrl);
+  }
   const token = await resolveToken(remote.host);
   return { remote, token };
 }
@@ -693,10 +685,11 @@ async function resolvePRNumber(
 
 export async function runPRReview(
   context: TaskContext,
-  options?: AgentSpawnOptions,
+  options?: AgentSpawnOptions & { insecure?: boolean },
 ): Promise<{ output: PRReviewOutput; usage?: UsageInfo }> {
+  const insecure = options?.insecure;
   const { remote, token } = await getRemoteAndToken();
-  const prNumber = await resolvePRNumber(context, remote, token);
+  const prNumber = await resolvePRNumber(context, remote, token, insecure);
 
   const agents = getAgents();
   const agent = agents.find((a) => a.name === "pr-reviewer");
@@ -705,9 +698,9 @@ export async function runPRReview(
   }
 
   const [diff, stat, log] = await Promise.all([
-    getDiff(prNumber, remote, token),
-    getPRDiffStat(prNumber, remote, token),
-    getPRCommitLog(prNumber, remote, token),
+    getDiff(prNumber, remote, token, insecure),
+    getPRDiffStat(prNumber, remote, token, insecure),
+    getPRCommitLog(prNumber, remote, token, insecure),
   ]);
 
   // Split diff by file and select within budget
@@ -740,9 +733,11 @@ export async function runPRReview(
 export async function postPRReviewComment(
   context: TaskContext,
   review: PRReviewOutput,
+  opts?: { insecure?: boolean },
 ): Promise<void> {
+  const insecure = opts?.insecure;
   const { remote, token } = await getRemoteAndToken();
-  const prNumber = await resolvePRNumber(context, remote, token);
+  const prNumber = await resolvePRNumber(context, remote, token, insecure);
   const body = formatPRReviewOutput(review) +
     "\n\n---\n*Review by [reygent](https://github.com/andrewevans0102/reygent)*";
 
@@ -756,6 +751,7 @@ export async function postPRReviewComment(
         `${apiBase}/merge_requests/${prNumber}/notes`,
         headers,
         JSON.stringify({ body }),
+        { insecure },
       );
       if (status < 200 || status >= 300) {
         throw new TaskError(`pr-review: GitLab API error ${status}: ${text}`);
@@ -769,6 +765,7 @@ export async function postPRReviewComment(
       `${apiBase}/issues/${prNumber}/comments`,
       headers,
       JSON.stringify({ body }),
+      { insecure },
     );
     if (status < 200 || status >= 300) {
       throw new TaskError(`pr-review: GitHub API error ${status}: ${text}`);

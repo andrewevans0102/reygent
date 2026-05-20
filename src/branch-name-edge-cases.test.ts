@@ -183,7 +183,7 @@ describe("branch name edge cases", () => {
   describe("prefix validation", () => {
     it("accepts all conventional commit types", () => {
       const spec: SpecPayload = { source: "jira", issueKey: "TEST-1", title: "Test", content: "" };
-      const types = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"];
+      const types = ["feat", "fix", "chore", "refactor", "docs", "test", "style", "perf"] as const;
 
       for (const type of types) {
         const branch = deriveBranchName(spec, type);

@@ -45,7 +45,7 @@ describe("loadConfig", () => {
     const config = loadConfig();
     expect(config.telemetry).toEqual({
       enabled: undefined,
-      level: 'standard',
+      level: 'verbose',
       backend: 'sqlite',
       retention: 30,
     });
@@ -109,7 +109,7 @@ describe("loadConfig", () => {
     const config = loadConfig();
     expect(config.telemetry).toEqual({
       enabled: undefined,
-      level: 'standard',
+      level: 'verbose',
       backend: 'sqlite',
       retention: 30,
     });
@@ -154,7 +154,7 @@ describe("loadConfig", () => {
     expect(config.agents).toEqual(builtinAgents);
     expect(config.telemetry).toEqual({
       enabled: undefined,
-      level: 'standard',
+      level: 'verbose',
       backend: 'sqlite',
       retention: 30,
     });
