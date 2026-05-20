@@ -213,6 +213,100 @@ When running without `--auto-approve`, you'll be prompted for:
 
 ---
 
+## `reygent continue`
+
+Resume a previously failed or interrupted reygent run. Each `reygent run` writes a snapshot to `.reygent/runs/<runId>.json` after every completed stage; `continue` lets you pick one up where it left off.
+
+```bash
+reygent continue [--run-id <id>] [--auto-approve] [--verbose]
+```
+
+| Option | Description |
+|---|---|
+| `--run-id <id>` | Run id (or unique prefix) to resume — skips the interactive picker |
+| `--auto-approve` | Auto-approve all file edits and actions without prompting |
+| `--verbose` | Show detailed per-agent token and cost breakdown |
+
+**What it does:**
+
+1. Looks up unfinished snapshots in `<projectRoot>/.reygent/runs/` (any run whose last completed stage is not `pr-review`, or that has a `failedStage`)
+2. Displays up to 5 most recent unfinished runs with short id, spec title, last completed stage, failed stage, and age
+3. Re-invokes `reygent run` with the original run options (provider, model, type, security threshold, etc.) and replays state from the snapshot so completed stages are skipped
+4. CLI flags passed to `continue` (`--auto-approve`, `--verbose`) override the values stored in the snapshot
+
+**Examples:**
+
+```bash
+# Interactive picker
+reygent continue
+
+# Resume a specific run by id prefix
+reygent continue --run-id a1b2c3d4
+
+# Resume non-interactively (e.g., CI) — --run-id is required
+reygent continue --run-id a1b2c3d4 --auto-approve
+```
+
+**Requirements and behavior:**
+
+- Must be run from a project with a `.reygent/` directory (same as `reygent run`)
+- In non-TTY environments, `--run-id` is required — the interactive picker is skipped
+- Ambiguous prefixes (matching more than one run) error out; use a longer prefix
+- Snapshots stay on disk after a successful resume completes the `pr-review` stage
+
+---
+
+## `reygent dashboard`
+
+Visual interface for exploring Reygent telemetry data. Generates a self-contained HTML dashboard or runs CLI queries against the local telemetry DB. See [Dashboard](./dashboard.md) for full details and screenshots.
+
+```bash
+reygent dashboard <subcommand> [options]
+```
+
+### Subcommands
+
+#### `reygent dashboard generate`
+
+Generate a standalone HTML dashboard with embedded telemetry data.
+
+```bash
+reygent dashboard generate [--output <file>] [--open]
+```
+
+| Option | Description |
+|---|---|
+| `--output <file>` | Output file path (default: `<projectRoot>/.reygent/reygent-dashboard.html`) |
+| `--open` | Open the dashboard in the default browser after generation |
+
+#### `reygent dashboard runs`
+
+List recent runs in the terminal with status, duration, and cost.
+
+#### `reygent dashboard trends`
+
+Show success/failure trends over time.
+
+#### `reygent dashboard agent-failures`
+
+Aggregate failure counts by agent to find unstable stages.
+
+#### `reygent dashboard run <runId>`
+
+Show the full event timeline for a specific run.
+
+#### `reygent dashboard export`
+
+Export telemetry data for offline analysis.
+
+```bash
+reygent dashboard export [--format csv|xlsx] [--output <file>]
+```
+
+See [Dashboard](./dashboard.md) for full options on each subcommand.
+
+---
+
 ## `reygent review-work`
 
 Review the current branch's changes and optionally post the review to an open PR or MR.

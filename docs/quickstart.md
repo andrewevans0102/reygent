@@ -179,6 +179,8 @@ See [Skills](./skills.md) for the full guide.
 | `reygent agent dev` | Start interactive session with an agent |
 | `reygent agent dev --spec spec.md` | Interactive session with spec context |
 | `reygent run --spec spec.md` | Run full 7-stage workflow |
+| `reygent continue` | Resume a previously failed or interrupted run |
+| `reygent dashboard generate --open` | Generate and open an HTML telemetry dashboard |
 | `reygent skills list` | Browse available skills in the registry |
 | `reygent skills add <name>` | Install a skill from the registry |
 | `reygent skills remove <name>` | Remove an installed skill |
