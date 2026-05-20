@@ -111,7 +111,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
     console.log(
       chalk.gray(existsSync(rootGitignorePath) ? "  update:" : "  file:  "),
       chalk.cyan(rootGitignorePath),
-      chalk.gray("(adds reygent-dashboard.html)"),
+      chalk.gray("(adds reygent-dashboard.html, .reygent/chesstrace.db*)"),
     );
     console.log("");
     console.log(chalk.bold("Config preview:"));
@@ -207,7 +207,13 @@ knowledge/success-patterns.md
 
       // Ensure project root .gitignore covers Reygent-generated artifacts
       spinner.text = "Updating project .gitignore";
-      ensureRootGitignoreEntries(process.cwd(), ["reygent-dashboard.html"]);
+      ensureRootGitignoreEntries(process.cwd(), [
+        "reygent-dashboard.html",
+        ".reygent/chesstrace.db",
+        ".reygent/chesstrace.db-journal",
+        ".reygent/chesstrace.db-wal",
+        ".reygent/chesstrace.db-shm",
+      ]);
 
       spinner.succeed(chalk.green("Initialized .reygent folder"));
 

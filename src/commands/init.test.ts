@@ -340,7 +340,7 @@ describe("initCommand", () => {
     expect(content).toContain("chesstrace.db");
   });
 
-  it("creates root .gitignore with reygent-dashboard.html when none exists", async () => {
+  it("creates root .gitignore with reygent-dashboard.html and chesstrace.db entries when none exists", async () => {
     // Nothing exists — including the root .gitignore
     mockExistsSync.mockReturnValue(false);
 
@@ -353,19 +353,25 @@ describe("initCommand", () => {
     expect(rootGitignoreCall).toBeDefined();
     const content = rootGitignoreCall?.[1] as string;
     expect(content).toContain("reygent-dashboard.html");
+    expect(content).toContain(".reygent/chesstrace.db");
+    expect(content).toContain(".reygent/chesstrace.db-journal");
+    expect(content).toContain(".reygent/chesstrace.db-wal");
+    expect(content).toContain(".reygent/chesstrace.db-shm");
   });
 
   it("appends to existing root .gitignore without duplicating", async () => {
-    // .reygent does not exist, but root .gitignore does
+    // .reygent does not exist, but root .gitignore does with ALL entries already present
     mockExistsSync.mockImplementation((p) => {
       const path = String(p);
       return path.endsWith("/.gitignore") && !path.includes(".reygent/");
     });
-    mockReadFileSync.mockReturnValue("node_modules/\nreygent-dashboard.html\n");
+    mockReadFileSync.mockReturnValue(
+      "node_modules/\nreygent-dashboard.html\n.reygent/chesstrace.db\n.reygent/chesstrace.db-journal\n.reygent/chesstrace.db-wal\n.reygent/chesstrace.db-shm\n",
+    );
 
     await initCommand({ dryRun: false });
 
-    // No write to root .gitignore because entry already present
+    // No write to root .gitignore because all entries already present
     const rootGitignoreWrites = mockWriteFileSync.mock.calls.filter((c) => {
       const path = String(c[0]);
       return path.endsWith("/.gitignore") && !path.includes(".reygent/");
@@ -390,6 +396,7 @@ describe("initCommand", () => {
     const content = rootGitignoreCall?.[1] as string;
     expect(content).toContain("node_modules/");
     expect(content).toContain("reygent-dashboard.html");
+    expect(content).toContain(".reygent/chesstrace.db");
   });
 
   it("calls process.exit(2) on filesystem errors", async () => {
