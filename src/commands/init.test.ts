@@ -4,8 +4,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 // Mock declarations appear before vi.mock calls in source, but vitest
 // hoists vi.mock to the top of the file so the mocks are defined first.
 const mockSelect = vi.fn();
+const mockInput = vi.fn();
 vi.mock("@inquirer/prompts", () => ({
   select: (...args: unknown[]) => mockSelect(...args),
+  input: (...args: unknown[]) => mockInput(...args),
 }));
 
 const inquirerCoreMock = vi.hoisted(() => {
@@ -37,6 +39,27 @@ vi.mock("../agents.js", () => ({
 }));
 vi.mock("../debug.js", () => ({ isDebug: vi.fn(() => false) }));
 vi.mock("../model.js", () => ({ DEFAULT_MODEL: "test-model" }));
+vi.mock("../providers/index.js", () => ({
+  PROVIDER_NAMES: ["claude", "gemini"],
+  getProvider: (name: string) => {
+    if (name === "claude") {
+      return {
+        defaultModel: "claude-default",
+        supportedModels: [
+          { id: "claude-default", label: "Claude Default" },
+          { id: "claude-other", label: "Claude Other" },
+        ],
+        vertexModels: [
+          { id: "claude-vertex", label: "Claude Vertex" },
+        ],
+      };
+    }
+    return {
+      defaultModel: "gemini-default",
+      supportedModels: [],
+    };
+  },
+}));
 vi.mock("../knowledge/manager.js", () => ({
   ensureKnowledgeDir: vi.fn(async () => {}),
 }));
@@ -77,6 +100,15 @@ describe("initCommand", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockReadFileSync.mockReturnValue("");
+    // Drive select() based on its prompt message so the same default works for
+    // the provider, API platform, and model picks during init.
+    mockSelect.mockImplementation(async (opts: { message: string }) => {
+      if (/platform/i.test(opts.message)) return "direct";
+      if (/provider/i.test(opts.message)) return "claude";
+      if (/model/i.test(opts.message)) return "claude-default";
+      throw new Error(`Unexpected select prompt: ${opts.message}`);
+    });
+    mockInput.mockResolvedValue("gemini-default");
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     exitSpy = vi
       .spyOn(process, "exit")
@@ -151,7 +183,13 @@ describe("initCommand", () => {
 
   it("reset choice overwrites config with defaults", async () => {
     mockExistsSync.mockReturnValue(true);
-    mockSelect.mockResolvedValue("reset");
+    // First select() handles the existing-config action, then provider, platform, model.
+    mockSelect.mockReset();
+    mockSelect
+      .mockResolvedValueOnce("reset")
+      .mockResolvedValueOnce("claude")
+      .mockResolvedValueOnce("direct")
+      .mockResolvedValueOnce("claude-default");
 
     await initCommand({ dryRun: false });
 
@@ -265,8 +303,26 @@ describe("initCommand", () => {
     // Should contain skills config
     expect(config.skills).toEqual({ path: "skills" });
 
-    // Should contain the mocked DEFAULT_MODEL
-    expect(config.model).toBe("test-model");
+    // Provider and model come from the init prompt selection
+    expect(config.provider).toBe("claude");
+    expect(config.model).toBe("claude-default");
+  });
+
+  it("uses vertex model list when user picks Google Vertex AI", async () => {
+    mockExistsSync.mockReturnValue(false);
+    mockSelect.mockImplementation(async (opts: { message: string }) => {
+      if (/platform/i.test(opts.message)) return "vertex";
+      if (/provider/i.test(opts.message)) return "claude";
+      if (/model/i.test(opts.message)) return "claude-vertex";
+      throw new Error(`Unexpected select prompt: ${opts.message}`);
+    });
+
+    await initCommand({ dryRun: false });
+
+    const writtenContent = mockWriteFileSync.mock.calls[0]?.[1] as string;
+    const config = JSON.parse(writtenContent.trim());
+    expect(config.provider).toBe("claude");
+    expect(config.model).toBe("claude-vertex");
   });
 
   it(".reygent/.gitignore includes chesstrace.db", async () => {

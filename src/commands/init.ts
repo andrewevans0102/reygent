@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ExitPromptError } from "@inquirer/core";
-import { select } from "@inquirer/prompts";
+import { input, select } from "@inquirer/prompts";
 import chalk from "chalk";
 import ora from "ora";
 import { builtinAgents } from "../agents.js";
@@ -9,8 +9,61 @@ import type { ReygentConfig } from "../config.js";
 import { promptForTelemetryOptIn } from "../chesstrace/prompt.js";
 import { isDebug } from "../debug.js";
 import { DEFAULT_MODEL } from "../model.js";
+import { getProvider, PROVIDER_NAMES } from "../providers/index.js";
 import { resetTerminalForInput } from "../terminal-reset.js";
 import { ensureKnowledgeDir } from "../knowledge/manager.js";
+
+async function promptForProviderAndModel(): Promise<{ provider: string; model: string }> {
+  resetTerminalForInput();
+
+  const provider = await select({
+    message: "Default provider for this project?",
+    choices: PROVIDER_NAMES.map((name) => {
+      const adapter = getProvider(name);
+      return { name: `${name} (default model: ${adapter.defaultModel})`, value: name };
+    }),
+    default: "claude",
+  });
+
+  const adapter = getProvider(provider);
+
+  // Providers with a Vertex AI model list get an extra platform question, mirroring `reygent config`.
+  let useVertexAi = false;
+  if (adapter.vertexModels && adapter.vertexModels.length > 0) {
+    resetTerminalForInput();
+    const platform = await select({
+      message: "API platform?",
+      choices: [
+        { name: "Direct API (local setup)", value: "direct" as const },
+        {
+          name: `Google Vertex AI ${chalk.gray("— see https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai")}`,
+          value: "vertex" as const,
+        },
+      ],
+      default: "direct",
+    });
+    useVertexAi = platform === "vertex";
+  }
+
+  const modelList = useVertexAi ? (adapter.vertexModels ?? []) : adapter.supportedModels;
+
+  resetTerminalForInput();
+  if (modelList.length === 0) {
+    const model = await input({
+      message: `Default model for ${provider}?`,
+      default: adapter.defaultModel,
+    });
+    return { provider, model: model.trim() || adapter.defaultModel };
+  }
+
+  const model = await select({
+    message: `Default model for ${provider}?`,
+    choices: modelList.map((m) => ({ name: `${m.id} — ${m.label}`, value: m.id })),
+    default: useVertexAi ? modelList[0]?.id : adapter.defaultModel,
+  });
+
+  return { provider, model };
+}
 
 function ensureRootGitignoreEntries(cwd: string, entries: string[]): void {
   const gitignorePath = join(cwd, ".gitignore");
@@ -46,6 +99,7 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
     model: DEFAULT_MODEL,
   };
 
+  // Dry-run shows the defaults without prompting so it stays non-interactive.
   if (options.dryRun) {
     console.log(chalk.yellow.bold("[dry-run]"), "No changes will be made.\n");
     console.log(chalk.bold("Would create:"));
@@ -99,6 +153,13 @@ export async function initCommand(options: { dryRun: boolean } = { dryRun: false
       } else {
         console.log(chalk.cyan("No config.json found. Creating default config...\n"));
       }
+    }
+
+    // Prompt for default provider + model before writing config (TTY only).
+    if (process.stdin.isTTY) {
+      const { provider, model } = await promptForProviderAndModel();
+      defaultConfig.provider = provider;
+      defaultConfig.model = model;
     }
 
     const spinnerText = existsSync(targetDir) ? "Writing config" : "Creating .reygent folder";
