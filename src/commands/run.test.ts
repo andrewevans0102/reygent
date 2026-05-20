@@ -66,6 +66,13 @@ vi.mock("../chesstrace/backends/sqlite.js", () => ({
     close: vi.fn().mockResolvedValue(undefined),
   })),
 }));
+vi.mock("./run-snapshot.js", () => ({
+  saveSnapshot: vi.fn(),
+  loadSnapshot: vi.fn(() => null),
+  deleteSnapshot: vi.fn(),
+  listUnfinishedSnapshots: vi.fn(() => []),
+  getRunsDir: vi.fn((root: string) => `${root}/.reygent/runs`),
+}));
 
 import { loadSpec } from "../spec.js";
 import { runPlanner } from "../planner.js";
