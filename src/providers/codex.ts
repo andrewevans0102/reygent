@@ -60,7 +60,6 @@ export const codexAdapter: ProviderAdapter = {
       const child = spawn(wrapped.file, wrapped.args, {
         stdio: [stdinMode, "pipe", "pipe"],
         env: buildMemoryEnv(),
-        detached: true, // New process group so we can kill descendants via -pid
       });
       registerChildProcess(child);
 
@@ -68,16 +67,7 @@ export const codexAdapter: ProviderAdapter = {
       let stdoutBytes = 0;
 
       const timeout = setTimeout(() => {
-        // Kill entire process group to catch spawned descendants
-        if (child.pid && process.platform !== "win32") {
-          try {
-            process.kill(-child.pid, "SIGTERM");
-          } catch {
-            child.kill();
-          }
-        } else {
-          child.kill();
-        }
+        child.kill("SIGTERM");
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);
 
@@ -204,7 +194,7 @@ export const codexAdapter: ProviderAdapter = {
       const child = spawn(
         "codex",
         ["--model", model, systemPrompt],
-        { stdio: "inherit", detached: true },
+        { stdio: "inherit" },
       );
       registerChildProcess(child);
 

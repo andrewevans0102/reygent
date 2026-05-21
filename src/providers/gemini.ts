@@ -84,7 +84,6 @@ export const geminiAdapter: ProviderAdapter = {
       const child = spawn(wrapped.file, wrapped.args, {
         stdio: [stdinMode, "pipe", "pipe"],
         env: buildMemoryEnv({ GEMINI_CLI_TRUST_WORKSPACE: "true" }),
-        detached: true, // New process group so we can kill descendants via -pid
       });
       registerChildProcess(child);
 
@@ -92,16 +91,7 @@ export const geminiAdapter: ProviderAdapter = {
       let stdoutBytes = 0;
 
       const timeout = setTimeout(() => {
-        // Kill entire process group to catch spawned descendants
-        if (child.pid && process.platform !== "win32") {
-          try {
-            process.kill(-child.pid, "SIGTERM");
-          } catch {
-            child.kill();
-          }
-        } else {
-          child.kill();
-        }
+        child.kill("SIGTERM");
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);
 
@@ -229,7 +219,7 @@ export const geminiAdapter: ProviderAdapter = {
       const child = spawn(
         "gemini",
         ["--model", model, "-i", `Follow these instructions for this session:\n\n${systemPrompt}`],
-        { stdio: "inherit", detached: true, env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" } },
+        { stdio: "inherit", env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" } },
       );
       registerChildProcess(child);
 

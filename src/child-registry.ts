@@ -5,10 +5,6 @@ const activeChildProcesses = new Set<ChildProcess>();
 export function registerChildProcess(child: ChildProcess): void {
   activeChildProcesses.add(child);
   child.on("close", () => {
-    // Kill process group to clean up any grandchild processes (MCP servers, etc.)
-    if (child.pid && process.platform !== "win32") {
-      try { process.kill(-child.pid, "SIGTERM"); } catch { /* already dead */ }
-    }
     activeChildProcesses.delete(child);
   });
   child.on("error", () => {
@@ -19,16 +15,28 @@ export function registerChildProcess(child: ChildProcess): void {
 export function killAllChildrenProcesses(): void {
   for (const child of activeChildProcesses) {
     try {
-      // Kill entire process group to catch spawned descendants (e.g., vitest)
-      if (child.pid && process.platform !== "win32") {
-        process.kill(-child.pid, "SIGTERM");
-      } else {
-        child.kill("SIGTERM");
-      }
+      child.kill("SIGTERM");
     } catch {
       // Already dead — ignore
     }
   }
+
+  // Escalate to SIGKILL after 500ms for any survivors
+  if (activeChildProcesses.size > 0) {
+    const remaining = new Set(activeChildProcesses);
+    setTimeout(() => {
+      for (const child of remaining) {
+        if (!child.killed) {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // Already dead — ignore
+          }
+        }
+      }
+    }, 500).unref();
+  }
+
   activeChildProcesses.clear();
 }
 
