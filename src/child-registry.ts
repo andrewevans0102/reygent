@@ -14,17 +14,44 @@ export function registerChildProcess(child: ChildProcess): void {
 
 export function killAllChildrenProcesses(): void {
   for (const child of activeChildProcesses) {
-    try {
-      // Kill entire process group to catch spawned descendants (e.g., vitest)
-      if (child.pid && process.platform !== "win32") {
+    // Kill entire process group first to catch grandchildren (test runners, bundlers, etc.)
+    if (child.pid) {
+      try {
         process.kill(-child.pid, "SIGTERM");
-      } else {
-        child.kill("SIGTERM");
+      } catch {
+        // Process group already dead — ignore
       }
+    }
+    try {
+      child.kill("SIGTERM");
     } catch {
       // Already dead — ignore
     }
   }
+
+  // Escalate to SIGKILL after 500ms for any survivors
+  if (activeChildProcesses.size > 0) {
+    const remaining = new Set(activeChildProcesses);
+    setTimeout(() => {
+      for (const child of remaining) {
+        if (!child.killed) {
+          if (child.pid) {
+            try {
+              process.kill(-child.pid, "SIGKILL");
+            } catch {
+              // Process group already dead — ignore
+            }
+          }
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // Already dead — ignore
+          }
+        }
+      }
+    }, 500).unref();
+  }
+
   activeChildProcesses.clear();
 }
 
