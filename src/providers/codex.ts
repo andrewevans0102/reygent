@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import chalk from "chalk";
 import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
-import { buildMemoryEnv, MAX_STDOUT_BYTES, MAX_STDERR_BYTES } from "./memory-limits.js";
+import { buildMemoryEnv, buildMemorySpawn, MAX_STDOUT_BYTES, MAX_STDERR_BYTES } from "./memory-limits.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
 const SUPPORTED_MODELS: ModelEntry[] = [
@@ -56,7 +56,8 @@ export const codexAdapter: ProviderAdapter = {
 
       const name = options.agentName;
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
-      const child = spawn("codex", args, {
+      const wrapped = buildMemorySpawn("codex", args);
+      const child = spawn(wrapped.file, wrapped.args, {
         stdio: [stdinMode, "pipe", "pipe"],
         env: buildMemoryEnv(),
         detached: true, // New process group so we can kill descendants via -pid

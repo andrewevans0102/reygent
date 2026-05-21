@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import chalk from "chalk";
 import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
-import { buildMemoryEnv, MAX_STDOUT_BYTES, MAX_STDERR_BYTES } from "./memory-limits.js";
+import { buildMemoryEnv, buildMemorySpawn, MAX_STDOUT_BYTES, MAX_STDERR_BYTES } from "./memory-limits.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
 const SUPPORTED_MODELS: ModelEntry[] = [
@@ -80,7 +80,8 @@ export const geminiAdapter: ProviderAdapter = {
 
       // Gemini CLI requires workspace trust for non-interactive spawns;
       // without this it exits 55 when stdin is not a TTY.
-      const child = spawn("gemini", args, {
+      const wrapped = buildMemorySpawn("gemini", args);
+      const child = spawn(wrapped.file, wrapped.args, {
         stdio: [stdinMode, "pipe", "pipe"],
         env: buildMemoryEnv({ GEMINI_CLI_TRUST_WORKSPACE: "true" }),
         detached: true, // New process group so we can kill descendants via -pid
