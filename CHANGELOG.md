@@ -1,3 +1,16 @@
+## [1.3.1](https://github.com/andrewevans0102/reygent/compare/v1.3.0...v1.3.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* cap memory usage for spawned child processes and reygent itself ([223fc3f](https://github.com/andrewevans0102/reygent/commit/223fc3fad9a252ee2b1a6fe0012889b912e2a38a))
+* drop child process heap cap to 512MB ([def89f1](https://github.com/andrewevans0102/reygent/commit/def89f1633407be262b99456cd3f95823ee6286e))
+* harden resource limits to prevent process explosion ([9f3d96f](https://github.com/andrewevans0102/reygent/commit/9f3d96f2c59c7e3868e4e633572f99adbbec4400))
+* kill orphaned grandchild processes after reygent runs ([f567580](https://github.com/andrewevans0102/reygent/commit/f567580ea70a1b0b779dc66c07fc636c9f1b9bf5))
+* remove detached spawns so Ctrl+C kills children directly ([88231cb](https://github.com/andrewevans0102/reygent/commit/88231cb456a6da738f168f2120d7e0467d68d090))
+* scope memory cap to direct child only, not grandchildren ([3fb1b0e](https://github.com/andrewevans0102/reygent/commit/3fb1b0e8a8955d32c99da9e4ef8492a246c08d8d))
+* tighten memory caps for lower overall footprint ([e93b7ae](https://github.com/andrewevans0102/reygent/commit/e93b7ae06df3d14169b4b78f2a4df2112ab769f4))
+
 # [1.3.0](https://github.com/andrewevans0102/reygent/compare/v1.2.1...v1.3.0) (2026-05-20)
 
 
