@@ -1,7 +1,7 @@
 /** Memory caps for spawned child processes and reygent itself. */
 
 /** Max V8 old-space for each spawned CLI child (MB). */
-export const CHILD_MAX_OLD_SPACE_MB = 1024;
+export const CHILD_MAX_OLD_SPACE_MB = 512;
 
 /** Max V8 old-space for reygent's own process (MB). */
 export const REYGENT_MAX_OLD_SPACE_MB = 256;
