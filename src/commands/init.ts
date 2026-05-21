@@ -86,6 +86,7 @@ function ensureRootGitignoreEntries(cwd: string, entries: string[]): void {
   writeFileSync(gitignorePath, next, "utf-8");
 }
 
+
 export async function initCommand(options: { dryRun: boolean } = { dryRun: false }): Promise<void> {
   const targetDir = join(process.cwd(), ".reygent");
   const configPath = join(targetDir, "config.json");

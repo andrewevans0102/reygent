@@ -4,6 +4,7 @@ import { constants } from "node:os";
 import chalk from "chalk";
 import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
+import { buildMemoryEnv, buildMemorySpawn, MAX_STDERR_BYTES } from "./memory-limits.js";
 import type { UsageInfo } from "../usage.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
@@ -193,10 +194,16 @@ export const claudeAdapter: ProviderAdapter = {
       }
 
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
-      const child = spawn("claude", args, {
+      const wrapped = buildMemorySpawn("claude", args);
+      const child = spawn(wrapped.file, wrapped.args, {
         stdio: [stdinMode, "pipe", "pipe"],
-        detached: false, // Keep in same process group so we can kill descendants
+        env: buildMemoryEnv(),
+        detached: true,
       });
+      // Detached child gets its own process group — unref so it doesn't
+      // keep the parent event loop alive, but registerChildProcess tracks
+      // it for cleanup on exit/SIGINT.
+      child.unref();
       registerChildProcess(child);
 
       let resultText = "";
@@ -207,16 +214,11 @@ export const claudeAdapter: ProviderAdapter = {
       const stderrChunks: string[] = [];
 
       const timeout = setTimeout(() => {
-        // Kill entire process group to catch spawned descendants
-        if (child.pid && process.platform !== "win32") {
-          try {
-            process.kill(-child.pid, "SIGTERM");
-          } catch {
-            child.kill();
-          }
-        } else {
-          child.kill();
+        // Kill entire process group (grandchildren too)
+        if (child.pid) {
+          try { process.kill(-child.pid, "SIGTERM"); } catch { /* already dead */ }
         }
+        child.kill("SIGTERM");
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);
 
@@ -305,9 +307,14 @@ export const claudeAdapter: ProviderAdapter = {
         maybeResolve();
       });
 
+      let stderrBytes = 0;
       const stderrRL = createInterface({ input: child.stderr! });
       stderrRL.on("line", (line) => {
-        stderrChunks.push(line);
+        const lineBytes = Buffer.byteLength(line);
+        if (stderrBytes < MAX_STDERR_BYTES) {
+          stderrChunks.push(line);
+          stderrBytes += lineBytes;
+        }
         if (options.onActivity) {
           options.onActivity({ agent: name, detail: line.slice(0, 80) });
         } else {
@@ -347,7 +354,6 @@ export const claudeAdapter: ProviderAdapter = {
         ["--append-system-prompt", systemPrompt, "--model", model],
         {
           stdio: "inherit",
-          detached: false, // Keep in same process group so we can kill descendants
         },
       );
       registerChildProcess(child);

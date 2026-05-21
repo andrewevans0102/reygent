@@ -10,7 +10,7 @@ function exec(cmd: string, args: string[]): Promise<string> {
     execFile(
       cmd,
       args,
-      { maxBuffer: 50 * 1024 * 1024 },
+      { maxBuffer: 10 * 1024 * 1024, timeout: 15_000 },
       (error, stdout, stderr) => {
         if (error) {
           reject(

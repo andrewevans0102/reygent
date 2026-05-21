@@ -49,7 +49,7 @@ function exec(
     execFile(
       cmd,
       args,
-      { maxBuffer: 50 * 1024 * 1024 },
+      { maxBuffer: 10 * 1024 * 1024, timeout: 30_000 },
       (error, stdout, stderr) => {
         if (error) {
           reject(

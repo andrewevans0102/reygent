@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import chalk from "chalk";
 import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
+import { buildMemoryEnv, buildMemorySpawn, MAX_STDOUT_BYTES, MAX_STDERR_BYTES } from "./memory-limits.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
 const SUPPORTED_MODELS: ModelEntry[] = [
@@ -79,37 +80,41 @@ export const geminiAdapter: ProviderAdapter = {
 
       // Gemini CLI requires workspace trust for non-interactive spawns;
       // without this it exits 55 when stdin is not a TTY.
-      const child = spawn("gemini", args, {
+      const wrapped = buildMemorySpawn("gemini", args);
+      const child = spawn(wrapped.file, wrapped.args, {
         stdio: [stdinMode, "pipe", "pipe"],
-        env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
-        detached: false, // Keep in same process group so we can kill descendants
+        env: buildMemoryEnv({ GEMINI_CLI_TRUST_WORKSPACE: "true" }),
+        detached: true,
       });
+      child.unref();
       registerChildProcess(child);
 
       let stdout = "";
+      let stdoutBytes = 0;
 
       const timeout = setTimeout(() => {
-        // Kill entire process group to catch spawned descendants
-        if (child.pid && process.platform !== "win32") {
-          try {
-            process.kill(-child.pid, "SIGTERM");
-          } catch {
-            child.kill();
-          }
-        } else {
-          child.kill();
+        if (child.pid) {
+          try { process.kill(-child.pid, "SIGTERM"); } catch { /* already dead */ }
         }
+        child.kill("SIGTERM");
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);
 
       child.stdout!.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
+        if (stdoutBytes < MAX_STDOUT_BYTES) {
+          stdout += chunk.toString();
+          stdoutBytes += chunk.length;
+        }
       });
 
+      let stderrBytes = 0;
       const stderrChunks: string[] = [];
       child.stderr!.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
-        stderrChunks.push(text);
+        if (stderrBytes < MAX_STDERR_BYTES) {
+          stderrChunks.push(text);
+          stderrBytes += chunk.length;
+        }
         if (options.onActivity) {
           const line = text.trim();
           if (line) options.onActivity({ agent: name, detail: line.slice(0, 80) });
