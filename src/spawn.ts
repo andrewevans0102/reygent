@@ -167,6 +167,11 @@ export async function spawnAgentStream(
     }
   }
 
+  // Always append resource constraints — applies regardless of config source
+  // (built-in agents, local config, or global config).
+  const resourceConstraints = `\n\n## Resource Constraints (mandatory)\n\n- Run all commands sequentially. Never run commands in parallel or in the background.\n- Do not spawn detached or background processes.\n- When running tests, always use single-worker mode: --maxWorkers=1 (jest), --maxThreads=1 --maxForks=1 (vitest), or equivalent.\n- Never use watch mode (--watch, --watchAll).\n- Avoid spawning unnecessary subprocesses. Prefer direct commands over npx when possible.`;
+  enhancedSystemPrompt = (enhancedSystemPrompt || "") + resourceConstraints;
+
   // Track timeout state to prevent duplicate events
   let timedOut = false;
 

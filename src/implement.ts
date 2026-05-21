@@ -129,6 +129,8 @@ ${plan.dod.map((d) => `- ${d}`).join("\n")}
 
 ---
 
+When running tests, use --maxWorkers=1 or equivalent flag to limit parallelism (e.g. vitest --maxThreads=1, jest --maxWorkers=1). Run commands sequentially, never in parallel. Do not spawn background processes.
+
 When you are finished, output a JSON block with the list of files you created or modified:
 
 \`\`\`json
@@ -175,6 +177,8 @@ ${plan.constraints.map((c) => `- ${c}`).join("\n")}
 ${plan.dod.map((d) => `- ${d}`).join("\n")}
 
 ---
+
+When running tests, use --maxWorkers=1 or equivalent flag to limit parallelism (e.g. vitest --maxThreads=1, jest --maxWorkers=1). Run commands sequentially, never in parallel. Do not spawn background processes.
 
 When you are finished, output a JSON block with the list of test files you created or modified:
 

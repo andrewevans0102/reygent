@@ -198,7 +198,12 @@ export const claudeAdapter: ProviderAdapter = {
       const child = spawn(wrapped.file, wrapped.args, {
         stdio: [stdinMode, "pipe", "pipe"],
         env: buildMemoryEnv(),
+        detached: true,
       });
+      // Detached child gets its own process group — unref so it doesn't
+      // keep the parent event loop alive, but registerChildProcess tracks
+      // it for cleanup on exit/SIGINT.
+      child.unref();
       registerChildProcess(child);
 
       let resultText = "";
@@ -209,6 +214,10 @@ export const claudeAdapter: ProviderAdapter = {
       const stderrChunks: string[] = [];
 
       const timeout = setTimeout(() => {
+        // Kill entire process group (grandchildren too)
+        if (child.pid) {
+          try { process.kill(-child.pid, "SIGTERM"); } catch { /* already dead */ }
+        }
         child.kill("SIGTERM");
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);

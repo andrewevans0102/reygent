@@ -60,13 +60,18 @@ export const codexAdapter: ProviderAdapter = {
       const child = spawn(wrapped.file, wrapped.args, {
         stdio: [stdinMode, "pipe", "pipe"],
         env: buildMemoryEnv(),
+        detached: true,
       });
+      child.unref();
       registerChildProcess(child);
 
       let stdout = "";
       let stdoutBytes = 0;
 
       const timeout = setTimeout(() => {
+        if (child.pid) {
+          try { process.kill(-child.pid, "SIGTERM"); } catch { /* already dead */ }
+        }
         child.kill("SIGTERM");
         reject(new TaskError(`${name}: timed out after ${options.timeoutMs}ms`));
       }, options.timeoutMs);

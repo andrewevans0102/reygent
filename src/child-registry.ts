@@ -14,6 +14,14 @@ export function registerChildProcess(child: ChildProcess): void {
 
 export function killAllChildrenProcesses(): void {
   for (const child of activeChildProcesses) {
+    // Kill entire process group first to catch grandchildren (test runners, bundlers, etc.)
+    if (child.pid) {
+      try {
+        process.kill(-child.pid, "SIGTERM");
+      } catch {
+        // Process group already dead — ignore
+      }
+    }
     try {
       child.kill("SIGTERM");
     } catch {
@@ -27,6 +35,13 @@ export function killAllChildrenProcesses(): void {
     setTimeout(() => {
       for (const child of remaining) {
         if (!child.killed) {
+          if (child.pid) {
+            try {
+              process.kill(-child.pid, "SIGKILL");
+            } catch {
+              // Process group already dead — ignore
+            }
+          }
           try {
             child.kill("SIGKILL");
           } catch {

@@ -42,6 +42,8 @@ function runGit(args: string[], cwd?: string): string {
       cwd,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
     });
   } catch (err: unknown) {
     const error = err as NodeJS.ErrnoException;
