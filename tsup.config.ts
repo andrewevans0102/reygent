@@ -9,7 +9,7 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   banner: {
-    js: "#!/usr/bin/env node --max-old-space-size=512 --no-warnings=ExperimentalWarning",
+    js: "#!/usr/bin/env node --max-old-space-size=256 --no-warnings=ExperimentalWarning",
   },
   async onSuccess() {
     // Copy template.html to dist
