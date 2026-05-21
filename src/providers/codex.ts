@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import chalk from "chalk";
 import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
+import { buildMemoryEnv, MAX_STDOUT_BYTES, MAX_STDERR_BYTES } from "./memory-limits.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
 const SUPPORTED_MODELS: ModelEntry[] = [
@@ -57,11 +58,13 @@ export const codexAdapter: ProviderAdapter = {
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
       const child = spawn("codex", args, {
         stdio: [stdinMode, "pipe", "pipe"],
+        env: buildMemoryEnv(),
         detached: true, // New process group so we can kill descendants via -pid
       });
       registerChildProcess(child);
 
       let stdout = "";
+      let stdoutBytes = 0;
 
       const timeout = setTimeout(() => {
         // Kill entire process group to catch spawned descendants
@@ -78,13 +81,20 @@ export const codexAdapter: ProviderAdapter = {
       }, options.timeoutMs);
 
       child.stdout!.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
+        if (stdoutBytes < MAX_STDOUT_BYTES) {
+          stdout += chunk.toString();
+          stdoutBytes += chunk.length;
+        }
       });
 
+      let stderrBytes = 0;
       const stderrChunks: string[] = [];
       child.stderr!.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
-        stderrChunks.push(text);
+        if (stderrBytes < MAX_STDERR_BYTES) {
+          stderrChunks.push(text);
+          stderrBytes += chunk.length;
+        }
         if (options.onActivity) {
           const line = text.trim();
           if (line) options.onActivity({ agent: name, detail: line.slice(0, 80) });

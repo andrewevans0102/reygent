@@ -4,6 +4,7 @@ import { constants } from "node:os";
 import chalk from "chalk";
 import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
+import { buildMemoryEnv, MAX_STDERR_BYTES } from "./memory-limits.js";
 import type { UsageInfo } from "../usage.js";
 import type { ProviderAdapter, SpawnAdapterOptions, SpawnResult, ModelEntry } from "./types.js";
 
@@ -195,6 +196,7 @@ export const claudeAdapter: ProviderAdapter = {
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
       const child = spawn("claude", args, {
         stdio: [stdinMode, "pipe", "pipe"],
+        env: buildMemoryEnv(),
         detached: true, // New process group so we can kill descendants via -pid
       });
       registerChildProcess(child);
@@ -305,9 +307,14 @@ export const claudeAdapter: ProviderAdapter = {
         maybeResolve();
       });
 
+      let stderrBytes = 0;
       const stderrRL = createInterface({ input: child.stderr! });
       stderrRL.on("line", (line) => {
-        stderrChunks.push(line);
+        const lineBytes = Buffer.byteLength(line);
+        if (stderrBytes < MAX_STDERR_BYTES) {
+          stderrChunks.push(line);
+          stderrBytes += lineBytes;
+        }
         if (options.onActivity) {
           options.onActivity({ agent: name, detail: line.slice(0, 80) });
         } else {
