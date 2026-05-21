@@ -82,7 +82,7 @@ export const geminiAdapter: ProviderAdapter = {
       const child = spawn("gemini", args, {
         stdio: [stdinMode, "pipe", "pipe"],
         env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" },
-        detached: false, // Keep in same process group so we can kill descendants
+        detached: true, // New process group so we can kill descendants via -pid
       });
       registerChildProcess(child);
 
@@ -219,7 +219,7 @@ export const geminiAdapter: ProviderAdapter = {
       const child = spawn(
         "gemini",
         ["--model", model, "-i", `Follow these instructions for this session:\n\n${systemPrompt}`],
-        { stdio: "inherit", env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" } },
+        { stdio: "inherit", detached: true, env: { ...process.env, GEMINI_CLI_TRUST_WORKSPACE: "true" } },
       );
       registerChildProcess(child);
 

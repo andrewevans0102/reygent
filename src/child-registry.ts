@@ -5,6 +5,10 @@ const activeChildProcesses = new Set<ChildProcess>();
 export function registerChildProcess(child: ChildProcess): void {
   activeChildProcesses.add(child);
   child.on("close", () => {
+    // Kill process group to clean up any grandchild processes (MCP servers, etc.)
+    if (child.pid && process.platform !== "win32") {
+      try { process.kill(-child.pid, "SIGTERM"); } catch { /* already dead */ }
+    }
     activeChildProcesses.delete(child);
   });
   child.on("error", () => {

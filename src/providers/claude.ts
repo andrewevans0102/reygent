@@ -195,7 +195,7 @@ export const claudeAdapter: ProviderAdapter = {
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
       const child = spawn("claude", args, {
         stdio: [stdinMode, "pipe", "pipe"],
-        detached: false, // Keep in same process group so we can kill descendants
+        detached: true, // New process group so we can kill descendants via -pid
       });
       registerChildProcess(child);
 
@@ -347,7 +347,7 @@ export const claudeAdapter: ProviderAdapter = {
         ["--append-system-prompt", systemPrompt, "--model", model],
         {
           stdio: "inherit",
-          detached: false, // Keep in same process group so we can kill descendants
+          detached: true, // New process group so we can kill descendants via -pid
         },
       );
       registerChildProcess(child);

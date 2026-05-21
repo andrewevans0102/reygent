@@ -57,7 +57,7 @@ export const codexAdapter: ProviderAdapter = {
       const stdinMode = options.autoApprove === false ? "inherit" : "ignore";
       const child = spawn("codex", args, {
         stdio: [stdinMode, "pipe", "pipe"],
-        detached: false, // Keep in same process group so we can kill descendants
+        detached: true, // New process group so we can kill descendants via -pid
       });
       registerChildProcess(child);
 
@@ -193,7 +193,7 @@ export const codexAdapter: ProviderAdapter = {
       const child = spawn(
         "codex",
         ["--model", model, systemPrompt],
-        { stdio: "inherit" },
+        { stdio: "inherit", detached: true },
       );
       registerChildProcess(child);
 
