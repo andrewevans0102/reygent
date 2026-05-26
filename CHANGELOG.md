@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/andrewevans0102/reygent/compare/v1.3.1...v1.3.2) (2026-05-26)
+
+
+### Bug Fixes
+
+* repair global CLI shebang so reygent runs after install ([a66d0ad](https://github.com/andrewevans0102/reygent/commit/a66d0ad9c79aee38cbf63f424724440ab9a15396))
+
 ## [1.3.1](https://github.com/andrewevans0102/reygent/compare/v1.3.0...v1.3.1) (2026-05-21)
 
 
