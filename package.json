@@ -20,6 +20,7 @@
   ],
   "scripts": {
     "prepare": "husky",
+    "prepublishOnly": "npm run build",
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
