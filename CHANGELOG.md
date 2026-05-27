@@ -1,3 +1,11 @@
+## [1.3.3](https://github.com/andrewevans0102/reygent/compare/v1.3.2...v1.3.3) (2026-05-27)
+
+
+### Bug Fixes
+
+* address PR review comments ([d57ad8d](https://github.com/andrewevans0102/reygent/commit/d57ad8d422c81f35cd1995504d9e41b769a1df54))
+* repair malformed JSON from LLM output by escaping bare backslashes ([d318bb5](https://github.com/andrewevans0102/reygent/commit/d318bb56a0d7bd1e93d361b9803435c1af53f3dd))
+
 ## [1.3.2](https://github.com/andrewevans0102/reygent/compare/v1.3.1...v1.3.2) (2026-05-26)
 
 
