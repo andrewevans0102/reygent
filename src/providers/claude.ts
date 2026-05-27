@@ -225,6 +225,7 @@ export const claudeAdapter: ProviderAdapter = {
       let stdoutEnded = false;
       let stderrEnded = false;
       let processExitCode: number | null = null;
+      let processSignal: string | undefined;
 
       const maybeResolve = () => {
         if (stdoutEnded && stderrEnded && processExitCode !== null) {
@@ -238,6 +239,7 @@ export const claudeAdapter: ProviderAdapter = {
             errorMessage: resultErrorMessage,
             apiErrorStatus: resultApiErrorStatus,
             stderr: stderr || undefined,
+            signal: processSignal,
           });
         }
       };
@@ -331,8 +333,14 @@ export const claudeAdapter: ProviderAdapter = {
         reject(new TaskError(`${name}: failed to spawn — ${err.message}`));
       });
 
-      child.on("close", (code) => {
-        processExitCode = code ?? 1;
+      child.on("close", (code, signal) => {
+        if (signal) {
+          processSignal = signal;
+          const sigNum = constants.signals[signal];
+          processExitCode = sigNum ? 128 + sigNum : 1;
+        } else {
+          processExitCode = code ?? 1;
+        }
         maybeResolve();
       });
     });

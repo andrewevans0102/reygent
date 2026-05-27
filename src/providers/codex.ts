@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { constants } from "node:os";
 import chalk from "chalk";
 import { registerChildProcess } from "../child-registry.js";
 import { TaskError } from "../task.js";
@@ -104,9 +105,18 @@ export const codexAdapter: ProviderAdapter = {
         reject(new TaskError(`${name}: failed to spawn codex — ${err.message}`));
       });
 
-      child.on("close", (code) => {
+      child.on("close", (code, signal) => {
         clearTimeout(timeout);
         const durationMs = Math.max(0, Date.now() - startTime);
+        let exitCode: number;
+        let signalName: string | undefined;
+        if (signal) {
+          signalName = signal;
+          const sigNum = constants.signals[signal];
+          exitCode = sigNum ? 128 + sigNum : 1;
+        } else {
+          exitCode = code ?? 1;
+        }
 
         // Try to parse Codex JSON output
         let resultText = stdout;
@@ -177,7 +187,7 @@ export const codexAdapter: ProviderAdapter = {
 
         resolve({
           stdout: resultText,
-          exitCode: code ?? 1,
+          exitCode,
           usage: {
             durationMs,
             inputTokens,
@@ -188,6 +198,7 @@ export const codexAdapter: ProviderAdapter = {
           },
           errorMessage,
           apiErrorStatus,
+          signal: signalName,
         });
       });
     });

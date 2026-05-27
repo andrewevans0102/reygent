@@ -1,31 +1,12 @@
 import { getProvider } from "./providers/index.js";
 import { resolveModel, resolveProvider } from "./model.js";
 import { TaskError } from "./task.js";
-import type { ActivityEvent } from "./providers/types.js";
+import type { ActivityEvent, SpawnResult } from "./providers/types.js";
 import type { UsageInfo } from "./usage.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
 import { loadKnowledge } from "./knowledge/loader.js";
 import { emitErrorTask } from "./telemetry-helpers.js";
-
-/**
- * Result returned by provider adapter spawn() method.
- * See Provider Adapter Contract in CLAUDE.md for full details.
- */
-export interface SpawnResult {
-  /** Agent output text (JSON, markdown, or plain text depending on agent) */
-  stdout: string;
-  /** Exit code: 0 for success, non-zero for failure */
-  exitCode: number;
-  /** Optional cost/token telemetry for usage tracking */
-  usage?: UsageInfo;
-  /** Clean error message from provider API (e.g., "Model not available"). Only present on errors. */
-  errorMessage?: string;
-  /** HTTP status code from API error (e.g., 404, 401, 429). Only present on API errors. */
-  apiErrorStatus?: number;
-  /** Captured stderr output (may be truncated). Useful for diagnosing CLI failures. */
-  stderr?: string;
-}
 
 /**
  * Check if model name looks malformed (obvious user input error).
@@ -54,23 +35,50 @@ export function formatExitDetail(result: SpawnResult, model?: string): string {
     return `\n  Claude CLI does not trust this directory.\n\n  To fix, do one of:\n    1. Run \`claude\` interactively here once and approve the trust prompt\n    2. Initialize a git repo: git init\n\n  Then re-run \`reygent run\`.`;
   }
 
+  const parts: string[] = [];
+
+  // Surface signal info first — often the most important diagnostic
+  if (result.signal) {
+    const sigHints: Record<string, string> = {
+      SIGTRAP: "process hit a fatal trap (common cause: V8 memory/address-space limit exceeded)",
+      SIGKILL: "process was forcibly killed (OOM killer or external signal)",
+      SIGTERM: "process was terminated (timeout or manual kill)",
+      SIGSEGV: "segmentation fault (memory access violation)",
+      SIGABRT: "process aborted (assertion failure or fatal error)",
+      SIGBUS: "bus error (memory-mapped file issue or unaligned memory access)",
+    };
+    const hint = sigHints[result.signal] ?? "";
+    parts.push(`killed by ${result.signal}${hint ? ` — ${hint}` : ""}`);
+  }
+
   if (result.errorMessage) {
     const status = result.apiErrorStatus ? ` (HTTP ${result.apiErrorStatus})` : "";
-    let detail = `\n  ${result.errorMessage}${status}`;
-    // Only show model selection tip if:
-    // 1. It's a 404 error with "not available" pattern AND
-    // 2. Model name looks malformed (obvious typo/error)
-    // This avoids confusing users who intentionally use custom models not yet synced by provider
+    parts.push(`${result.errorMessage}${status}`);
     if (result.apiErrorStatus === 404 && /not available/i.test(result.errorMessage) && looksLikeMalformedModel(model)) {
-      detail += `\n  Tip: edit .reygent/config.json "model" field, or run \`reygent config\` to pick a supported model.`;
+      parts.push(`Tip: edit .reygent/config.json "model" field, or run \`reygent config\` to pick a supported model.`);
     }
-    return detail;
   }
-  const trimmed = result.stdout.trim();
-  if (!trimmed) return "";
-  const truncated = trimmed.slice(0, 500);
-  const suffix = trimmed.length > 500 ? "..." : "";
-  return `\n  ${truncated}${suffix}`;
+
+  // Include stderr snippet when no structured error — often contains the real diagnostic
+  if (!result.errorMessage && result.stderr) {
+    const stderrTrimmed = result.stderr.trim();
+    if (stderrTrimmed) {
+      const truncated = stderrTrimmed.slice(0, 500);
+      const suffix = stderrTrimmed.length > 500 ? "..." : "";
+      parts.push(`stderr: ${truncated}${suffix}`);
+    }
+  }
+
+  // Fallback to stdout if nothing else
+  if (parts.length === 0) {
+    const trimmed = result.stdout.trim();
+    if (!trimmed) return "";
+    const truncated = trimmed.slice(0, 500);
+    const suffix = trimmed.length > 500 ? "..." : "";
+    parts.push(truncated + suffix);
+  }
+
+  return "\n  " + parts.join("\n  ");
 }
 
 export interface SpawnOptions {

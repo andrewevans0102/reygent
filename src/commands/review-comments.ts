@@ -5,6 +5,7 @@ import { pasteableInput } from "../pasteable-input.js";
 import { wrapText } from "../format.js";
 import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
+import { formatExitDetail } from "../spawn.js";
 import { extractJSON, repairJSON } from "../planner.js";
 import { createLiveStatus } from "../live-status.js";
 import type { ActivityEvent } from "../live-status.js";
@@ -434,7 +435,8 @@ async function generatePlan(
   const result = await spawnAgent("planner", prompt, { quiet: true, provider: agent.provider, model: agent.model, allowedTools: [] });
 
   if (result.exitCode !== 0) {
-    throw new TaskError(`review-comments: planner agent exited with code ${result.exitCode}`);
+    const detail = formatExitDetail(result);
+    throw new TaskError(`review-comments: planner agent exited with code ${result.exitCode}${detail}`);
   }
 
   let parsed: unknown;
@@ -576,7 +578,8 @@ async function executeWithDevAgent(
   const result = await spawnAgent("dev", prompt, { autoApprove, quiet: true, onActivity, provider: devAgent.provider, model: devAgent.model });
 
   if (result.exitCode !== 0) {
-    throw new TaskError(`review-comments: dev agent exited with code ${result.exitCode}`);
+    const detail = formatExitDetail(result);
+    throw new TaskError(`review-comments: dev agent exited with code ${result.exitCode}${detail}`);
   }
 
   // Extract files changed
