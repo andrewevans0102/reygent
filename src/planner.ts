@@ -9,6 +9,28 @@ import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
 import { emitErrorTask } from "./telemetry-helpers.js";
 
+/**
+ * Repair malformed JSON from LLM output by escaping bare backslashes
+ * inside string values that aren't valid JSON escape sequences.
+ * Handles cases like regex patterns: \d, \s, \w, etc.
+ */
+export function repairJSON(json: string): string {
+  // First try as-is — only repair if needed
+  try {
+    JSON.parse(json);
+    return json;
+  } catch {
+    // noop — needs repair
+  }
+
+  // Inside JSON strings, escape backslashes not followed by valid JSON escape chars
+  // Valid JSON escapes: " \ / b f n r t u
+  return json.replace(
+    /\\(?!["\\/bfnrtu])/g,
+    "\\\\",
+  );
+}
+
 export function extractJSON(text: string): string {
   const trimmed = text.trim();
 
@@ -132,7 +154,7 @@ export async function runPlanner(
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(extractJSON(raw));
+    parsed = JSON.parse(repairJSON(extractJSON(raw)));
   } catch (err) {
     // Emit error.parse before throwing
     const cleaned = extractJSON(raw);

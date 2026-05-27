@@ -32,3 +32,9 @@ reygent-dashboard.html
 
 # Reygent config (for testing/development only - not shipped)
 .reygent/
+
+# Reygent generated files
+.reygent/chesstrace.db
+.reygent/chesstrace.db-journal
+.reygent/chesstrace.db-wal
+.reygent/chesstrace.db-shm

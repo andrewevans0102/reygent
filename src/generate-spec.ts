@@ -1,6 +1,6 @@
 import { getAgents } from "./config.js";
 import { isDebug } from "./debug.js";
-import { extractJSON } from "./planner.js";
+import { extractJSON, repairJSON } from "./planner.js";
 import type { ActivityEvent } from "./providers/types.js";
 import { spawnAgentStream, formatExitDetail } from "./spawn.js";
 import { TaskError } from "./task.js";
@@ -126,7 +126,7 @@ export async function runClarification(
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(extractJSON(raw));
+    parsed = JSON.parse(repairJSON(extractJSON(raw)));
   } catch {
     throw new TaskError("generate-spec: failed to parse clarification response as JSON");
   }

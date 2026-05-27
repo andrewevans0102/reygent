@@ -5,7 +5,7 @@ import { pasteableInput } from "../pasteable-input.js";
 import { wrapText } from "../format.js";
 import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
-import { extractJSON } from "../planner.js";
+import { extractJSON, repairJSON } from "../planner.js";
 import { createLiveStatus } from "../live-status.js";
 import type { ActivityEvent } from "../live-status.js";
 import { loadEnvFile } from "../env.js";
@@ -439,7 +439,7 @@ async function generatePlan(
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(extractJSON(result.stdout));
+    parsed = JSON.parse(repairJSON(extractJSON(result.stdout)));
   } catch {
     throw new TaskError("review-comments: failed to parse planner output as JSON");
   }
@@ -581,7 +581,7 @@ async function executeWithDevAgent(
 
   // Extract files changed
   try {
-    const parsed = JSON.parse(extractJSON(result.stdout)) as { files?: string[] };
+    const parsed = JSON.parse(repairJSON(extractJSON(result.stdout))) as { files?: string[] };
     if (parsed.files && parsed.files.length > 0) {
       console.log();
       console.log(chalk.bold("  Files modified:"));
