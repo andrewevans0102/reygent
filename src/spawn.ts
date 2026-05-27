@@ -25,6 +25,8 @@ export interface SpawnResult {
   apiErrorStatus?: number;
   /** Captured stderr output (may be truncated). Useful for diagnosing CLI failures. */
   stderr?: string;
+  /** Signal name if the child was killed by a signal (e.g., "SIGTRAP", "SIGTERM"). */
+  signal?: string;
 }
 
 /**
@@ -54,23 +56,49 @@ export function formatExitDetail(result: SpawnResult, model?: string): string {
     return `\n  Claude CLI does not trust this directory.\n\n  To fix, do one of:\n    1. Run \`claude\` interactively here once and approve the trust prompt\n    2. Initialize a git repo: git init\n\n  Then re-run \`reygent run\`.`;
   }
 
+  const parts: string[] = [];
+
+  // Surface signal info first — often the most important diagnostic
+  if (result.signal) {
+    const sigHints: Record<string, string> = {
+      SIGTRAP: "process hit a fatal trap (common cause: V8 memory/address-space limit exceeded)",
+      SIGKILL: "process was forcibly killed (OOM killer or external signal)",
+      SIGTERM: "process was terminated (timeout or manual kill)",
+      SIGSEGV: "segmentation fault (memory access violation)",
+      SIGABRT: "process aborted (assertion failure or fatal error)",
+    };
+    const hint = sigHints[result.signal] ?? "";
+    parts.push(`killed by ${result.signal}${hint ? ` — ${hint}` : ""}`);
+  }
+
   if (result.errorMessage) {
     const status = result.apiErrorStatus ? ` (HTTP ${result.apiErrorStatus})` : "";
-    let detail = `\n  ${result.errorMessage}${status}`;
-    // Only show model selection tip if:
-    // 1. It's a 404 error with "not available" pattern AND
-    // 2. Model name looks malformed (obvious typo/error)
-    // This avoids confusing users who intentionally use custom models not yet synced by provider
+    parts.push(`${result.errorMessage}${status}`);
     if (result.apiErrorStatus === 404 && /not available/i.test(result.errorMessage) && looksLikeMalformedModel(model)) {
-      detail += `\n  Tip: edit .reygent/config.json "model" field, or run \`reygent config\` to pick a supported model.`;
+      parts.push(`Tip: edit .reygent/config.json "model" field, or run \`reygent config\` to pick a supported model.`);
     }
-    return detail;
   }
-  const trimmed = result.stdout.trim();
-  if (!trimmed) return "";
-  const truncated = trimmed.slice(0, 500);
-  const suffix = trimmed.length > 500 ? "..." : "";
-  return `\n  ${truncated}${suffix}`;
+
+  // Include stderr snippet when no structured error — often contains the real diagnostic
+  if (!result.errorMessage && result.stderr) {
+    const stderrTrimmed = result.stderr.trim();
+    if (stderrTrimmed) {
+      const truncated = stderrTrimmed.slice(0, 500);
+      const suffix = stderrTrimmed.length > 500 ? "..." : "";
+      parts.push(`stderr: ${truncated}${suffix}`);
+    }
+  }
+
+  // Fallback to stdout if nothing else
+  if (parts.length === 0) {
+    const trimmed = result.stdout.trim();
+    if (!trimmed) return "";
+    const truncated = trimmed.slice(0, 500);
+    const suffix = trimmed.length > 500 ? "..." : "";
+    parts.push(truncated + suffix);
+  }
+
+  return "\n  " + parts.join("\n  ");
 }
 
 export interface SpawnOptions {

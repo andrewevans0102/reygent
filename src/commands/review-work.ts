@@ -3,6 +3,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { getAgents } from "../config.js";
 import { spawnAgent } from "../implement.js";
+import { formatExitDetail } from "../spawn.js";
 import { loadEnvFile } from "../env.js";
 import { isDebug } from "../debug.js";
 import { createLiveStatus } from "../live-status.js";
@@ -293,8 +294,9 @@ async function runAgentReview(
   const result = await spawnAgent("pr-review", prompt, { quiet: true, onActivity, provider: agent.provider, model: agent.model, allowedTools: [] });
 
   if (result.exitCode !== 0) {
+    const detail = formatExitDetail(result);
     throw new TaskError(
-      `review-work: agent exited with code ${result.exitCode}`,
+      `review-work: agent exited with code ${result.exitCode}${detail}`,
     );
   }
 
