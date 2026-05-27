@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { getAgents } from "./config.js";
 import { wrapText } from "./format.js";
 import { spawnAgent, type AgentSpawnOptions } from "./implement.js";
+import { formatExitDetail } from "./spawn.js";
 import { extractJSON } from "./planner.js";
 import type {
   Severity,
@@ -211,8 +212,9 @@ export async function runSecurityReview(
   const result = await spawnAgent("security-review", prompt, { ...options, quiet: true, provider: agent.provider, model: agent.model });
 
   if (result.exitCode !== 0) {
+    const detail = formatExitDetail(result);
     throw new TaskError(
-      `security-review: agent exited with code ${result.exitCode}`,
+      `security-review: agent exited with code ${result.exitCode}${detail}`,
     );
   }
 

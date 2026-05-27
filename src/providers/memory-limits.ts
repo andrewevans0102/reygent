@@ -57,13 +57,14 @@ export function buildMemorySpawn(
   const escapedArgs = args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
 
   // On linux, apply OS-level ulimits before exec.
-  // Note: macOS (darwin) ignores ulimit -v, so we rely on NODE_OPTIONS heap cap there.
-  // -v: virtual memory ~512MB (above 256MB heap for native overhead) — linux only
+  // Note: ulimit -v (virtual address space) is intentionally omitted — V8's pointer-compression
+  // cage reserves ~4GB VA on aarch64/linux regardless of actual heap usage, so any reasonable
+  // -v cap kills the process before it starts. Actual memory is bounded by --max-old-space-size.
   // -t: CPU time 900s (matches AGENT_TIMEOUT_MS ~15min)
   // -f: max file size 100MB (prevent runaway writes)
   const ulimits =
     process.platform !== "win32"
-      ? "ulimit -v $((512 * 1024)) 2>/dev/null; ulimit -t 900 2>/dev/null; ulimit -f $((100 * 1024)) 2>/dev/null; "
+      ? "ulimit -t 900 2>/dev/null; ulimit -f $((100 * 1024)) 2>/dev/null; "
       : "";
 
   return {

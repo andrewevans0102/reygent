@@ -30,6 +30,8 @@ export interface SpawnResult {
   apiErrorStatus?: number;
   /** Captured stderr output (may be truncated). Useful for diagnosing CLI failures. */
   stderr?: string;
+  /** Signal name if the child was killed by a signal (e.g., "SIGTRAP", "SIGTERM"). */
+  signal?: string;
 }
 
 export interface ModelEntry {
