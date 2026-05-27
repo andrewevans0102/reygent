@@ -1,3 +1,11 @@
+## [1.3.4](https://github.com/andrewevans0102/reygent/compare/v1.3.3...v1.3.4) (2026-05-27)
+
+
+### Bug Fixes
+
+* address PR review comments ([fc0ed12](https://github.com/andrewevans0102/reygent/commit/fc0ed127cc4ec9b5b8af1dbdf04b8007f50b2c9c))
+* remove ulimit -v cap and surface signal diagnostics in errors ([40e5f1b](https://github.com/andrewevans0102/reygent/commit/40e5f1b5d97443efc639b2a4e1bdbb1a2cfbe1ec))
+
 ## [1.3.3](https://github.com/andrewevans0102/reygent/compare/v1.3.2...v1.3.3) (2026-05-27)
 
 
