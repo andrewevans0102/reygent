@@ -25,6 +25,9 @@ export function repairJSON(json: string): string {
 
   // Inside JSON strings, escape backslashes not followed by valid JSON escape chars
   // Valid JSON escapes: " \ / b f n r t u
+  // Note: This regex operates on the full JSON text (not just string interiors) and may not
+  // handle backslashes inside nested/escaped strings correctly (e.g., "\\" followed by "d").
+  // This is acceptable for LLM output where such edge cases are unlikely.
   return json.replace(
     /\\(?!["\\/bfnrtu])/g,
     "\\\\",

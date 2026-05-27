@@ -4,7 +4,7 @@ vi.mock("@inquirer/prompts", () => ({ select: vi.fn() }));
 vi.mock("./config.js", () => ({ getAgents: vi.fn(() => []) }));
 vi.mock("./spawn.js", () => ({ spawnAgentStream: vi.fn() }));
 
-import { extractJSON } from "./planner.js";
+import { extractJSON, repairJSON } from "./planner.js";
 
 describe("extractJSON", () => {
   it("extracts from fenced json block", () => {
@@ -64,5 +64,74 @@ describe("extractJSON", () => {
 
   it("handles whitespace-only input", () => {
     expect(extractJSON("   ")).toBe("");
+  });
+});
+
+describe("repairJSON", () => {
+  it("passes valid JSON through unchanged", () => {
+    const validJSON = '{"key": "value", "number": 123}';
+    expect(repairJSON(validJSON)).toBe(validJSON);
+  });
+
+  it("passes already-valid escape sequences through", () => {
+    const validEscapes = '{"newline": "line\\nbreak", "tab": "tab\\there", "quote": "say \\"hi\\""}';
+    expect(repairJSON(validEscapes)).toBe(validEscapes);
+  });
+
+  it("repairs bare backslash in regex pattern (\\d)", () => {
+    const malformed = '{"pattern": "\\d+"}';
+    const repaired = repairJSON(malformed);
+    expect(repaired).toBe('{"pattern": "\\\\d+"}');
+    expect(JSON.parse(repaired)).toEqual({ pattern: "\\d+" });
+  });
+
+  it("repairs bare backslash in regex pattern (\\w)", () => {
+    const malformed = '{"pattern": "\\w+"}';
+    const repaired = repairJSON(malformed);
+    expect(repaired).toBe('{"pattern": "\\\\w+"}');
+    expect(JSON.parse(repaired)).toEqual({ pattern: "\\w+" });
+  });
+
+  it("repairs bare backslash in regex pattern (\\s)", () => {
+    const malformed = '{"pattern": "\\s*"}';
+    const repaired = repairJSON(malformed);
+    expect(repaired).toBe('{"pattern": "\\\\s*"}');
+    expect(JSON.parse(repaired)).toEqual({ pattern: "\\s*" });
+  });
+
+  it("preserves double backslash (escaped backslash)", () => {
+    const doubleBackslash = '{"path": "C:\\\\Users\\\\file.txt"}';
+    expect(repairJSON(doubleBackslash)).toBe(doubleBackslash);
+  });
+
+  it("repairs multiple bare backslashes in one string", () => {
+    const malformed = '{"pattern": "\\d+\\s*\\w+"}';
+    const repaired = repairJSON(malformed);
+    expect(repaired).toBe('{"pattern": "\\\\d+\\\\s*\\\\w+"}');
+    expect(JSON.parse(repaired)).toEqual({ pattern: "\\d+\\s*\\w+" });
+  });
+
+  it("repairs bare backslashes across multiple fields", () => {
+    const malformed = '{"regex1": "\\d+", "regex2": "\\w+", "valid": "\\n"}';
+    const repaired = repairJSON(malformed);
+    expect(repaired).toBe('{"regex1": "\\\\d+", "regex2": "\\\\w+", "valid": "\\n"}');
+    const parsed = JSON.parse(repaired);
+    expect(parsed.regex1).toBe("\\d+");
+    expect(parsed.regex2).toBe("\\w+");
+    expect(parsed.valid).toBe("\n");
+  });
+
+  it("handles array of strings with bare backslashes", () => {
+    const malformed = '{"patterns": ["\\d+", "\\w+", "\\s*"]}';
+    const repaired = repairJSON(malformed);
+    expect(repaired).toBe('{"patterns": ["\\\\d+", "\\\\w+", "\\\\s*"]}');
+    expect(JSON.parse(repaired)).toEqual({ patterns: ["\\d+", "\\w+", "\\s*"] });
+  });
+
+  it("handles nested objects with bare backslashes", () => {
+    const malformed = '{"outer": {"inner": "\\d+"}}';
+    const repaired = repairJSON(malformed);
+    expect(repaired).toBe('{"outer": {"inner": "\\\\d+"}}');
+    expect(JSON.parse(repaired)).toEqual({ outer: { inner: "\\d+" } });
   });
 });
