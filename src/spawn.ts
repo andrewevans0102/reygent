@@ -1,33 +1,12 @@
 import { getProvider } from "./providers/index.js";
 import { resolveModel, resolveProvider } from "./model.js";
 import { TaskError } from "./task.js";
-import type { ActivityEvent } from "./providers/types.js";
+import type { ActivityEvent, SpawnResult } from "./providers/types.js";
 import type { UsageInfo } from "./usage.js";
 import { getChesstrace } from "./chesstrace/index.js";
 import { Events } from "./chesstrace/events.js";
 import { loadKnowledge } from "./knowledge/loader.js";
 import { emitErrorTask } from "./telemetry-helpers.js";
-
-/**
- * Result returned by provider adapter spawn() method.
- * See Provider Adapter Contract in CLAUDE.md for full details.
- */
-export interface SpawnResult {
-  /** Agent output text (JSON, markdown, or plain text depending on agent) */
-  stdout: string;
-  /** Exit code: 0 for success, non-zero for failure */
-  exitCode: number;
-  /** Optional cost/token telemetry for usage tracking */
-  usage?: UsageInfo;
-  /** Clean error message from provider API (e.g., "Model not available"). Only present on errors. */
-  errorMessage?: string;
-  /** HTTP status code from API error (e.g., 404, 401, 429). Only present on API errors. */
-  apiErrorStatus?: number;
-  /** Captured stderr output (may be truncated). Useful for diagnosing CLI failures. */
-  stderr?: string;
-  /** Signal name if the child was killed by a signal (e.g., "SIGTRAP", "SIGTERM"). */
-  signal?: string;
-}
 
 /**
  * Check if model name looks malformed (obvious user input error).
@@ -66,6 +45,7 @@ export function formatExitDetail(result: SpawnResult, model?: string): string {
       SIGTERM: "process was terminated (timeout or manual kill)",
       SIGSEGV: "segmentation fault (memory access violation)",
       SIGABRT: "process aborted (assertion failure or fatal error)",
+      SIGBUS: "bus error (memory-mapped file issue or unaligned memory access)",
     };
     const hint = sigHints[result.signal] ?? "";
     parts.push(`killed by ${result.signal}${hint ? ` — ${hint}` : ""}`);
