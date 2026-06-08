@@ -1,7 +1,7 @@
 /**
  * Custom input prompt based on @inquirer/input v5.0.11.
  *
- * Fixes two cursor-tracking bugs in @inquirer/core's ScreenManager:
+ * Fixes three cursor-tracking bugs in @inquirer/core's ScreenManager:
  *
  * 1. `checkCursorPos()` only corrects the column on keypress, never the row.
  *    When arrow keys / Home / End don't change `rl.line`, `useState` skips
@@ -19,6 +19,20 @@
  *    Fix: render user input on a separate line from the prompt message
  *    during active editing, so both readline and wrapAnsi start from
  *    column 0 and agree on wrap positions.
+ *
+ * 3. When the input *itself* wraps to a second visual line (typing past
+ *    terminal width), the same word-wrap vs char-wrap mismatch resurfaces.
+ *    wrap-ansi breaks at the last space ≤ width (e.g., col 78), while
+ *    readline tracks the cursor as `total % width` (e.g., col 80).  The
+ *    visible cursor then lands ~2 cols *behind* the typed text on every
+ *    wrapped line.
+ *    Fix: in the *rendered* value only, replace ASCII space U+0020 with
+ *    non-breaking space U+00A0.  wrap-ansi splits words on U+0020 only
+ *    (`string.split(' ')`), so with no break opportunities it falls
+ *    through to `hard: true` and breaks at exactly `width` chars —
+ *    matching readline.  NBSP renders identically to space in every
+ *    monospace font; `rl.line` is untouched so the returned value still
+ *    contains the original spaces.
  *
  * Also handles paste injection: when pasteState.pending is true,
  * the accumulated text is inserted directly into rl.line (bypassing
@@ -188,7 +202,13 @@ const cursorAwareInput: Prompt<string, InputConfig> = createPrompt<string, Input
     .filter((v) => v !== undefined)
     .join(" ");
 
-  return [promptLine + "\n" + formattedValue, error];
+  // Force char-level wrapping of the input by neutralising word breaks.
+  // See bug #3 in the file header.  Only applied to the rendered string —
+  // `value`/`rl.line` keeps the original spaces, so the resolved answer
+  // returned to callers is unchanged.
+  const renderedValue = formattedValue.replace(/ /g, " ");
+
+  return [promptLine + "\n" + renderedValue, error];
 });
 
 export default cursorAwareInput;
