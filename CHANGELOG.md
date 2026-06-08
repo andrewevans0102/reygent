@@ -1,3 +1,10 @@
+## [1.3.5](https://github.com/andrewevans0102/reygent/compare/v1.3.4...v1.3.5) (2026-06-08)
+
+
+### Bug Fixes
+
+* fix wrap text on generate-spec multiple lines ([846fbbd](https://github.com/andrewevans0102/reygent/commit/846fbbd431cbeb5550ee3081f2facbc1fae56bdb))
+
 ## [1.3.4](https://github.com/andrewevans0102/reygent/compare/v1.3.3...v1.3.4) (2026-05-27)
 
 
