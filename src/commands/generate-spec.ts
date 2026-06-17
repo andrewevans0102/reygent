@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import chalk from "chalk";
 import { isDebug } from "../debug.js";
-import { generateSpec, runClarification } from "../generate-spec.js";
+import { DEFAULT_DETAIL_LEVEL, generateSpec, runClarification, type DetailLevel } from "../generate-spec.js";
 import { createLiveStatus } from "../live-status.js";
 import { pasteableInput } from "../pasteable-input.js";
 import { TaskError } from "../task.js";
@@ -18,8 +18,9 @@ async function prompt(question: string, fallback?: string): Promise<string> {
 
 export async function generateSpecCommand(
   description: string | undefined,
-  options: { output?: string; skipClarification: boolean },
+  options: { output?: string; skipClarification: boolean; detail?: DetailLevel },
 ): Promise<void> {
+  const detail: DetailLevel = options.detail ?? DEFAULT_DETAIL_LEVEL;
   return withTelemetry('generate-spec', async () => {
   try {
     if (!description) {
@@ -122,7 +123,7 @@ export async function generateSpecCommand(
 
     let markdown: string;
     try {
-      markdown = await generateSpec(description!, clarificationAnswers, genStatus.onActivity);
+      markdown = await generateSpec(description!, clarificationAnswers, genStatus.onActivity, detail);
       genStatus.succeed(chalk.green("Spec generated"));
     } catch (err) {
       genStatus.fail(chalk.red("Failed to generate spec"));
