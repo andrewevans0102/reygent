@@ -19,6 +19,75 @@ export interface ReadyResult {
 
 export type ClarificationResponse = ClarificationResult | ReadyResult;
 
+export type DetailLevel = 1 | 2 | 3 | 4 | 5;
+
+export const DEFAULT_DETAIL_LEVEL: DetailLevel = 3;
+
+export function isValidDetailLevel(value: number): value is DetailLevel {
+  return Number.isInteger(value) && value >= 1 && value <= 5;
+}
+
+interface DetailSpec {
+  guidance: string;
+  sections: string;
+}
+
+function detailSpecFor(level: DetailLevel): DetailSpec {
+  switch (level) {
+    case 1:
+      return {
+        guidance:
+          "Keep the spec brief and high-level. Cover only the broadest requirements — a few sentences per section, no implementation details, no edge cases. Aim for a one-page outline a stakeholder could skim.",
+        sections: `- A top-level heading (\`# Title\`)
+- An **Overview** section (2-3 sentences)
+- A **Requirements** section with 3-5 high-level bullets`,
+      };
+    case 2:
+      return {
+        guidance:
+          "Keep the spec focused and concise. Cover the main requirements with light acceptance criteria. Avoid implementation details.",
+        sections: `- A top-level heading (\`# Title\`)
+- An **Overview** section explaining the feature
+- A **Requirements** section with a bulleted list
+- An **Acceptance Criteria** section with 3-5 bullets`,
+      };
+    case 3:
+      return {
+        guidance:
+          "Be specific and actionable. Expand the description into concrete requirements that a development team could implement without further clarification.",
+        sections: `- A top-level heading (\`# Title\`)
+- An **Overview** section explaining the feature
+- A **Requirements** section with a bulleted list
+- An **Acceptance Criteria** section with a bulleted list
+- A **Constraints** section noting any technical or process constraints`,
+      };
+    case 4:
+      return {
+        guidance:
+          "Be thorough and precise. Expand each requirement with concrete details, enumerate acceptance criteria for both happy paths and common edge cases, and call out non-functional requirements (performance, security, observability) where relevant.",
+        sections: `- A top-level heading (\`# Title\`)
+- An **Overview** section explaining the feature and its motivation
+- A **Requirements** section with a detailed bulleted list (group by capability if helpful)
+- An **Acceptance Criteria** section covering happy paths and key edge cases
+- A **Non-Functional Requirements** section (performance, security, observability, etc.)
+- A **Constraints** section noting any technical or process constraints`,
+      };
+    case 5:
+      return {
+        guidance:
+          "Be exhaustive. Cover every requirement in depth, enumerate acceptance criteria for happy paths, edge cases, and failure modes, document non-functional requirements, and include implementation hints (suggested data models, API shapes, integration points). The spec should leave a development team with no open questions.",
+        sections: `- A top-level heading (\`# Title\`)
+- An **Overview** section explaining the feature, motivation, and target users
+- A **Requirements** section with a detailed bulleted list, grouped by capability
+- An **Acceptance Criteria** section covering happy paths, edge cases, and failure modes
+- A **Non-Functional Requirements** section (performance, security, observability, accessibility)
+- An **Implementation Notes** section with suggested data models, API shapes, and integration points
+- A **Constraints** section noting any technical or process constraints
+- An **Open Questions** section (or "None" if fully resolved)`,
+      };
+  }
+}
+
 function buildClarificationPrompt(description: string, previousAnswers?: string): string {
   const agents = getAgents();
   const plannerAgent = agents.find((a) => a.name === "planner");
@@ -68,7 +137,11 @@ Keep questions specific and actionable (max 5). Do not include any text outside 
 **Description:** ${description}${answersContext}`;
 }
 
-function buildGeneratePrompt(description: string, clarificationAnswers?: string): string {
+function buildGeneratePrompt(
+  description: string,
+  clarificationAnswers?: string,
+  detail: DetailLevel = DEFAULT_DETAIL_LEVEL,
+): string {
   const agents = getAgents();
   const plannerAgent = agents.find((a) => a.name === "planner");
   const systemPrompt = plannerAgent?.systemPrompt ?? "";
@@ -84,19 +157,17 @@ ${clarificationAnswers}
 Use these answers to make the spec more precise and targeted.`;
   }
 
+  const { guidance, sections } = detailSpecFor(detail);
+
   return `${systemPrompt}
 
 ---
 
-You are generating a full markdown spec from a short description. Output ONLY the raw markdown content (no fences, no wrapper). The spec must include:
+You are generating a markdown spec from a short description at detail level ${detail} of 5 (1 = broadest, 5 = most exhaustive). Output ONLY the raw markdown content (no fences, no wrapper). The spec must include:
 
-- A top-level heading (\`# Title\`)
-- An **Overview** section explaining the feature
-- A **Requirements** section with a bulleted list
-- An **Acceptance Criteria** section with a bulleted list
-- A **Constraints** section noting any technical or process constraints
+${sections}
 
-Be specific and actionable. Expand the description into concrete requirements that a development team could implement without further clarification.
+${guidance}
 
 ---
 
@@ -165,10 +236,11 @@ export async function generateSpec(
   description: string,
   clarificationAnswers?: string,
   onActivity?: (event: ActivityEvent) => void,
+  detail: DetailLevel = DEFAULT_DETAIL_LEVEL,
 ): Promise<string> {
   const agents = getAgents();
   const plannerAgent = agents.find((a) => a.name === "planner");
-  const prompt = buildGeneratePrompt(description, clarificationAnswers);
+  const prompt = buildGeneratePrompt(description, clarificationAnswers, detail);
   const specResult = await spawnAgentStream("generate-spec", prompt, 120_000, { onActivity });
   const { stdout, exitCode, errorMessage, apiErrorStatus } = specResult;
 
