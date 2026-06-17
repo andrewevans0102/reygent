@@ -10,6 +10,7 @@ import { getProvider, PROVIDER_NAMES } from "./providers/index.js";
 import { setTelemetryOverride, isValidTelemetryLevel } from "./telemetry-override.js";
 import { agentCommand } from "./commands/agent.js";
 import { generateSpecCommand } from "./commands/generate-spec.js";
+import { isValidDetailLevel, type DetailLevel } from "./generate-spec.js";
 import { specCommand } from "./commands/spec.js";
 import { runCommand } from "./commands/run.js";
 import { registerContinueCommand } from "./commands/continue.js";
@@ -58,6 +59,18 @@ program
   .argument("[description]", "Short description of the feature to spec out")
   .option("--output <file>", "Output file path")
   .option("--skip-clarification", "Skip clarifying questions and generate spec directly", false)
+  .option(
+    "--detail <level>",
+    "Detail level 1-5 (1=broad/high-level, 3=standard, 5=exhaustive with edge cases & implementation notes)",
+    (value) => {
+      const parsed = Number.parseInt(value, 10);
+      if (!isValidDetailLevel(parsed)) {
+        console.error(chalk.red(`Error: Invalid --detail "${value}". Must be an integer from 1 to 5.`));
+        process.exit(1);
+      }
+      return parsed as DetailLevel;
+    },
+  )
   .action(generateSpecCommand);
 
 program
