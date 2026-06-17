@@ -1,3 +1,15 @@
+# [1.4.0](https://github.com/andrewevans0102/reygent/compare/v1.3.5...v1.4.0) (2026-06-17)
+
+
+### Bug Fixes
+
+* add unit test for detail value in generate spec ([a7eee0f](https://github.com/andrewevans0102/reygent/commit/a7eee0f5bfc6e008b659f7b2ae394cbe2f05f4ee))
+
+
+### Features
+
+* adding detail option to spec generation ([d05e786](https://github.com/andrewevans0102/reygent/commit/d05e786cfef8587e1dc6b47831e04b5e895624f5))
+
 ## [1.3.5](https://github.com/andrewevans0102/reygent/compare/v1.3.4...v1.3.5) (2026-06-08)
 
 
